@@ -5,6 +5,9 @@ export class AudioEngine {
     anRaw: AnalyserNode | null = null;
     src: MediaElementAudioSourceNode | null = null;
     gainNode: GainNode | null = null;
+    // For Recording
+    recDest: MediaStreamAudioDestinationNode | null = null;
+
     bands: BandsData = { sync1: 0, sync2: 0, sync3: 0 };
     filters: FilterBand[] = [];
     fftData: Uint8Array = new Uint8Array(1024);
@@ -24,6 +27,10 @@ export class AudioEngine {
             this.gainNode = this.ctx.createGain();
             this.gainNode.connect(this.anRaw);
             this.anRaw.connect(this.ctx.destination);
+
+            // Create Recording Destination (Loopback for MediaRecorder)
+            this.recDest = this.ctx.createMediaStreamDestination();
+            this.gainNode.connect(this.recDest);
         }
 
         if (this.ctx.state === 'suspended') {
@@ -46,6 +53,11 @@ export class AudioEngine {
         } catch (e) {
             console.error("Error creating MediaElementSource", e);
         }
+    }
+
+    // Returns the stream for MediaRecorder
+    getAudioStream(): MediaStream | null {
+        return this.recDest ? this.recDest.stream : null;
     }
 
     setupFilters() {
