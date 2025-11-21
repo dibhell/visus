@@ -84,11 +84,11 @@ export class AudioEngine {
             if (f.bandpass && params) {
                 // Secure frequency clamping
                 const freq = Math.max(20, Math.min(20000, params.freq));
-                f.bandpass.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                f.bandpass.frequency.setValueAtTime(freq, this.ctx!.currentTime);
                 
                 // Q Value: 10% Width -> Q=1, 100% Width -> Q=10 (Approximation)
                 const qValue = 1 + (params.width * 0.09);
-                f.bandpass.Q.setValueAtTime(qValue, this.ctx.currentTime);
+                f.bandpass.Q.setValueAtTime(qValue, this.ctx!.currentTime);
             }
         });
     }
@@ -97,11 +97,13 @@ export class AudioEngine {
         if (!this.anRaw || !this.ctx || this.ctx.state === 'suspended') return;
 
         // 1. RAW FFT Data (Visualizer)
-        this.anRaw.getByteFrequencyData(this.fftData);
+        // Cast to any to prevent TS mismatch between ArrayBufferLike and ArrayBuffer in CI
+        this.anRaw.getByteFrequencyData(this.fftData as any);
 
         // 2. Filtered Bands Data (Logic)
         this.filters.forEach(f => {
-            f.analyser.getByteFrequencyData(f.data);
+            // Cast to any to prevent TS mismatch
+            f.analyser.getByteFrequencyData(f.data as any);
             let sum = 0;
             for(let i=0; i<f.data.length; i++) sum += f.data[i];
             
