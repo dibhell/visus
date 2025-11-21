@@ -1,0 +1,5 @@
+{
+  "name": "VJ Reactor v24",
+  "description": "A real-time WebGL video mixer and audio visualizer with additive FX and shader pipeline.",
+  "requestFramePermissions": []
+}
