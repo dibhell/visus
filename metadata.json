@@ -1,5 +1,5 @@
 {
-  "name": "VJ Reactor v24",
-  "description": "A real-time WebGL video mixer and audio visualizer with additive FX and shader pipeline.",
+  "name": "VISUS",
+  "description": "Advanced visual engine with effects controlled by frequencies.",
   "requestFramePermissions": []
 }
