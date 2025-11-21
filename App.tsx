@@ -45,6 +45,16 @@ const App: React.FC = () => {
         fx5: { shader: '3_GLITCH_LINES', routing: 'sync3', gain: 150 }, // Hats glitch
     });
 
+    // --- LIVE REFS FOR LOOP (Fixes Stale Closure Bug) ---
+    const fxStateRef = useRef(fxState);
+    const syncParamsRef = useRef(syncParams);
+    const isSystemActiveRef = useRef(isSystemActive);
+
+    // Sync state to refs immediately
+    useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
+    useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
+    useEffect(() => { isSystemActiveRef.current = isSystemActive; }, [isSystemActive]);
+
     // --- LOGIC ---
 
     const getActivationLevel = (routing: string, phase: number) => {
@@ -83,15 +93,11 @@ const App: React.FC = () => {
         if (finalH < 1) finalH = 10;
 
         // Center the canvas (Visually)
-        // If manual is larger than screen, it will scale down via CSS object-fit typically, 
-        // but here we are setting physical pixels. CSS transform scales it to fit.
         const canvas = canvasRef.current;
         canvas.width = finalW;
         canvas.height = finalH;
 
-        // CSS for centering
         const scale = Math.min(w / finalW, h / finalH);
-        // If manual mode is huge, we scale it down visually to fit screen
         const displayW = aspectRatio === 'manual' ? finalW * scale : finalW;
         const displayH = aspectRatio === 'manual' ? finalH * scale : finalH;
 
@@ -104,105 +110,106 @@ const App: React.FC = () => {
         glService.current.resize(finalW, finalH);
     }, [aspectRatio, manualRes]);
 
-    const loop = useCallback((t: number) => {
+    // --- ANIMATION LOOP ---
+    useEffect(() => {
         if (!isSystemActive) return;
 
-        // 1. Update Audio
-        const ae = audioService.current;
-        ae.update(); 
-
-        // 2. Calculate Timings
-        const bpm = syncParams[0].bpm;
-        const offset = syncParams[0].offset;
-        const beatMs = 60000 / bpm;
-        const adjustedTime = t - offset;
-        const phase = (adjustedTime % beatMs) / beatMs;
-
-        // 3. Compute FX Values
-        const computeFxVal = (config: any) => {
-            const sourceLevel = getActivationLevel(config.routing, phase);
-            const gainMult = config.gain / 100;
-            // Allow overdrive up to 2.0 for intense effects
-            return sourceLevel * gainMult * 2.0; 
-        };
-
-        const lvls = {
-            main: computeFxVal(fxState.main),
-            fx1: computeFxVal(fxState.fx1),
-            fx2: computeFxVal(fxState.fx2),
-            fx3: computeFxVal(fxState.fx3),
-            fx4: computeFxVal(fxState.fx4),
-            fx5: computeFxVal(fxState.fx5),
-        };
-
-        const computedFx = {
-            mainFXGain: lvls.main,
-            mix: fxState.main.mix,
-            fx1: lvls.fx1,
-            fx2: lvls.fx2,
-            fx3: lvls.fx3,
-            fx4: lvls.fx4,
-            fx5: lvls.fx5,
-            fx1_id: SHADER_LIST[fxState.fx1.shader]?.id || 0,
-            fx2_id: SHADER_LIST[fxState.fx2.shader]?.id || 0,
-            fx3_id: SHADER_LIST[fxState.fx3.shader]?.id || 0,
-            fx4_id: SHADER_LIST[fxState.fx4.shader]?.id || 0,
-            fx5_id: SHADER_LIST[fxState.fx5.shader]?.id || 0,
-        };
-
-        // 4. Draw
-        if (videoRef.current) {
-            glService.current.updateTexture(videoRef.current);
-            glService.current.draw(t, videoRef.current, computedFx);
+        // Initialize WebGL
+        if (canvasRef.current) {
+            const success = glService.current.init(canvasRef.current);
+            if (!success) return;
+            
+            // Load initial shader
+            const currentShaderKey = fxStateRef.current.main.shader;
+            const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
+            glService.current.loadShader(shaderDef.src);
         }
 
-        // 5. UI & FPS Update
-        if (t - lastTimeRef.current > 100) {
-             setFps(Math.round(1000 / ((t - lastTimeRef.current) / ((t - lastTimeRef.current) > 200 ? 1 : 1))));
-             setVisualLevels({
-                 main: lvls.main,
-                 fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5
-             });
-             lastTimeRef.current = t;
-        }
+        handleResize();
+        window.addEventListener('resize', handleResize);
+
+        const loop = (t: number) => {
+            if (!isSystemActiveRef.current) return;
+
+            // 1. Update Audio
+            const ae = audioService.current;
+            ae.update(); 
+
+            // 2. Use REFS for current values (Fixes "No Control" bug)
+            const currentSyncParams = syncParamsRef.current;
+            const currentFxState = fxStateRef.current;
+
+            // 3. Calculate Timings
+            const bpm = currentSyncParams[0].bpm;
+            const offset = currentSyncParams[0].offset;
+            const beatMs = 60000 / bpm;
+            const adjustedTime = t - offset;
+            const phase = (adjustedTime % beatMs) / beatMs;
+
+            // 4. Compute FX Values
+            const computeFxVal = (config: any) => {
+                const sourceLevel = getActivationLevel(config.routing, phase);
+                const gainMult = config.gain / 100;
+                // Allow overdrive up to 2.0 for intense effects
+                return sourceLevel * gainMult * 2.0; 
+            };
+
+            const lvls = {
+                main: computeFxVal(currentFxState.main),
+                fx1: computeFxVal(currentFxState.fx1),
+                fx2: computeFxVal(currentFxState.fx2),
+                fx3: computeFxVal(currentFxState.fx3),
+                fx4: computeFxVal(currentFxState.fx4),
+                fx5: computeFxVal(currentFxState.fx5),
+            };
+
+            const computedFx = {
+                mainFXGain: lvls.main,
+                mix: currentFxState.main.mix,
+                fx1: lvls.fx1,
+                fx2: lvls.fx2,
+                fx3: lvls.fx3,
+                fx4: lvls.fx4,
+                fx5: lvls.fx5,
+                fx1_id: SHADER_LIST[currentFxState.fx1.shader]?.id || 0,
+                fx2_id: SHADER_LIST[currentFxState.fx2.shader]?.id || 0,
+                fx3_id: SHADER_LIST[currentFxState.fx3.shader]?.id || 0,
+                fx4_id: SHADER_LIST[currentFxState.fx4.shader]?.id || 0,
+                fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
+            };
+
+            // 5. Draw
+            if (videoRef.current) {
+                glService.current.updateTexture(videoRef.current);
+                glService.current.draw(t, videoRef.current, computedFx);
+            }
+
+            // 6. UI & FPS Update (Throttled)
+            if (t - lastTimeRef.current > 100) {
+                 setFps(Math.round(1000 / ((t - lastTimeRef.current) / ((t - lastTimeRef.current) > 200 ? 1 : 1))));
+                 setVisualLevels({
+                     main: lvls.main,
+                     fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5
+                 });
+                 lastTimeRef.current = t;
+            }
+
+            animationFrameRef.current = requestAnimationFrame(loop);
+        };
 
         animationFrameRef.current = requestAnimationFrame(loop);
-    }, [isSystemActive, syncParams, fxState]);
 
-    // --- EFFECTS ---
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            cancelAnimationFrame(animationFrameRef.current);
+        };
+    }, [isSystemActive, handleResize]); // Minimal dependencies to avoid restarting loop unnecessarily
 
-    // Init System
-    useEffect(() => {
-        if (isSystemActive && canvasRef.current) {
-            const success = glService.current.init(canvasRef.current);
-            if (success) {
-                const shaderDef = SHADER_LIST[fxState.main.shader];
-                const src = shaderDef ? shaderDef.src : SHADER_LIST['00_NONE'].src;
-                glService.current.loadShader(src);
-                window.addEventListener('resize', handleResize);
-                handleResize();
-                animationFrameRef.current = requestAnimationFrame(loop);
-                return () => {
-                    window.removeEventListener('resize', handleResize);
-                    cancelAnimationFrame(animationFrameRef.current);
-                };
-            }
-        }
-    }, [isSystemActive]); // removed handleResize to prevent loop
-
-    useEffect(() => {
-        if(isSystemActive) handleResize();
-    }, [aspectRatio, manualRes, isSystemActive, handleResize]);
-
+    // Shader Hotswap
     useEffect(() => {
         if (isSystemActive) {
-            const shaderDef = SHADER_LIST[fxState.main.shader];
-            if (shaderDef) {
-                glService.current.loadShader(shaderDef.src);
-            } else {
-                // Fallback if shader key is invalid/missing
-                glService.current.loadShader(SHADER_LIST['00_NONE'].src);
-            }
+            const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
+            glService.current.loadShader(shaderDef.src);
         }
     }, [fxState.main.shader, isSystemActive]);
 
