@@ -36,7 +36,7 @@ const App: React.FC = () => {
     ]);
 
     const [fxState, setFxState] = useState<FxState>({
-        main: { shader: '01_Glitch_Basic', routing: 'off', gain: 100, mix: 100 },
+        main: { shader: '10_GLITCH_SCENE', routing: 'off', gain: 100, mix: 100 },
         fx1: { shader: '1_RGB_SHIFT', routing: 'sync1', gain: 100 },
         fx2: { shader: '5_BRIGHT_FLASH', routing: 'sync2', gain: 80 },
         fx3: { shader: '00_NONE', routing: 'off', gain: 0 },
@@ -175,7 +175,9 @@ const App: React.FC = () => {
         if (isSystemActive && canvasRef.current) {
             const success = glService.current.init(canvasRef.current);
             if (success) {
-                glService.current.loadShader(SHADER_LIST[fxState.main.shader].src);
+                const shaderDef = SHADER_LIST[fxState.main.shader];
+                const src = shaderDef ? shaderDef.src : SHADER_LIST['00_NONE'].src;
+                glService.current.loadShader(src);
                 window.addEventListener('resize', handleResize);
                 handleResize();
                 animationFrameRef.current = requestAnimationFrame(loop);
@@ -193,7 +195,10 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (isSystemActive) {
-            glService.current.loadShader(SHADER_LIST[fxState.main.shader].src);
+            const shaderDef = SHADER_LIST[fxState.main.shader];
+            if (shaderDef) {
+                glService.current.loadShader(shaderDef.src);
+            }
         }
     }, [fxState.main.shader, isSystemActive]);
 
