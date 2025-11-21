@@ -35,13 +35,14 @@ const App: React.FC = () => {
         { bpm: 128.0, offset: 0, freq: 6000, width: 40 },
     ]);
 
+    // Default preset to show off new features
     const [fxState, setFxState] = useState<FxState>({
-        main: { shader: '10_GLITCH_SCENE', routing: 'off', gain: 100, mix: 100 },
-        fx1: { shader: '1_RGB_SHIFT', routing: 'sync1', gain: 100 },
-        fx2: { shader: '5_BRIGHT_FLASH', routing: 'sync2', gain: 80 },
-        fx3: { shader: '00_NONE', routing: 'off', gain: 0 },
-        fx4: { shader: '00_NONE', routing: 'off', gain: 0 },
-        fx5: { shader: '00_NONE', routing: 'off', gain: 0 },
+        main: { shader: '16_STEAM_ENGINE', routing: 'off', gain: 80, mix: 100 }, // New Steampunk main
+        fx1: { shader: '7_VHS_RETRO', routing: 'off', gain: 50 }, // Always on VHS look
+        fx2: { shader: '9_SCANLINES', routing: 'sync1', gain: 100 }, // Bass kicks scanlines
+        fx3: { shader: '8_STEAM_COLOR', routing: 'off', gain: 60 }, // Sepia tint
+        fx4: { shader: '5_BRIGHT_FLASH', routing: 'sync2', gain: 120 }, // Snare flashes
+        fx5: { shader: '3_GLITCH_LINES', routing: 'sync3', gain: 150 }, // Hats glitch
     });
 
     // --- LOGIC ---
@@ -198,6 +199,9 @@ const App: React.FC = () => {
             const shaderDef = SHADER_LIST[fxState.main.shader];
             if (shaderDef) {
                 glService.current.loadShader(shaderDef.src);
+            } else {
+                // Fallback if shader key is invalid/missing
+                glService.current.loadShader(SHADER_LIST['00_NONE'].src);
             }
         }
     }, [fxState.main.shader, isSystemActive]);
