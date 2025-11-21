@@ -18,10 +18,15 @@ const App: React.FC = () => {
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     
+    // Recording Refs
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordedChunksRef = useRef<Blob[]>([]);
+
     // --- STATE ---
     const [isSystemActive, setIsSystemActive] = useState(false);
     const [fps, setFps] = useState(0);
     const [panelVisible, setPanelVisible] = useState(true);
+    const [isRecording, setIsRecording] = useState(false);
     
     // FR-105: Manual Resolution
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('fit');
@@ -252,13 +257,78 @@ const App: React.FC = () => {
         }
     };
 
+    // --- RECORDING (RENDER) HANDLER ---
+    const toggleRecording = () => {
+        if (isRecording) {
+            // STOP RECORDING
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+                setIsRecording(false);
+            }
+        } else {
+            // START RECORDING
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+
+            // 1. Get Video Stream from Canvas
+            const videoStream = (canvas as any).captureStream(60); // 60 FPS target
+            
+            // 2. Get Audio Stream from AudioEngine
+            const audioStream = audioService.current.getAudioStream();
+            
+            // 3. Combine Tracks
+            const combinedTracks = [...videoStream.getVideoTracks()];
+            if (audioStream) {
+                combinedTracks.push(...audioStream.getAudioTracks());
+            }
+            const combinedStream = new MediaStream(combinedTracks);
+
+            // 4. Initialize Recorder
+            try {
+                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
+                    ? 'video/webm;codecs=vp9' 
+                    : 'video/webm';
+                
+                const recorder = new MediaRecorder(combinedStream, { 
+                    mimeType, 
+                    videoBitsPerSecond: 5000000 // 5Mbps high quality
+                });
+
+                recordedChunksRef.current = [];
+
+                recorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunksRef.current.push(event.data);
+                    }
+                };
+
+                recorder.onstop = () => {
+                    const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `visus-render-${new Date().toISOString()}.webm`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                };
+
+                recorder.start();
+                mediaRecorderRef.current = recorder;
+                setIsRecording(true);
+            } catch (e) {
+                console.error("Failed to start recording", e);
+                alert("Could not start recording. Browser may not support MediaRecorder.");
+            }
+        }
+    };
+
     if (!isSystemActive) {
         return (
             <div className="flex items-center justify-center h-screen w-screen bg-black">
                 <div className="text-center p-10 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-md relative overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-b from-transparent to-accent/5 pointer-events-none"></div>
-                    <h1 className="text-5xl font-black mb-2 text-white tracking-tighter">VJ REACTOR</h1>
-                    <div className="text-accent font-mono text-xs tracking-[0.3em] mb-8">VISUAL ENGINE V24</div>
+                    <h1 className="text-6xl font-black mb-2 text-white tracking-tighter">VISUS</h1>
+                    <div className="text-accent font-mono text-xs tracking-[0.3em] mb-8">ADVANCED VISUAL ENGINE</div>
                     <button 
                         className="px-10 py-4 bg-white text-black font-bold rounded hover:bg-accent hover:scale-105 transition-all duration-200 tracking-widest text-sm"
                         onClick={() => setIsSystemActive(true)}
@@ -280,6 +350,7 @@ const App: React.FC = () => {
             <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-gray-500 flex gap-4 bg-black/50 p-1 rounded backdrop-blur">
                 <span className={fps < 55 ? 'text-red-500' : 'text-accent'}>FPS: {fps}</span>
                 <span>RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
+                {isRecording && <span className="text-red-500 animate-pulse font-bold">● REC</span>}
             </div>
 
             {/* Main UI Panel */}
@@ -289,8 +360,8 @@ const App: React.FC = () => {
             >
                 <div className="p-4 border-b border-zinc-800 bg-black/40 flex justify-between items-center">
                     <div>
-                        <h2 className="text-sm font-black text-white tracking-widest">VJ REACTOR</h2>
-                        <div className="text-[9px] text-gray-500 font-mono">AUDIO REACTIVE PIPELINE</div>
+                        <h2 className="text-sm font-black text-white tracking-widest">VISUS</h2>
+                        <div className="text-[9px] text-gray-500 font-mono">ADVANCED VISUAL ENGINE</div>
                     </div>
                     <button onClick={() => setPanelVisible(false)} className="text-gray-500 hover:text-white px-2">✕</button>
                 </div>
@@ -303,12 +374,30 @@ const App: React.FC = () => {
                             <span className="w-2 h-2 bg-accent rounded-full"></span> Sources & Transport
                         </div>
                         
-                        {/* FR-103: Transport Controls */}
+                        {/* Transport Controls */}
                         <div className="flex gap-1 mb-3">
                              <button onClick={() => handleTransport('play')} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-accent font-bold py-2 rounded text-xs">▶ PLAY</button>
                              <button onClick={() => handleTransport('stop')} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2 rounded text-xs">■ STOP</button>
                              <button onClick={() => handleTransport('reset')} className="w-10 bg-zinc-800 hover:bg-zinc-700 text-gray-400 font-bold py-2 rounded text-xs">↺</button>
                         </div>
+
+                        {/* Recording Control */}
+                         <button 
+                            onClick={toggleRecording}
+                            className={`w-full mb-3 font-bold py-2 rounded text-xs flex items-center justify-center gap-2 transition-all ${isRecording ? 'bg-red-500/20 text-red-500 border border-red-500' : 'bg-zinc-900 text-gray-400 hover:text-white border border-zinc-700'}`}
+                        >
+                            {isRecording ? (
+                                <>
+                                    <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                                    RECORDING... (CLICK TO SAVE)
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                                    START RENDER REC
+                                </>
+                            )}
+                        </button>
 
                         <div className="flex gap-2 mb-3">
                              <label className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-center py-3 rounded text-[10px] font-bold cursor-pointer border border-zinc-700 hover:border-accent text-gray-300 transition-all">
