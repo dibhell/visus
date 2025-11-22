@@ -1,6 +1,7 @@
 
+
 import React from 'react';
-import { SyncParam } from '../types';
+import { SyncParam } from '../constants';
 import Knob from './Knob';
 
 interface BandControlsProps {

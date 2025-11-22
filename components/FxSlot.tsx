@@ -1,7 +1,7 @@
 
+
 import React from 'react';
-import { FxState, RoutingType } from '../types';
-import { SHADER_LIST } from '../constants';
+import { FxState, RoutingType, SHADER_LIST } from '../constants';
 import Knob from './Knob';
 
 interface FxSlotProps {

@@ -1,7 +1,8 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { AudioEngine } from '../services/audioService';
-import { SyncParam } from '../types';
+import { SyncParam } from '../constants';
 
 interface Props {
     audioServiceRef: React.MutableRefObject<AudioEngine>;

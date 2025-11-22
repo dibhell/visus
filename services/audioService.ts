@@ -1,5 +1,6 @@
 
-import { FilterBand, SyncParam, BandsData } from '../types';
+
+import { FilterBand, SyncParam, BandsData } from '../constants';
 
 export class AudioEngine {
     ctx: AudioContext | null = null;

@@ -1,6 +1,6 @@
 
-import { GLSL_HEADER, VERT_SRC } from '../constants';
-import { FxConfig, ShaderList } from '../types';
+
+import { GLSL_HEADER, VERT_SRC, FxConfig, ShaderList } from '../constants';
 
 export class GLService {
     gl: WebGLRenderingContext | null = null;

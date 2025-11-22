@@ -1,6 +1,7 @@
 
+
 import React, { useState } from 'react';
-import { MusicTrack } from '../types';
+import { MusicTrack } from '../constants';
 
 interface Props {
     onSelect: (url: string, trackName: string) => void;
