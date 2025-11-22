@@ -30,7 +30,13 @@ const App: React.FC = () => {
     const [fps, setFps] = useState(0);
     const [panelVisible, setPanelVisible] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
+    
+    // Modal States
     const [showCatalog, setShowCatalog] = useState(false);
+    const [showCameraSelector, setShowCameraSelector] = useState(false);
+    
+    // Sources & Data
+    const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
     const [currentTrackName, setCurrentTrackName] = useState<string | null>(null);
     const [micActive, setMicActive] = useState(false);
     const [micGain, setMicGain] = useState(2.0);
@@ -92,14 +98,11 @@ const App: React.FC = () => {
         const isMobile = wWindow < 768;
 
         // --- SPLIT SCREEN LOGIC ---
-        // If on mobile and panel is open, we restrict the "viewable" area to the top 40%
-        // This ensures the video fits in the space above the controls
         let availableH = hWindow;
         let topOffset = 0;
 
         if (isMobile && panelVisible) {
             availableH = hWindow * 0.40; // 40% height for video
-            // Controls take remaining 60%
         }
         
         let finalW = wWindow;
@@ -136,12 +139,9 @@ const App: React.FC = () => {
 
         const canvas = canvasRef.current;
         
-        // 1. Set Internal Resolution (High Quality for Recording)
         canvas.width = finalW;
         canvas.height = finalH;
 
-        // 2. Set Visual Display Size (CSS) to fit in Available Area
-        // We scale the visual representation to fit 'availableH' (screen or top split)
         const scale = Math.min(wWindow / finalW, availableH / finalH);
         const displayW = finalW * scale;
         const displayH = finalH * scale;
@@ -149,8 +149,6 @@ const App: React.FC = () => {
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
         
-        // 3. Center Logic
-        // If mobile split, center within the top area
         canvas.style.position = 'absolute';
         canvas.style.left = `${(wWindow - displayW) / 2}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
@@ -161,7 +159,6 @@ const App: React.FC = () => {
     // Trigger resize when panel visibility changes to adjust split screen
     useEffect(() => {
         handleResize();
-        // Adding a small delay because CSS transitions might affect layout calculation (though we use fixed VH here)
         const t = setTimeout(handleResize, 300); 
         return () => clearTimeout(t);
     }, [panelVisible, handleResize]);
@@ -203,7 +200,6 @@ const App: React.FC = () => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = config.gain / 100;
-                // Note: Mix is applied in shader via iMix or direct mix, but we pass gain here for activity monitoring
                 return sourceLevel * gainMult; 
             };
 
@@ -217,11 +213,9 @@ const App: React.FC = () => {
             };
 
             const computedFx = {
-                // Main Layer (Layer 0)
                 mainFXGain: lvls.main, 
                 main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
-                
-                mix: currentFxState.main.mix, // Kept for legacy compatibility if shader uses iMix
+                mix: currentFxState.main.mix,
                 additiveMasterGain: additiveGainRef.current / 100,
                 transform: currentTransform,
                 fx1: lvls.fx1,
@@ -264,7 +258,6 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (isSystemActive) {
-            // Since all shaders use BASE_SHADER_BODY, this might be redundant unless we change the base
             const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
             glService.current.loadShader(shaderDef.src);
         }
@@ -309,21 +302,71 @@ const App: React.FC = () => {
         }
     };
 
-    const handleCamera = async () => {
-        if (!videoRef.current) return;
+    // --- CAMERA LOGIC START ---
+    const initCameraSelection = async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+            alert("Camera API not supported");
+            return;
+        }
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { width: { ideal: 1920 }, height: { ideal: 1080 } } 
-            });
+            // 1. First request permission generically to populate labels
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            // Stop this immediately, we just wanted permissions
+            stream.getTracks().forEach(t => t.stop());
+
+            // 2. Enumerate
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoInputs = devices.filter(d => d.kind === 'videoinput');
+            setAvailableCameras(videoInputs);
+
+            if (videoInputs.length > 1) {
+                setShowCameraSelector(true);
+            } else if (videoInputs.length === 1) {
+                startCameraStream(videoInputs[0].deviceId);
+            } else {
+                alert("No cameras found.");
+            }
+
+        } catch (e) {
+            console.error("Error accessing camera devices", e);
+            alert("Camera access denied or error.");
+        }
+    };
+
+    const startCameraStream = async (deviceId?: string) => {
+        if (!videoRef.current) return;
+        
+        try {
+            const constraints: MediaStreamConstraints = {
+                video: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Cleanup old stream if exists
+            if (videoRef.current.srcObject) {
+                const oldStream = videoRef.current.srcObject as MediaStream;
+                oldStream.getTracks().forEach(t => t.stop());
+            }
+
             videoRef.current.src = "";
             videoRef.current.srcObject = stream;
             videoRef.current.play();
+            
+            // Close modal if open
+            setShowCameraSelector(false);
             setTimeout(handleResize, 500);
         } catch (e) {
-            console.error("Camera access denied", e);
-            alert("Could not access camera. Please check permissions.");
+            console.error("Failed to start camera stream", e);
+            alert("Could not start selected camera.");
         }
     };
+    // --- CAMERA LOGIC END ---
 
     const handleMicrophone = async () => {
         if (micActive) {
@@ -389,24 +432,46 @@ const App: React.FC = () => {
             const combinedStream = new MediaStream(combinedTracks);
 
             try {
-                const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+                // Prefer mp4 if available (safari/some chrome), otherwise webm
+                let mimeType = 'video/webm;codecs=vp9';
+                if (MediaRecorder.isTypeSupported('video/mp4')) {
+                    mimeType = 'video/mp4';
+                } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+                    mimeType = 'video/webm;codecs=h264';
+                }
+
                 const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000 });
                 recordedChunksRef.current = [];
-                recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
+                
+                recorder.ondataavailable = (event) => { 
+                    if (event.data.size > 0) recordedChunksRef.current.push(event.data); 
+                };
+                
                 recorder.onstop = () => {
                     const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `visus-rec-${new Date().toISOString().slice(0,19).replace(/:/g,"-")}.webm`;
+                    
+                    // Generate clean timestamp for sorting
+                    const now = new Date();
+                    const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    // Extension based on type
+                    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                    
+                    a.download = `VISUS_Rec_${timestamp}.${ext}`;
+                    document.body.appendChild(a);
                     a.click();
+                    document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                 };
+                
                 recorder.start();
                 mediaRecorderRef.current = recorder;
                 setIsRecording(true);
             } catch (e) {
                 console.error("Failed to start recording", e);
+                alert("Recording failed to start. Browser might not support this format.");
             }
         }
     };
@@ -430,7 +495,7 @@ const App: React.FC = () => {
                 <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4 flex flex-col items-center">
                     <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-50"></div>
                     
-                    {/* LOGO REPLACEMENT - CSS ONLY */}
+                    {/* LOGO */}
                     <div className="mb-8 relative group w-32 h-32 flex items-center justify-center bg-black rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] hover:scale-105 transition-transform duration-500">
                          <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
                          <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 select-none">V</span>
@@ -463,6 +528,7 @@ const App: React.FC = () => {
                 {micActive && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC ACTIVE</span>}
             </div>
 
+            {/* MODALS */}
             {showCatalog && (
                 <MusicCatalog 
                     onSelect={handleCatalogSelect} 
@@ -470,7 +536,34 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Main UI Panel - RESPONSIVE LAYOUT */}
+            {/* CAMERA SELECTOR MODAL */}
+            {showCameraSelector && (
+                 <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
+                    <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col relative">
+                        <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <h3 className="text-white font-black tracking-widest text-lg">SELECT CAMERA</h3>
+                            <button onClick={() => setShowCameraSelector(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white">✕</button>
+                        </div>
+                        <div className="p-4 space-y-2">
+                            {availableCameras.map((cam, idx) => (
+                                <button 
+                                    key={cam.deviceId}
+                                    onClick={() => startCameraStream(cam.deviceId)}
+                                    className="w-full p-4 rounded-xl bg-zinc-900/40 border border-white/5 hover:bg-accent/20 hover:border-accent/50 hover:text-white text-left transition-all flex items-center gap-3 group"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-black border border-white/10 flex items-center justify-center group-hover:border-accent">📷</div>
+                                    <div className="flex-1">
+                                        <div className="text-sm font-bold">{cam.label || `Camera ${idx + 1}`}</div>
+                                        <div className="text-[10px] text-zinc-500 font-mono">ID: {cam.deviceId.slice(0,8)}...</div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                 </div>
+            )}
+
+            {/* Main UI Panel */}
             <div 
                 ref={uiPanelRef}
                 className={`
@@ -492,7 +585,6 @@ const App: React.FC = () => {
 
                 <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
                     <div className="flex items-center gap-3">
-                         {/* LOGO IN SIDEBAR - CSS ONLY */}
                          <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 flex items-center justify-center">
                             <span className="font-black text-white text-xs">V</span>
                          </div>
@@ -531,10 +623,10 @@ const App: React.FC = () => {
                             {/* Source Inputs */}
                             <div className="grid grid-cols-2 gap-2 pt-1">
                                 <button 
-                                    onClick={handleCamera}
+                                    onClick={initCameraSelection}
                                     className="bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white py-3 rounded-lg text-[9px] font-bold transition-all tracking-wide flex flex-col items-center justify-center gap-1 border border-white/5"
                                 >
-                                    <span>◉ USE CAMERA</span>
+                                    <span>📷 SELECT CAM</span>
                                 </button>
                                 <button 
                                     onClick={handleMicrophone}
@@ -604,7 +696,7 @@ const App: React.FC = () => {
                                 onClick={toggleRecording}
                                 className={`w-full py-3 mt-4 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
                             >
-                                {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING...</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC (WYSIWYG)</span>}
+                                {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING...</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC (SAVE VIDEO)</span>}
                             </button>
                         </div>
                     </section>
