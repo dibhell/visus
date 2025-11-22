@@ -1,5 +1,8 @@
 {
   "name": "VISUS",
   "description": "Advanced visual engine with effects controlled by frequencies.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
 }

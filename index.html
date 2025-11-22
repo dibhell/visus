@@ -10,18 +10,21 @@
         theme: {
           extend: {
             colors: {
-              accent: '#33ff99',
-              sync1: '#ff3333',
-              sync2: '#00eeff',
-              sync3: '#fce303',
-              panel: 'rgba(5, 5, 8, 0.95)',
+              accent: '#a78bfa', // Soft Violet
+              accent2: '#2dd4bf', // Teal
+              surface: '#18181b', // Zinc 900
+              panel: 'rgba(15, 23, 42, 0.85)', // Slate 900 glass
+              sync1: '#f472b6', // Pink 400
+              sync2: '#38bdf8', // Sky 400
+              sync3: '#fbbf24', // Amber 400
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
               mono: ['JetBrains Mono', 'monospace'],
             },
             animation: {
-                'in': 'fade-in 0.2s ease-out',
+                'in': 'fade-in 0.3s ease-out',
+                'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }
           },
         },
@@ -29,15 +32,15 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-      body { font-family: 'Inter', sans-serif; background: #050505; color: #e4e4e7; }
+      body { font-family: 'Inter', sans-serif; background: #020617; color: #e2e8f0; }
       
       /* Modern Slider Styling */
       input[type=range] {
         -webkit-appearance: none;
         background: transparent;
-        height: 16px;
+        height: 20px;
         width: 100%;
         cursor: pointer;
       }
@@ -48,44 +51,48 @@
       /* Track */
       input[type=range]::-webkit-slider-runnable-track {
         width: 100%;
-        height: 2px;
+        height: 4px;
         cursor: pointer;
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 1px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
         transition: background 0.2s;
       }
       input[type=range]:hover::-webkit-slider-runnable-track {
-        background: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.2);
       }
       
       /* Thumb */
       input[type=range]::-webkit-slider-thumb {
         -webkit-appearance: none;
-        height: 10px;
-        width: 10px;
+        height: 14px;
+        width: 14px;
         border-radius: 50%;
-        background: #fff;
+        background: #e2e8f0;
         cursor: pointer;
-        margin-top: -4px;
-        box-shadow: 0 0 8px rgba(0,0,0,0.8);
-        border: 1px solid rgba(0,0,0,0.5);
+        margin-top: -5px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        border: 2px solid rgba(0,0,0,0.2);
         transition: transform 0.1s, background 0.1s;
       }
       
       input[type=range]::-webkit-slider-thumb:hover {
-        transform: scale(1.3);
-        background: #33ff99;
+        transform: scale(1.2);
+        background: #a78bfa;
         border-color: transparent;
       }
 
       /* Custom Scrollbar */
-      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar { width: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
       ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
       
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
-      .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+      .glass-panel {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
     </style>
 <script type="importmap">
 {
@@ -100,7 +107,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-black text-gray-200 overflow-hidden">
+  <body class="bg-slate-950 text-slate-200 overflow-hidden">
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
   <script type="module" src="/index.tsx"></script>
