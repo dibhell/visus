@@ -1,3 +1,4 @@
+
 import { FilterBand, SyncParam, BandsData } from '../types';
 
 export class AudioEngine {
@@ -11,6 +12,7 @@ export class AudioEngine {
     bands: BandsData = { sync1: 0, sync2: 0, sync3: 0 };
     filters: FilterBand[] = [];
     fftData: Uint8Array = new Uint8Array(1024);
+    currentParams: SyncParam[] = [];
 
     constructor() {
         this.bands = { sync1: 0, sync2: 0, sync3: 0 };
@@ -37,12 +39,14 @@ export class AudioEngine {
             await this.ctx.resume();
         }
 
+        // Clean up existing source to prevent connection errors or double playing
         if (this.src) {
             try {
                 this.src.disconnect();
             } catch (e) {
                 console.warn("Could not disconnect old source", e);
             }
+            this.src = null;
         }
 
         try {
@@ -89,6 +93,7 @@ export class AudioEngine {
     }
 
     updateFilters(syncParams: SyncParam[]) {
+        this.currentParams = syncParams;
         if (!this.ctx || this.filters.length === 0) return;
 
         this.filters.forEach((f, index) => {
@@ -109,11 +114,11 @@ export class AudioEngine {
         if (!this.anRaw || !this.ctx || this.ctx.state === 'suspended') return;
 
         // 1. RAW FFT Data (Visualizer)
-        // Cast to any to prevent TS mismatch between ArrayBufferLike and ArrayBuffer in CI
+        // Cast to any to prevent TS mismatch
         this.anRaw.getByteFrequencyData(this.fftData as any);
 
         // 2. Filtered Bands Data (Logic)
-        this.filters.forEach(f => {
+        this.filters.forEach((f, index) => {
             // Cast to any to prevent TS mismatch
             f.analyser.getByteFrequencyData(f.data as any);
             let sum = 0;
@@ -121,11 +126,10 @@ export class AudioEngine {
             
             const avg = sum / f.data.length;
             
-            // NORMALIZATION BOOST: 
-            // Divide by 180 instead of 255 to make it reach 1.0 easier.
-            // Add a small curve to make low volumes visible.
+            // NORMALIZATION + GAIN SENSITIVITY
+            const userGain = this.currentParams[index]?.gain ?? 1.0;
             const rawNorm = avg / 180.0; 
-            const normalizedLevel = Math.min(1.2, rawNorm * rawNorm * 0.5 + rawNorm); 
+            const normalizedLevel = Math.min(1.2, (rawNorm * rawNorm * 0.5 + rawNorm) * userGain); 
             
             this.bands[f.name] = Math.min(1.0, normalizedLevel);
         });
