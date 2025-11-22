@@ -418,7 +418,7 @@ const App: React.FC = () => {
         setTransform(prev => ({ ...prev, [key]: val }));
     };
 
-    // Fallback helper for logo
+    // USE SVG LOGO TO PREVENT 404 ERRORS
     const logoSrc = "./logo.svg";
 
     if (!isSystemActive) {
