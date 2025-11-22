@@ -434,7 +434,6 @@ const App: React.FC = () => {
                         <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
                         <img 
                             src={logoSrc}
-                            onError={(e) => {e.currentTarget.src = './logo.png'}} 
                             alt="VISUS Logo" 
                             className="relative w-32 h-32 rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] object-cover hover:scale-105 transition-transform duration-500"
                         />
@@ -499,7 +498,6 @@ const App: React.FC = () => {
                          {/* LOGO IN SIDEBAR */}
                         <img 
                             src={logoSrc} 
-                            onError={(e) => {e.currentTarget.src = './logo.png'}}
                             alt="V" 
                             className="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover" 
                         />
