@@ -56,7 +56,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // 1. Background
             ctx.clearRect(0, 0, W, H);
-            ctx.fillStyle = 'rgba(5, 5, 8, 0.4)'; 
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.3)'; // Slate dark
             ctx.fillRect(0, 0, W, H);
 
             // 2. Grid
@@ -100,20 +100,21 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.lineTo(0, H);
                 ctx.closePath();
                 
+                // New Gradient: Teal to Transparent
                 const grad = ctx.createLinearGradient(0, 0, 0, H);
-                grad.addColorStop(0, '#33ff9966');
-                grad.addColorStop(1, '#33ff9900');
+                grad.addColorStop(0, 'rgba(45, 212, 191, 0.4)'); // Teal
+                grad.addColorStop(1, 'rgba(45, 212, 191, 0.0)');
                 ctx.fillStyle = grad;
                 ctx.fill();
                 
                 // Top Line
                 ctx.lineWidth = 1.5;
-                ctx.strokeStyle = '#33ff99';
+                ctx.strokeStyle = '#2dd4bf';
                 ctx.stroke();
             }
 
             // 4. Interactive Points
-            const colors = ['#ff3333', '#00eeff', '#fce303'];
+            const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             
             if (syncParams && syncParams.length >= 3) {
                 syncParams.slice(0, 3).forEach((param, i) => {
@@ -158,8 +159,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     
                     // Label Number
                     if (!isDraggingThis && !isHovered) {
-                        ctx.fillStyle = '#000';
-                        ctx.font = 'bold 8px Inter, sans-serif';
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 9px Inter, sans-serif';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'middle';
                         ctx.fillText((i+1).toString(), x, anchorY);
@@ -168,7 +169,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     // Info Tooltip
                     if (isHovered || isDraggingThis) {
                         const tooltipY = anchorY - 20;
-                        ctx.fillStyle = 'rgba(0,0,0,0.8)';
+                        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
                         ctx.fillRect(x - 30, tooltipY - 22, 60, 24);
                         ctx.fillStyle = colors[i];
                         ctx.font = '10px JetBrains Mono, monospace';
@@ -190,19 +191,63 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     // --- INTERACTION HANDLERS ---
     
-    const getMousePos = (e: React.MouseEvent | MouseEvent) => {
+    const getMousePos = (e: React.MouseEvent | MouseEvent | React.TouchEvent) => {
         if (!containerRef.current) return { x: 0, y: 0, w: 0, h: 0 };
         const rect = containerRef.current.getBoundingClientRect();
+        
+        let clientX, clientY;
+        if ('touches' in e) {
+             clientX = e.touches[0].clientX;
+             clientY = e.touches[0].clientY;
+        } else {
+             clientX = (e as React.MouseEvent).clientX;
+             clientY = (e as React.MouseEvent).clientY;
+        }
+
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
+            x: clientX - rect.left,
+            y: clientY - rect.top,
             w: rect.width,
             h: rect.height
         };
     };
 
+    // --- MOUSE ---
+
     const handleMouseDown = (e: React.MouseEvent) => {
         const { x, w } = getMousePos(e);
+        checkHit(x, w);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        const { x, y, w, h } = getMousePos(e);
+        processMove(x, y, w, h);
+    };
+
+    const handleMouseUp = () => {
+        isDragging.current = null;
+    };
+
+    // --- TOUCH ---
+    
+    const handleTouchStart = (e: React.TouchEvent) => {
+        // e.preventDefault(); // Often needed to prevent scroll
+        const { x, w } = getMousePos(e);
+        checkHit(x, w);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        const { x, y, w, h } = getMousePos(e);
+        processMove(x, y, w, h);
+    };
+
+    const handleTouchEnd = () => {
+        isDragging.current = null;
+    };
+
+    // --- SHARED LOGIC ---
+
+    const checkHit = (x: number, w: number) => {
         let closest = -1;
         let minDist = 30; // Hit radius
 
@@ -221,9 +266,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         }
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
-        const { x, y, w, h } = getMousePos(e);
-
+    const processMove = (x: number, y: number, w: number, h: number) => {
         if (isDragging.current !== null) {
             const i = isDragging.current;
             
@@ -237,6 +280,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             onParamChange(i, { freq: newFreq, gain: newGain });
         } else {
+            // Hover detection only for Mouse
             let closest = -1;
             let minDist = 20;
             syncParams.slice(0, 3).forEach((p, i) => {
@@ -251,18 +295,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         }
     };
 
-    const handleMouseUp = () => {
-        isDragging.current = null;
-    };
-
     // Important: Add non-passive listener for wheel to prevent default scrolling
-    // But React's onWheel is synthetic. We need to handle it carefully.
     const handleWheel = (e: React.WheelEvent) => {
         // Only capture scroll if we are actively dragging a point
         if (isDragging.current !== null && syncParams[isDragging.current]) {
-            // Prevent page scroll
-            // Note: In React 18+ strict mode, sometimes e.preventDefault() in synthetic event warns,
-            // but it is necessary here.
             e.preventDefault();
             e.stopPropagation();
             
@@ -273,17 +309,19 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             
             onParamChange(idx, { width: newWidth });
         }
-        // If not dragging, we do NOT prevent default, allowing page scroll.
     };
 
     return (
         <div 
             ref={containerRef}
-            className="bg-zinc-900/50 border border-white/10 rounded-xl mb-4 overflow-hidden relative group cursor-crosshair select-none backdrop-blur-sm"
+            className="bg-black/20 border border-white/10 rounded-xl mb-4 overflow-hidden relative group cursor-crosshair select-none backdrop-blur-sm touch-none"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
             onWheel={handleWheel}
         >
             <div className="w-full h-[140px]">
@@ -293,7 +331,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     style={{ width: '100%', height: '100%' }}
                 />
             </div>
-            <div className="absolute top-2 left-3 text-[9px] text-zinc-600 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-2 left-3 text-[9px] text-slate-500 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
                 Interactive Spectrum<br/>
                 Hold & Scroll to adjust Width (Q)
             </div>

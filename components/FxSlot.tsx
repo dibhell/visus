@@ -29,7 +29,7 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
             const id = SHADER_LIST[key].id;
             if (key === '00_NONE') return true;
             if (category === 'additive') return id < 100 && id >= 0; // Additive < 100
-            if (category === 'main') return id >= 100; // Main Scenes > 100 (renumbered for clarity if needed, but keeping logic similar)
+            if (category === 'main') return id >= 100; // Main Scenes > 100
             return true;
         })
         .map(key => ({
@@ -37,11 +37,16 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
             label: key.replace(/^\d+_/, '').replace(/_/g, ' ')
         }));
 
+    // Modern Colors
+    const slotBorder = isMain ? 'border-accent/30' : 'border-white/5';
+    const slotBg = isMain ? 'bg-accent/5' : 'bg-white/5';
+    const glowColor = isMain ? '#a78bfa' : '#2dd4bf';
+
     return (
-        <div className="bg-black/20 p-3 rounded-lg border border-white/5 mb-2 relative overflow-hidden group hover:border-white/10 transition-colors">
+        <div className={`${slotBg} p-3 rounded-xl border ${slotBorder} mb-3 relative overflow-hidden group hover:border-white/20 transition-all duration-300`}>
              {/* Activity Indicator Bar */}
              <div 
-                className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent transition-all duration-75 ease-out"
+                className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent transition-all duration-75 ease-out shadow-[0_0_10px_rgba(167,139,250,0.5)]"
                 style={{ 
                     opacity: config.routing !== 'off' ? 0.3 + (activeLevel * 0.7) : 0,
                     height: `${Math.min(100, activeLevel * 100)}%`,
@@ -49,13 +54,13 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                 }} 
             />
             
-            {title && <div className="text-[9px] font-bold text-zinc-600 mb-1 uppercase pl-3 tracking-wider">{title}</div>}
+            {title && <div className="text-[9px] font-bold text-slate-400 mb-1 uppercase pl-3 tracking-wider flex items-center justify-between">{title}</div>}
             
             <div className="flex flex-col gap-3 pl-2">
                 {/* Top Row: Shader & Routing */}
                 <div className="flex gap-2">
                     <select
-                        className={`flex-1 bg-black border border-white/10 text-[10px] p-1.5 rounded-md focus:border-accent outline-none font-mono transition-colors ${config.shader === '00_NONE' ? 'text-zinc-600' : 'text-gray-200'}`}
+                        className={`flex-1 bg-black/40 border border-white/10 text-[10px] p-2 rounded-lg focus:border-accent outline-none font-mono transition-colors cursor-pointer hover:bg-black/60 ${config.shader === '00_NONE' ? 'text-slate-500' : 'text-slate-200'}`}
                         value={config.shader}
                         onChange={(e) => handleChange('shader', e.target.value)}
                     >
@@ -65,7 +70,7 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                     </select>
                     
                     <select
-                        className="w-20 bg-black border border-white/10 text-[9px] text-gray-300 p-1.5 rounded focus:border-accent outline-none uppercase"
+                        className="w-20 bg-black/40 border border-white/10 text-[9px] text-slate-300 p-2 rounded-lg focus:border-accent outline-none uppercase cursor-pointer hover:bg-black/60"
                         value={config.routing}
                         onChange={(e) => handleChange('routing', e.target.value as RoutingType)}
                     >
@@ -79,7 +84,7 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
 
                 {/* Bottom Row: Knobs Grid */}
                 {config.shader !== '00_NONE' && (
-                    <div className="flex justify-around items-center pt-1 pb-1 bg-black/10 rounded-lg">
+                    <div className="flex justify-around items-center pt-2 pb-1 bg-black/20 rounded-lg border border-white/5">
                         {/* Depth/Gain Knob */}
                         <Knob 
                             label="Depth"
@@ -89,22 +94,20 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                             step={1}
                             onChange={(v) => handleChange('gain', v)}
                             format={(v) => `${v}%`}
-                            color="#33ff99"
+                            color={glowColor}
                         />
 
-                        {/* Only show Mix for Main */}
-                        {isMain && (
-                            <Knob 
-                                label="Wet/Dry"
-                                value={config.mix || 100}
-                                min={0}
-                                max={100}
-                                step={1}
-                                onChange={(v) => handleChange('mix', v)}
-                                format={(v) => `${v}%`}
-                                color="#ffffff"
-                            />
-                        )}
+                        {/* Wet/Dry Knob for ALL effects now, to allow individual tuning */}
+                        <Knob 
+                            label="Wet/Dry"
+                            value={config.mix || 100}
+                            min={0}
+                            max={100}
+                            step={1}
+                            onChange={(v) => handleChange('mix', v)}
+                            format={(v) => `${v}%`}
+                            color="#ffffff"
+                        />
                     </div>
                 )}
             </div>
