@@ -4,6 +4,7 @@ export interface SyncParam {
   offset: number;
   freq: number;
   width: number;
+  gain: number; // Added for sensitivity control
 }
 
 export type RoutingType = 'off' | 'bpm' | 'sync1' | 'sync2' | 'sync3';
@@ -48,4 +49,12 @@ export interface BandsData {
   sync2: number;
   sync3: number;
   [key: string]: number;
+}
+
+export interface MusicTrack {
+  trackId: number;
+  artistName: string;
+  trackName: string;
+  previewUrl: string;
+  artworkUrl100: string;
 }

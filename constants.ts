@@ -19,6 +19,10 @@ export const GLSL_HEADER = `
         return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
     }
 
+    float noise(vec2 p) {
+        return rand(p); // Placeholder for simple noise
+    }
+
     vec2 getUV(vec2 fragCoord) {
         vec2 uv = fragCoord / iResolution.xy;
         
@@ -108,6 +112,60 @@ export const GLSL_HEADER = `
             outCol.rgb += drift;
         }
 
+        // --- NEW ADDITIONS (22+) ---
+
+        // 22. FISHEYE LENS
+        else if (fxID == 22) {
+            vec2 p = uv * 2.0 - 1.0;
+            float d = length(p);
+            float bind = max(0.0, amt * 0.5); // Strength
+            // Barrel distortion
+            vec2 uv2 = uv + (p * pow(d, 2.0) * bind);
+            outCol = getVideo(uv2);
+            // Vignette for fisheye
+            outCol.rgb *= 1.0 - (dot(p, p) * bind * 0.5);
+        }
+
+        // 23. ZOOM PULSE (Dynamic)
+        else if (fxID == 23) {
+            // Zoom centered
+            vec2 pivot = vec2(0.5);
+            // Pulse effect based on amount
+            float pulse = sin(iTime * 10.0) * 0.1 * amt;
+            float zoom = amt * 0.5 + pulse; // Base zoom + pulse
+            vec2 zoomedUV = (uv - pivot) * (1.0 - zoom) + pivot;
+            outCol = getVideo(zoomedUV);
+        }
+
+        // 24. GLITCH DIGITAL (Blocky)
+        else if (fxID == 24) {
+             float blocks = 10.0;
+             vec2 blockUV = floor(uv * blocks) / blocks;
+             float r = rand(blockUV + floor(iTime * 15.0));
+             if (r < amt * 0.5) {
+                 float shift = (r - 0.5) * 0.5;
+                 outCol = getVideo(uv + vec2(shift, 0.0));
+                 outCol.rgb += 0.2; // flash
+             }
+        }
+
+        // 25. GLITCH ANALOG (Tearing)
+        else if (fxID == 25) {
+             float y = floor(uv.y * 50.0); // Scanlines
+             float shift = sin(y * 13.2 + iTime * 20.0) * amt * 0.1;
+             shift *= step(0.8, sin(iTime * 5.0 + y)); // Random bursts
+             vec4 c = getVideo(uv + vec2(shift, 0.0));
+             c.r = getVideo(uv + vec2(shift + amt*0.02, 0.0)).r;
+             c.b = getVideo(uv + vec2(shift - amt*0.02, 0.0)).b;
+             outCol = c;
+        }
+
+        // 26. MIRROR QUAD
+        else if (fxID == 26) {
+            vec2 p = abs(uv * 2.0 - 1.0);
+            outCol = mix(baseCol, getVideo(p), clamp(amt, 0.0, 1.0));
+        }
+
         // --- GROUP 2: COLOR FILTERS (Operate on outCol directly) ---
 
         // 2. Invert
@@ -169,56 +227,90 @@ export const SHADER_LIST: ShaderList = {
     '7_VHS_RETRO': { id: 7, src: BASE_SHADER_BODY },
     '8_STEAM_COLOR': { id: 8, src: BASE_SHADER_BODY },
     '9_SCANLINES': { id: 9, src: BASE_SHADER_BODY },
+    // NEW BATCH (User Request)
+    '22_FISHEYE_LENS': { id: 22, src: BASE_SHADER_BODY },
+    '23_ZOOM_PULSE': { id: 23, src: BASE_SHADER_BODY },
+    '24_GLITCH_DIGITAL': { id: 24, src: BASE_SHADER_BODY },
+    '25_GLITCH_ANALOG': { id: 25, src: BASE_SHADER_BODY },
+    '26_MIRROR_QUAD': { id: 26, src: BASE_SHADER_BODY },
+
     
-    // --- MAIN SCENES (COMPLEX) ---
-    '10_GLITCH_SCENE': { id: 10, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); float s=step(0.8,sin(iTime*15.))*uMainFXGain*0.5; vec4 c=getVideo(uv+vec2(s,0)); c.g=getVideo(uv+vec2(s*1.5,0)).g; gl_FragColor=applyAdditiveFX(mix(c, getVideo(uv), 1.0-iMix), uv); }` },
-    '11_TUNNEL_WARP': { id: 11, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 p=(uv*2.-1.)*(1.0 + uMainFXGain*1.5); float r=length(p); float a=atan(p.y,p.x); a+=sin(r*20.0-iTime*5.0)*uMainFXGain; p=r*vec2(cos(a),sin(a)); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(p*0.5+0.5), iMix), uv); }` },
-    '12_NEON_EDGES': { id: 12, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 d=1./iResolution; vec4 c=getVideo(uv); float e=distance(c,getVideo(uv+vec2(d.x,0)))+distance(c,getVideo(uv+vec2(0,d.y))); e=smoothstep(0.1,0.4,e)*iMix*8.*uMainFXGain; gl_FragColor=applyAdditiveFX(mix(c,vec4(vec3(e)*vec3(1,0.2,1),1),0.5), uv); }` },
-    '13_COLOR_SHIFT': { id: 13, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec4 c=getVideo(uv); float hueShift = sin(iTime*0.5)*uMainFXGain*2.0; c.rgb = mod(c.rgb + hueShift, 1.0); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), c, iMix), uv); }` },
-    '14_MIRROR_X': { id: 14, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 m=abs(uv*2.-1.); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(m*0.5+0.5), iMix * clamp(uMainFXGain+0.5, 0.0, 1.0)), uv); }` },
-    '15_WAVE_VERT': { id: 15, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 distUv = uv; distUv.x += sin(uv.y * 30.0 + iTime * 5.0) * 0.1 * uMainFXGain; gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(distUv), iMix), uv); }` },
+    // --- MAIN SCENES (COMPLEX - ID > 100 for safety/logic separation, though logic uses ID check) ---
+    '100_GLITCH_SCENE': { id: 100, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); float s=step(0.8,sin(iTime*15.))*uMainFXGain*0.5; vec4 c=getVideo(uv+vec2(s,0)); c.g=getVideo(uv+vec2(s*1.5,0)).g; gl_FragColor=applyAdditiveFX(mix(c, getVideo(uv), 1.0-iMix), uv); }` },
+    '101_TUNNEL_WARP': { id: 101, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 p=(uv*2.-1.)*(1.0 + uMainFXGain*1.5); float r=length(p); float a=atan(p.y,p.x); a+=sin(r*20.0-iTime*5.0)*uMainFXGain; p=r*vec2(cos(a),sin(a)); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(p*0.5+0.5), iMix), uv); }` },
+    '102_NEON_EDGES': { id: 102, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 d=1./iResolution; vec4 c=getVideo(uv); float e=distance(c,getVideo(uv+vec2(d.x,0)))+distance(c,getVideo(uv+vec2(0,d.y))); e=smoothstep(0.1,0.4,e)*iMix*8.*uMainFXGain; gl_FragColor=applyAdditiveFX(mix(c,vec4(vec3(e)*vec3(1,0.2,1),1),0.5), uv); }` },
+    '103_COLOR_SHIFT': { id: 103, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec4 c=getVideo(uv); float hueShift = sin(iTime*0.5)*uMainFXGain*2.0; c.rgb = mod(c.rgb + hueShift, 1.0); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), c, iMix), uv); }` },
+    '104_MIRROR_X': { id: 104, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 m=abs(uv*2.-1.); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(m*0.5+0.5), iMix * clamp(uMainFXGain+0.5, 0.0, 1.0)), uv); }` },
+    '105_WAVE_VERT': { id: 105, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 distUv = uv; distUv.x += sin(uv.y * 30.0 + iTime * 5.0) * 0.1 * uMainFXGain; gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(distUv), iMix), uv); }` },
     
-    // New Complex
-    '16_STEAM_ENGINE': { id: 16, src: `void main(){ 
+    // Complex V2
+    '106_STEAM_ENGINE': { id: 106, src: `void main(){ 
         vec2 uv=getUV(gl_FragCoord.xy);
         vec4 c = getVideo(uv);
-        // Bronze Tint
         float gray = dot(c.rgb, vec3(0.299, 0.587, 0.114));
         vec3 bronze = vec3(gray * 1.3, gray * 1.0, gray * 0.7);
-        
-        // Steam/Smoke Noise
         float noise = fract(sin(dot(uv + iTime*0.1, vec2(12.9898,78.233)))*43758.5453);
-        // Boosted smoke visibility
         float smoke = smoothstep(0.4, 0.8, noise) * uMainFXGain;
-        
         vec3 final = mix(c.rgb, bronze, iMix) + vec3(smoke);
         gl_FragColor = applyAdditiveFX(vec4(final, 1.0), uv);
     }` },
-    '17_CYBER_FAILURE': { id: 17, src: `void main(){ 
+    '107_CYBER_FAILURE': { id: 107, src: `void main(){ 
         vec2 uv=getUV(gl_FragCoord.xy);
-        // Block displacement
         float blocks = floor(uv.y * 10.0);
-        // Increased displacement
         float displace = step(0.5, sin(iTime * 20.0 + blocks)) * uMainFXGain * 0.2;
         vec2 dUV = uv + vec2(displace, 0.0);
-        
-        // Color Channel Split
         float r = getVideo(dUV + vec2(uMainFXGain*0.05, 0)).r;
         float g = getVideo(dUV).g;
         float b = getVideo(dUV - vec2(uMainFXGain*0.05, 0)).b;
-        
         gl_FragColor = applyAdditiveFX(mix(getVideo(uv), vec4(r,g,b,1.0), iMix), uv);
     }` },
-    '18_BIO_HAZARD': { id: 18, src: `void main(){ 
+    '108_BIO_HAZARD': { id: 108, src: `void main(){ 
         vec2 uv=getUV(gl_FragCoord.xy);
         vec4 c = getVideo(uv);
-        // Edge detection for glowing outlines
         vec2 d = 2.0/iResolution;
         float edge = length(getVideo(uv+d).rgb - c.rgb);
-        
         vec3 toxic = vec3(0.0, 1.0, 0.2) * edge * 8.0 * uMainFXGain;
-        
         gl_FragColor = applyAdditiveFX(mix(c, c + vec4(toxic, 0.0), iMix), uv);
+    }` },
+
+    // --- ZOOM FX SCENES ---
+    '109_ZOOM_TOP': { id: 109, src: `void main(){ 
+        vec2 uv=getUV(gl_FragCoord.xy);
+        // Pivot at Top Center (0.5, 0.9) to focus on face
+        vec2 pivot = vec2(0.5, 0.9);
+        // Zoom Factor based on beat
+        float z = 0.5 * uMainFXGain; // Max zoom 50%
+        vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
+        
+        // Mix between original and zoomed based on mix
+        vec4 c = getVideo(mix(uv, zoomedUV, iMix));
+        gl_FragColor = applyAdditiveFX(c, uv);
+    }` },
+    '110_ZOOM_BTM': { id: 110, src: `void main(){ 
+        vec2 uv=getUV(gl_FragCoord.xy);
+        // Pivot at Bottom Center (0.5, 0.1) to focus on legs/shoes
+        vec2 pivot = vec2(0.5, 0.1);
+        float z = 0.5 * uMainFXGain;
+        vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
+        vec4 c = getVideo(mix(uv, zoomedUV, iMix));
+        gl_FragColor = applyAdditiveFX(c, uv);
+    }` },
+    '111_ZOOM_CTR': { id: 111, src: `void main(){ 
+        vec2 uv=getUV(gl_FragCoord.xy);
+        // Pivot Center (0.5, 0.5)
+        vec2 pivot = vec2(0.5, 0.5);
+        float z = 0.4 * uMainFXGain;
+        vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
+        
+        // Add a bit of rotation for 'Center' style
+        float rot = sin(iTime * 10.0) * 0.05 * uMainFXGain;
+        vec2 p = zoomedUV - pivot;
+        float s = sin(rot); float c_rot = cos(rot);
+        p = mat2(c_rot, -s, s, c_rot) * p;
+        zoomedUV = p + pivot;
+
+        vec4 c = getVideo(mix(uv, zoomedUV, iMix));
+        gl_FragColor = applyAdditiveFX(c, uv);
     }` },
 };
 
