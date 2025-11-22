@@ -1,6 +1,5 @@
 
-
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FxState, RoutingType, SHADER_LIST } from '../constants';
 import Knob from './Knob';
 
@@ -9,7 +8,7 @@ interface FxSlotProps {
     fxState: FxState;
     setFxState: React.Dispatch<React.SetStateAction<FxState>>;
     title?: string;
-    category: 'main' | 'additive';
+    category?: 'main' | 'additive'; // Kept for styling, not filtering
     activeLevel?: number;
 }
 
@@ -24,18 +23,15 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
         }));
     };
 
-    const shaderOptions = Object.keys(SHADER_LIST)
-        .filter(key => {
-            const id = SHADER_LIST[key].id;
-            if (key === '00_NONE') return true;
-            if (category === 'additive') return id < 100 && id >= 0; // Additive < 100
-            if (category === 'main') return id >= 100; // Main Scenes > 100
-            return true;
-        })
-        .map(key => ({
-            value: key,
-            label: key.replace(/^\d+_/, '').replace(/_/g, ' ')
-        }));
+    // Memoize and Sort options
+    const shaderOptions = useMemo(() => {
+        return Object.keys(SHADER_LIST)
+            .map(key => ({
+                value: key,
+                label: key.replace(/^\d+_/, '').replace(/_/g, ' ')
+            }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+    }, []);
 
     // Modern Colors
     const slotBorder = isMain ? 'border-accent/30' : 'border-white/5';
@@ -60,25 +56,27 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                 {/* Top Row: Shader & Routing */}
                 <div className="flex gap-2">
                     <select
-                        className={`flex-1 bg-black/40 border border-white/10 text-[10px] p-2 rounded-lg focus:border-accent outline-none font-mono transition-colors cursor-pointer hover:bg-black/60 ${config.shader === '00_NONE' ? 'text-slate-500' : 'text-slate-200'}`}
+                        className={`flex-1 bg-black/60 border border-white/10 text-[10px] p-2 rounded-lg focus:border-accent outline-none font-mono transition-colors cursor-pointer hover:bg-black/80 ${config.shader === '00_NONE' ? 'text-slate-400 italic' : 'text-slate-200 font-semibold'}`}
                         value={config.shader}
                         onChange={(e) => handleChange('shader', e.target.value)}
                     >
                         {shaderOptions.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            <option key={opt.value} value={opt.value} className="bg-slate-900 text-slate-200 not-italic font-sans">
+                                {opt.label}
+                            </option>
                         ))}
                     </select>
                     
                     <select
-                        className="w-20 bg-black/40 border border-white/10 text-[9px] text-slate-300 p-2 rounded-lg focus:border-accent outline-none uppercase cursor-pointer hover:bg-black/60"
+                        className="w-20 bg-black/60 border border-white/10 text-[9px] text-slate-300 p-2 rounded-lg focus:border-accent outline-none uppercase cursor-pointer hover:bg-black/80"
                         value={config.routing}
                         onChange={(e) => handleChange('routing', e.target.value as RoutingType)}
                     >
-                        <option value="off">MANUAL</option>
-                        <option value="bpm">BPM</option>
-                        <option value="sync1">BASS</option>
-                        <option value="sync2">MID</option>
-                        <option value="sync3">HIGH</option>
+                        <option value="off" className="bg-slate-900">MANUAL</option>
+                        <option value="bpm" className="bg-slate-900">BPM</option>
+                        <option value="sync1" className="bg-slate-900">BASS</option>
+                        <option value="sync2" className="bg-slate-900">MID</option>
+                        <option value="sync3" className="bg-slate-900">HIGH</option>
                     </select>
                 </div>
 
@@ -97,7 +95,7 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                             color={glowColor}
                         />
 
-                        {/* Wet/Dry Knob for ALL effects now, to allow individual tuning */}
+                        {/* Wet/Dry Knob */}
                         <Knob 
                             label="Wet/Dry"
                             value={config.mix || 100}

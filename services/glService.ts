@@ -82,14 +82,14 @@ export class GLService {
         this.gl.uniform2f(u("iResolution"), this.canvas.width, this.canvas.height);
         this.gl.uniform2f(u("iVideoResolution"), video?.videoWidth || 0, video?.videoHeight || 0);
 
-        this.gl.uniform1f(u("iMix"), (computedFx.mix ?? 100) / 100);
+        // Main Layer Controls (Layer 0)
         this.gl.uniform1f(u("uMainFXGain"), computedFx.mainFXGain);
+        this.gl.uniform1i(u("uMainFX_ID"), computedFx.main_id);
         
-        // New Master Gain for Additive Chain
+        // Additive Chain Controls (Layers 1-5)
         this.gl.uniform1f(u("uAdditiveMasterGain"), computedFx.additiveMasterGain);
 
         // Transforms
-        // Passed from App.tsx: x/y are normalized (e.g. 0.1)
         this.gl.uniform2f(u("uTranslate"), computedFx.transform.x, computedFx.transform.y);
         this.gl.uniform1f(u("uScale"), computedFx.transform.scale);
 

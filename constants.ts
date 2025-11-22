@@ -1,15 +1,15 @@
 
+
 export interface SyncParam {
   bpm: number;
   offset: number;
   freq: number;
   width: number;
-  gain: number; // Added for sensitivity control
+  gain: number;
 }
 
 export type RoutingType = 'off' | 'bpm' | 'sync1' | 'sync2' | 'sync3';
 
-// FR-105: Support for Manual Resolution and Social Formats
 export type AspectRatioMode = 'native' | 'fit' | '16:9' | '9:16' | '1:1' | '4:5' | '21:9' | 'manual';
 
 export interface TransformConfig {
@@ -22,7 +22,7 @@ export interface FxConfig {
   shader: string;
   routing: RoutingType;
   gain: number;
-  mix?: number; // Only for main
+  mix?: number; 
 }
 
 export interface FxState {
@@ -71,14 +71,15 @@ export const GLSL_HEADER = `
     uniform vec2 iResolution;
     uniform vec2 iVideoResolution;
     uniform sampler2D iChannel0;
-    uniform float iMix;
-    uniform float uMainFXGain;
     
     // Transform Uniforms
-    uniform vec2 uTranslate; // X, Y panning
-    uniform float uScale;    // Zoom
+    uniform vec2 uTranslate; 
+    uniform float uScale;    
     
-    // Uniforms for 5 Additive FX slots
+    // Uniforms for FX slots
+    uniform float uMainFXGain; // Gain for Main (Layer 0)
+    uniform int uMainFX_ID;    // ID for Main (Layer 0)
+
     uniform float uFX1; uniform float uFX2; uniform float uFX3; uniform float uFX4; uniform float uFX5;
     uniform int uFX1_ID; uniform int uFX2_ID; uniform int uFX3_ID; uniform int uFX4_ID; uniform int uFX5_ID;
     
@@ -90,16 +91,10 @@ export const GLSL_HEADER = `
         return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
     }
 
-    float noise(vec2 p) {
-        return rand(p); 
-    }
-
     vec2 getUV(vec2 fragCoord) {
         vec2 uv = fragCoord / iResolution.xy;
-        
         if(iVideoResolution.x < 1.0) return uv;
         
-        // 1. Aspect Ratio Correction (Cover Mode)
         float sR = iResolution.x / iResolution.y;
         float vR = iVideoResolution.x / iVideoResolution.y;
         vec2 scale = vec2(1.0); 
@@ -113,70 +108,46 @@ export const GLSL_HEADER = `
             offset.y = (1.0 - scale.y) * 0.5; 
         }
         
-        // Base UV with aspect correction
         vec2 correctedUV = (uv - offset) / scale;
-        
-        // 2. Apply User Transforms (Pan/Zoom)
-        // Center pivot
         vec2 p = correctedUV - 0.5;
-        
-        // Scale (Zoom) - Inverse logic: smaller scale value = bigger image
-        // We invert uScale so higher knob value = zoom in
         p /= max(0.1, uScale);
-        
-        // Translate (Pan)
         p -= uTranslate;
-        
         return p + 0.5;
     }
 
     vec4 getVideo(vec2 uv) {
-        // Mirror repeat to avoid black edges on heavy distortion
         vec2 p = abs(fract(uv * 0.5 + 0.5) * 2.0 - 1.0);
-        
-        if(iVideoResolution.x < 2.0) { // Fallback plasma
-            float t = iTime; 
-            float v = sin(p.x*10.+t) + sin(p.y*10.+t);
-            return vec4(0.5 + 0.5*sin(v), 0.2, 0.2, 1.0);
-        }
+        if(iVideoResolution.x < 2.0) return vec4(0.0);
         return texture2D(iChannel0, p);
     }
     
-    // --- LAYERING SYSTEM ---
-    // Each effect operates as a layer that blends on top of the previous result (bg)
+    // --- UNIFIED LAYER LOGIC ---
+    // Contains ALL effects (Main & Post) in one switch for maximum flexibility
     
     vec4 applyLayer(vec4 bg, vec2 uv, float rawAmt, int id) {
-        // Global Chain Intensity
-        float amt = rawAmt * uAdditiveMasterGain; 
-
+        // Apply Master Gain only if it's NOT the main layer (id < 100 usually implies additives, but here we control via uniforms)
+        // Actually, rawAmt passed here is already specific to the slot.
+        
+        float amt = rawAmt; 
         if (amt < 0.001 || id == 0) return bg;
 
-        vec4 fg = bg; // The 'Foreground' layer result
-
-        // --- DISTORTION LAYERS (Sample Video at new coords) ---
-        // Since we are single-pass, distortions sample the raw video and mix over the background.
-        // This creates a "Fade to effect" look which allows stacking.
+        // --- DISTORTIONS & GEOMETRY ---
 
         if (id == 1) { // RGB SHIFT
              float off = amt * 0.05;
              float r = getVideo(uv + vec2(off, 0.0)).r;
              float b = getVideo(uv - vec2(off, 0.0)).b;
-             vec4 shiftCol = vec4(r, bg.g, b, 1.0);
-             return mix(bg, shiftCol, amt);
+             return mix(bg, vec4(r, bg.g, b, 1.0), amt);
         }
         else if (id == 3) { // GLITCH LINES
             float shift = step(0.90, sin(uv.y * 50.0 + iTime * 20.0)) * amt * 0.2;
-            vec4 glitchSample = getVideo(uv + vec2(shift, 0.0));
-            return mix(bg, glitchSample, amt);
+            return mix(bg, getVideo(uv + vec2(shift, 0.0)), amt);
         }
         else if (id == 4) { // PIXELATE
             float pixels = 300.0 - (amt * 290.0);
             if (pixels < 1.0) pixels = 1.0;
             vec2 p = floor(uv * pixels) / pixels;
-            vec4 pixCol = getVideo(p);
-            // Enhance: Multiply original color to keep some previous fx logic if desired, 
-            // but purely mixing is cleaner for layering.
-            return mix(bg, pixCol, amt);
+            return mix(bg, getVideo(p), amt);
         }
         else if (id == 6) { // KALEIDOSCOPE
             vec2 p = uv * 2.0 - 1.0;
@@ -184,16 +155,14 @@ export const GLSL_HEADER = `
             float s = sin(angle); float c = cos(angle);
             p = mat2(c, -s, s, c) * p;
             p = abs(p);
-            vec4 kCol = getVideo(p * 0.5 + 0.5);
-            return mix(bg, kCol, amt);
+            return mix(bg, getVideo(p * 0.5 + 0.5), amt);
         }
         else if (id == 7) { // VHS RETRO
-             // Distortion part
              float yOff = amt * 0.03;
              float drift = sin(uv.y * 10.0 + iTime * 2.0) * amt * 0.1;
              vec4 vhsCol = bg;
-             vhsCol.r = bg.r + (rand(uv + vec2(0.0, iTime)) * amt * 0.6); // Noise
-             vhsCol.g = getVideo(uv + vec2(0.0, yOff)).g; // Chromatic abberation
+             vhsCol.r = bg.r + (rand(uv + vec2(0.0, iTime)) * amt * 0.6); 
+             vhsCol.g = getVideo(uv + vec2(0.0, yOff)).g; 
              vhsCol.rgb += drift;
              return mix(bg, vhsCol, amt);
         }
@@ -203,7 +172,6 @@ export const GLSL_HEADER = `
             float bind = max(0.0, amt * 0.5);
             vec2 uv2 = uv + (p * pow(d, 2.0) * bind);
             vec4 fishCol = getVideo(uv2);
-            // Vignette
             fishCol.rgb *= 1.0 - (dot(p, p) * bind * 0.5);
             return mix(bg, fishCol, amt);
         }
@@ -222,7 +190,7 @@ export const GLSL_HEADER = `
                  float shift = (r - 0.5) * 0.5;
                  vec4 gCol = getVideo(uv + vec2(shift, 0.0));
                  gCol.rgb += 0.2;
-                 return mix(bg, gCol, 0.8); // Hard mix for glitch
+                 return mix(bg, gCol, 0.8); 
              }
              return bg;
         }
@@ -239,11 +207,158 @@ export const GLSL_HEADER = `
             vec2 p = abs(uv * 2.0 - 1.0);
             return mix(bg, getVideo(p), amt);
         }
+        
+        // --- PREVIOUSLY "MAIN" SCENES (Now Universal) ---
 
-        // --- COLOR FILTERS (Modify the background directly) ---
-        // These are truly independent adjustment layers.
+        else if (id == 100) { // GLITCH SCENE
+            float s = step(0.8, sin(iTime * 15.0)) * amt * 0.5;
+            vec4 c = getVideo(uv + vec2(s, 0.0));
+            c.g = getVideo(uv + vec2(s * 1.5, 0.0)).g;
+            return mix(bg, c, amt);
+        }
+        else if (id == 101) { // TUNNEL WARP
+            vec2 p = (uv * 2.0 - 1.0) * (1.0 + amt * 1.5);
+            float r = length(p);
+            float a = atan(p.y, p.x);
+            a += sin(r * 20.0 - iTime * 5.0) * amt;
+            p = r * vec2(cos(a), sin(a));
+            return mix(bg, getVideo(p * 0.5 + 0.5), amt);
+        }
+        else if (id == 102) { // NEON EDGES
+            vec2 d = 1.0 / iResolution;
+            vec4 c = getVideo(uv);
+            float e = distance(c, getVideo(uv + vec2(d.x, 0.0))) + distance(c, getVideo(uv + vec2(0.0, d.y)));
+            e = smoothstep(0.1, 0.4, e) * amt * 8.0;
+            return mix(bg, mix(c, vec4(vec3(e) * vec3(1.0, 0.2, 1.0), 1.0), 0.5), amt);
+        }
+        else if (id == 103) { // COLOR SHIFT
+            vec4 c = getVideo(uv);
+            float hueShift = sin(iTime * 0.5) * amt * 2.0;
+            c.rgb = mod(c.rgb + hueShift, 1.0);
+            return mix(bg, c, amt);
+        }
+        else if (id == 104) { // MIRROR X
+            vec2 m = abs(uv * 2.0 - 1.0);
+            return mix(bg, getVideo(m * 0.5 + 0.5), amt);
+        }
+        else if (id == 105) { // WAVE VERT
+            vec2 distUv = uv;
+            distUv.x += sin(uv.y * 30.0 + iTime * 5.0) * 0.1 * amt;
+            return mix(bg, getVideo(distUv), amt);
+        }
+        else if (id == 106) { // STEAM ENGINE
+            vec4 c = getVideo(uv);
+            float gray = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+            vec3 bronze = vec3(gray * 1.3, gray * 1.0, gray * 0.7);
+            float noise = fract(sin(dot(uv + iTime*0.1, vec2(12.9898,78.233)))*43758.5453);
+            float smoke = smoothstep(0.4, 0.8, noise) * amt;
+            vec3 final = mix(c.rgb, bronze, amt) + vec3(smoke * amt);
+            return mix(bg, vec4(final, 1.0), amt);
+        }
+        else if (id == 107) { // CYBER FAILURE
+            float blocks = floor(uv.y * 10.0);
+            float displace = step(0.5, sin(iTime * 20.0 + blocks)) * amt * 0.2;
+            vec2 dUV = uv + vec2(displace, 0.0);
+            float r = getVideo(dUV + vec2(amt*0.05, 0)).r;
+            float g = getVideo(dUV).g;
+            float b = getVideo(dUV - vec2(amt*0.05, 0)).b;
+            return mix(bg, vec4(r,g,b,1.0), amt);
+        }
+        else if (id == 108) { // BIO HAZARD
+            vec4 c = getVideo(uv);
+            vec2 d = 2.0/iResolution;
+            float edge = length(getVideo(uv+d).rgb - c.rgb);
+            vec3 toxic = vec3(0.0, 1.0, 0.2) * edge * 8.0 * amt;
+            return mix(bg, c + vec4(toxic, 0.0), amt);
+        }
+        else if (id == 109) { // ZOOM TOP
+            vec2 pivot = vec2(0.5, 0.9);
+            float z = 0.5 * amt;
+            vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
+            return mix(bg, getVideo(mix(uv, zoomedUV, amt)), amt); // Mix UV for smooth transition
+        }
+        else if (id == 110) { // ZOOM BTM
+            vec2 pivot = vec2(0.5, 0.1);
+            float z = 0.5 * amt;
+            vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
+            return mix(bg, getVideo(mix(uv, zoomedUV, amt)), amt);
+        }
+        else if (id == 111) { // ZOOM CTR
+            vec2 pivot = vec2(0.5, 0.5);
+            float z = 0.4 * amt;
+            vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
+            float rot = sin(iTime * 10.0) * 0.05 * amt;
+            vec2 p = zoomedUV - pivot;
+            float s = sin(rot); float c_rot = cos(rot);
+            p = mat2(c_rot, -s, s, c_rot) * p;
+            zoomedUV = p + pivot;
+            return mix(bg, getVideo(mix(uv, zoomedUV, amt)), amt);
+        }
+        else if (id == 112) { // ASCII MATRIX
+            float pixels = 80.0 - (amt * 40.0); 
+            vec2 blockUV = floor(uv * pixels) / pixels;
+            vec4 c = getVideo(blockUV);
+            float gray = dot(c.rgb, vec3(0.3));
+            vec2 cellUV = fract(uv * pixels);
+            float char = 0.0;
+            float d = max(abs(cellUV.x-0.5), abs(cellUV.y-0.5));
+            if (gray > 0.8) char = step(d, 0.4);
+            else if (gray > 0.6) char = step(abs(cellUV.x-0.5), 0.1) + step(abs(cellUV.y-0.5), 0.1);
+            else if (gray > 0.4) char = step(abs(cellUV.x-cellUV.y), 0.1);
+            else if (gray > 0.2) char = step(length(cellUV-0.5), 0.2);
+            char = clamp(char, 0.0, 1.0);
+            vec3 matrixCol = vec3(0.2, 1.0, 0.4) * char;
+            return mix(bg, vec4(matrixCol, 1.0), amt);
+        }
+        else if (id == 113) { // WATER RIPPLE
+            vec2 p = uv * 2.0 - 1.0;
+            float len = length(p);
+            float rip = sin(len * 20.0 - iTime * 10.0) * 0.05 * amt;
+            vec2 d = (p/len) * rip;
+            return mix(bg, getVideo(uv + d), amt);
+        }
+        else if (id == 114) { // PIXEL SORT
+            float t = 0.4; 
+            float dist = 0.0;
+            for(float i=0.0; i<10.0; i++){
+                 vec4 s = getVideo(uv + vec2(-i*0.02*amt, 0.0));
+                 float l = dot(s.rgb, vec3(0.333));
+                 if(l > t) dist = i*0.02*amt;
+            }
+            return mix(bg, getVideo(uv - vec2(dist, 0.0)), amt);
+        }
+        else if (id == 115) { // HEX PIXELATE
+            vec2 r = vec2(1.0, 1.73);
+            vec2 h = r * 0.5;
+            float scale = 20.0 + (1.0-amt)*50.0;
+            vec2 a = mod(uv * scale, r) - h;
+            vec2 b = mod(uv * scale - h, r) - h;
+            vec2 gv = dot(a, a) < dot(b, b) ? a : b;
+            vec2 id_hex = uv * scale - gv;
+            vec2 hexUV = id_hex / scale;
+            return mix(bg, getVideo(hexUV), amt);
+        }
+        else if (id == 116) { // AUDIO SHAKE
+            float shake = amt * 0.1; 
+            vec2 off = vec2(rand(vec2(iTime, 0.0)), rand(vec2(iTime, 1.0))) * shake - (shake*0.5);
+            float r = getVideo(uv + off).r;
+            float g = getVideo(uv + off * 0.5).g;
+            float b = getVideo(uv).b;
+            return mix(bg, vec4(r,g,b,1.0), amt);
+        }
+        else if (id == 117) { // BARANORAMA
+            vec2 p = uv * 2.0 - 1.0;
+            float r = length(p);
+            float a = atan(p.y, p.x);
+            vec2 polarUV = vec2(a / 3.14159, r);
+            polarUV = polarUV * 0.5 + 0.5;
+            polarUV.x += iTime * 0.2 * amt;
+            return mix(bg, getVideo(polarUV), amt);
+        }
 
-        if (id == 2) { // INVERT
+        // --- COLOR & STYLE FILTERS ---
+
+        else if (id == 2) { // INVERT
             return mix(bg, 1.0 - bg, amt);
         }
         else if (id == 5) { // FLASH
@@ -260,32 +375,76 @@ export const GLSL_HEADER = `
             vec3 lined = bg.rgb * (1.0 - lines * clamp(amt, 0.0, 0.9));
             return vec4(lined, 1.0);
         }
+        else if (id == 27) { // HALFTONE
+            float freq = 80.0;
+            vec2 nearest = 2.0 * fract(freq * uv) - 1.0;
+            float dist = length(nearest);
+            float gray = dot(bg.rgb, vec3(0.299, 0.587, 0.114));
+            float radius = sqrt(gray) * 1.0; 
+            vec3 dotCol = vec3(step(dist, radius)); 
+            return mix(bg, vec4(dotCol, 1.0), amt);
+        }
+        else if (id == 28) { // GAMEBOY
+             float pix = 4.0;
+             vec2 dUV = floor(uv * iResolution / pix) * pix / iResolution;
+             float gray = dot(getVideo(dUV).rgb, vec3(0.299, 0.587, 0.114));
+             float dither = mod(gl_FragCoord.x, 2.0) + mod(gl_FragCoord.y, 2.0)*2.0;
+             dither = (dither / 4.0) * 0.3; 
+             float q = floor(gray * 4.0 + dither) / 3.0;
+             vec3 col = mix(vec3(0.06, 0.22, 0.06), vec3(0.61, 0.73, 0.06), q);
+             return mix(bg, vec4(col, 1.0), amt);
+        }
+        else if (id == 29) { // THERMAL
+            float lum = dot(bg.rgb, vec3(0.299, 0.587, 0.114));
+            vec3 thermal;
+            if (lum < 0.25) thermal = mix(vec3(0,0,1), vec3(0,1,1), lum*4.0);
+            else if (lum < 0.5) thermal = mix(vec3(0,1,1), vec3(0,1,0), (lum-0.25)*4.0);
+            else if (lum < 0.75) thermal = mix(vec3(0,1,0), vec3(1,1,0), (lum-0.5)*4.0);
+            else thermal = mix(vec3(1,1,0), vec3(1,0,0), (lum-0.75)*4.0);
+            return mix(bg, vec4(thermal, 1.0), amt);
+        }
+        else if (id == 30) { // DUOTONE
+             float lum = dot(bg.rgb, vec3(0.299, 0.587, 0.114));
+             vec3 c1 = vec3(0.2, 0.0, 0.4); 
+             vec3 c2 = vec3(0.0, 1.0, 0.9); 
+             vec3 duo = mix(c1, c2, lum);
+             return mix(bg, vec4(duo, 1.0), amt);
+        }
+        else if (id == 31) { // THRESHOLD
+             float lum = dot(bg.rgb, vec3(0.299, 0.587, 0.114));
+             float bw = step(0.5, lum);
+             return mix(bg, vec4(vec3(bw), 1.0), amt);
+        }
 
         return bg;
     }
     
     vec4 applyAdditiveFX(vec4 baseCol, vec2 uv) {
         vec4 col = baseCol;
-        
-        // Stack Layers (Order 1 -> 5)
-        // Each layer blends on top of the previous result
-        
-        col = applyLayer(col, uv, uFX1, uFX1_ID);
-        col = applyLayer(col, uv, uFX2, uFX2_ID); 
-        col = applyLayer(col, uv, uFX3, uFX3_ID); 
-        col = applyLayer(col, uv, uFX4, uFX4_ID);
-        col = applyLayer(col, uv, uFX5, uFX5_ID);
-
+        col = applyLayer(col, uv, uFX1 * uAdditiveMasterGain, uFX1_ID);
+        col = applyLayer(col, uv, uFX2 * uAdditiveMasterGain, uFX2_ID); 
+        col = applyLayer(col, uv, uFX3 * uAdditiveMasterGain, uFX3_ID); 
+        col = applyLayer(col, uv, uFX4 * uAdditiveMasterGain, uFX4_ID);
+        col = applyLayer(col, uv, uFX5 * uAdditiveMasterGain, uFX5_ID);
         return col;
     }
 `;
 
-const BASE_SHADER_BODY = `void main(){ gl_FragColor=applyAdditiveFX(getVideo(getUV(gl_FragCoord.xy)), getUV(gl_FragCoord.xy)); }`;
+// Updated Body: Apply Main Layer (Layer 0) first, then additive chain
+const BASE_SHADER_BODY = `void main(){ 
+    vec2 uv = getUV(gl_FragCoord.xy);
+    vec4 base = getVideo(uv);
+    // Layer 0 (Main Scene)
+    base = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
+    // Post Chain (Layers 1-5)
+    gl_FragColor = applyAdditiveFX(base, uv); 
+}`;
 
+// Unified List - All effects now use the same BASE_SHADER_BODY
 export const SHADER_LIST: ShaderList = {
     '00_NONE': { id: 0, src: BASE_SHADER_BODY },
     
-    // --- ADDITIVE FX (SLOTS 1-5) ---
+    // Additive
     '1_RGB_SHIFT': { id: 1, src: BASE_SHADER_BODY },
     '2_INVERT_COLOR': { id: 2, src: BASE_SHADER_BODY },
     '3_GLITCH_LINES': { id: 3, src: BASE_SHADER_BODY },
@@ -300,72 +459,31 @@ export const SHADER_LIST: ShaderList = {
     '24_GLITCH_DIGITAL': { id: 24, src: BASE_SHADER_BODY },
     '25_GLITCH_ANALOG': { id: 25, src: BASE_SHADER_BODY },
     '26_MIRROR_QUAD': { id: 26, src: BASE_SHADER_BODY },
+    '27_HALFTONE': { id: 27, src: BASE_SHADER_BODY },
+    '28_GAMEBOY': { id: 28, src: BASE_SHADER_BODY },
+    '29_THERMAL': { id: 29, src: BASE_SHADER_BODY },
+    '30_DUOTONE': { id: 30, src: BASE_SHADER_BODY },
+    '31_THRESHOLD': { id: 31, src: BASE_SHADER_BODY },
 
-    
-    // --- MAIN SCENES (COMPLEX - ID > 100) ---
-    '100_GLITCH_SCENE': { id: 100, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); float s=step(0.8,sin(iTime*15.))*uMainFXGain*0.5; vec4 c=getVideo(uv+vec2(s,0)); c.g=getVideo(uv+vec2(s*1.5,0)).g; gl_FragColor=applyAdditiveFX(mix(c, getVideo(uv), 1.0-iMix), uv); }` },
-    '101_TUNNEL_WARP': { id: 101, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 p=(uv*2.-1.)*(1.0 + uMainFXGain*1.5); float r=length(p); float a=atan(p.y,p.x); a+=sin(r*20.0-iTime*5.0)*uMainFXGain; p=r*vec2(cos(a),sin(a)); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(p*0.5+0.5), iMix), uv); }` },
-    '102_NEON_EDGES': { id: 102, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 d=1./iResolution; vec4 c=getVideo(uv); float e=distance(c,getVideo(uv+vec2(d.x,0)))+distance(c,getVideo(uv+vec2(0,d.y))); e=smoothstep(0.1,0.4,e)*iMix*8.*uMainFXGain; gl_FragColor=applyAdditiveFX(mix(c,vec4(vec3(e)*vec3(1,0.2,1),1),0.5), uv); }` },
-    '103_COLOR_SHIFT': { id: 103, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec4 c=getVideo(uv); float hueShift = sin(iTime*0.5)*uMainFXGain*2.0; c.rgb = mod(c.rgb + hueShift, 1.0); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), c, iMix), uv); }` },
-    '104_MIRROR_X': { id: 104, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 m=abs(uv*2.-1.); gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(m*0.5+0.5), iMix * clamp(uMainFXGain+0.5, 0.0, 1.0)), uv); }` },
-    '105_WAVE_VERT': { id: 105, src: `void main(){ vec2 uv=getUV(gl_FragCoord.xy); vec2 distUv = uv; distUv.x += sin(uv.y * 30.0 + iTime * 5.0) * 0.1 * uMainFXGain; gl_FragColor=applyAdditiveFX(mix(getVideo(uv), getVideo(distUv), iMix), uv); }` },
-    '106_STEAM_ENGINE': { id: 106, src: `void main(){ 
-        vec2 uv=getUV(gl_FragCoord.xy);
-        vec4 c = getVideo(uv);
-        float gray = dot(c.rgb, vec3(0.299, 0.587, 0.114));
-        vec3 bronze = vec3(gray * 1.3, gray * 1.0, gray * 0.7);
-        float noise = fract(sin(dot(uv + iTime*0.1, vec2(12.9898,78.233)))*43758.5453);
-        float smoke = smoothstep(0.4, 0.8, noise) * uMainFXGain;
-        vec3 final = mix(c.rgb, bronze, iMix) + vec3(smoke);
-        gl_FragColor = applyAdditiveFX(vec4(final, 1.0), uv);
-    }` },
-    '107_CYBER_FAILURE': { id: 107, src: `void main(){ 
-        vec2 uv=getUV(gl_FragCoord.xy);
-        float blocks = floor(uv.y * 10.0);
-        float displace = step(0.5, sin(iTime * 20.0 + blocks)) * uMainFXGain * 0.2;
-        vec2 dUV = uv + vec2(displace, 0.0);
-        float r = getVideo(dUV + vec2(uMainFXGain*0.05, 0)).r;
-        float g = getVideo(dUV).g;
-        float b = getVideo(dUV - vec2(uMainFXGain*0.05, 0)).b;
-        gl_FragColor = applyAdditiveFX(mix(getVideo(uv), vec4(r,g,b,1.0), iMix), uv);
-    }` },
-    '108_BIO_HAZARD': { id: 108, src: `void main(){ 
-        vec2 uv=getUV(gl_FragCoord.xy);
-        vec4 c = getVideo(uv);
-        vec2 d = 2.0/iResolution;
-        float edge = length(getVideo(uv+d).rgb - c.rgb);
-        vec3 toxic = vec3(0.0, 1.0, 0.2) * edge * 8.0 * uMainFXGain;
-        gl_FragColor = applyAdditiveFX(mix(c, c + vec4(toxic, 0.0), iMix), uv);
-    }` },
-    '109_ZOOM_TOP': { id: 109, src: `void main(){ 
-        vec2 uv=getUV(gl_FragCoord.xy);
-        vec2 pivot = vec2(0.5, 0.9);
-        float z = 0.5 * uMainFXGain; // Max zoom 50%
-        vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
-        vec4 c = getVideo(mix(uv, zoomedUV, iMix));
-        gl_FragColor = applyAdditiveFX(c, uv);
-    }` },
-    '110_ZOOM_BTM': { id: 110, src: `void main(){ 
-        vec2 uv=getUV(gl_FragCoord.xy);
-        vec2 pivot = vec2(0.5, 0.1);
-        float z = 0.5 * uMainFXGain;
-        vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
-        vec4 c = getVideo(mix(uv, zoomedUV, iMix));
-        gl_FragColor = applyAdditiveFX(c, uv);
-    }` },
-    '111_ZOOM_CTR': { id: 111, src: `void main(){ 
-        vec2 uv=getUV(gl_FragCoord.xy);
-        vec2 pivot = vec2(0.5, 0.5);
-        float z = 0.4 * uMainFXGain;
-        vec2 zoomedUV = (uv - pivot) * (1.0 - z) + pivot;
-        float rot = sin(iTime * 10.0) * 0.05 * uMainFXGain;
-        vec2 p = zoomedUV - pivot;
-        float s = sin(rot); float c_rot = cos(rot);
-        p = mat2(c_rot, -s, s, c_rot) * p;
-        zoomedUV = p + pivot;
-        vec4 c = getVideo(mix(uv, zoomedUV, iMix));
-        gl_FragColor = applyAdditiveFX(c, uv);
-    }` },
+    // Main Scenes (Now usable anywhere)
+    '100_GLITCH_SCENE': { id: 100, src: BASE_SHADER_BODY },
+    '101_TUNNEL_WARP': { id: 101, src: BASE_SHADER_BODY },
+    '102_NEON_EDGES': { id: 102, src: BASE_SHADER_BODY },
+    '103_COLOR_SHIFT': { id: 103, src: BASE_SHADER_BODY },
+    '104_MIRROR_X': { id: 104, src: BASE_SHADER_BODY },
+    '105_WAVE_VERT': { id: 105, src: BASE_SHADER_BODY },
+    '106_STEAM_ENGINE': { id: 106, src: BASE_SHADER_BODY },
+    '107_CYBER_FAILURE': { id: 107, src: BASE_SHADER_BODY },
+    '108_BIO_HAZARD': { id: 108, src: BASE_SHADER_BODY },
+    '109_ZOOM_TOP': { id: 109, src: BASE_SHADER_BODY },
+    '110_ZOOM_BTM': { id: 110, src: BASE_SHADER_BODY },
+    '111_ZOOM_CTR': { id: 111, src: BASE_SHADER_BODY },
+    '112_ASCII_MATRIX': { id: 112, src: BASE_SHADER_BODY },
+    '113_WATER_RIPPLE': { id: 113, src: BASE_SHADER_BODY },
+    '114_PIXEL_SORT': { id: 114, src: BASE_SHADER_BODY },
+    '115_HEX_PIXELATE': { id: 115, src: BASE_SHADER_BODY },
+    '116_AUDIO_SHAKE': { id: 116, src: BASE_SHADER_BODY },
+    '117_BARANORAMA': { id: 117, src: BASE_SHADER_BODY },
 };
 
 export const VERT_SRC = `attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }`;

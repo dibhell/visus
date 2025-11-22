@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GLService } from './services/glService';
 import { AudioEngine } from './services/audioService';
@@ -202,8 +203,8 @@ const App: React.FC = () => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = config.gain / 100;
-                const mixMult = (config.mix ?? 100) / 100; 
-                return sourceLevel * gainMult * mixMult * 2.0; 
+                // Note: Mix is applied in shader via iMix or direct mix, but we pass gain here for activity monitoring
+                return sourceLevel * gainMult; 
             };
 
             const lvls = {
@@ -216,8 +217,11 @@ const App: React.FC = () => {
             };
 
             const computedFx = {
-                mainFXGain: lvls.main,
-                mix: currentFxState.main.mix,
+                // Main Layer (Layer 0)
+                mainFXGain: lvls.main, 
+                main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
+                
+                mix: currentFxState.main.mix, // Kept for legacy compatibility if shader uses iMix
                 additiveMasterGain: additiveGainRef.current / 100,
                 transform: currentTransform,
                 fx1: lvls.fx1,
@@ -260,6 +264,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (isSystemActive) {
+            // Since all shaders use BASE_SHADER_BODY, this might be redundant unless we change the base
             const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
             glService.current.loadShader(shaderDef.src);
         }
@@ -628,7 +633,7 @@ const App: React.FC = () => {
                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span> 
-                                Main Scene
+                                Base Layer (Layer 0)
                             </div>
                             {visualLevels.main > 0.1 && <span className="text-[8px] text-accent animate-pulse font-bold tracking-widest">ACTIVE</span>}
                         </div>
@@ -639,7 +644,7 @@ const App: React.FC = () => {
                     <section>
                         <div className="flex justify-between items-center pt-6 border-t border-white/5 mb-4">
                              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                Post FX Chain
+                                Post FX Chain (Layers 1-5)
                             </div>
                         </div>
                         
@@ -663,7 +668,7 @@ const App: React.FC = () => {
                                 <FxSlot 
                                     key={fxName}
                                     category="additive" 
-                                    title={`Slot ${i+1}`} 
+                                    title={`Layer ${i+1}`} 
                                     slotName={fxName as keyof FxState} 
                                     fxState={fxState} 
                                     setFxState={setFxState} 
@@ -674,7 +679,7 @@ const App: React.FC = () => {
                     </section>
 
                      <div className="h-auto text-center text-[9px] text-slate-600 font-mono pt-10 pb-12 space-y-1">
-                        <div className="font-bold opacity-50 mb-2">VISUS ENGINE v2.8</div>
+                        <div className="font-bold opacity-50 mb-2">VISUS ENGINE v2.9</div>
                         <div className="opacity-40 hover:opacity-100 transition-opacity">
                             &copy; Studio Popłoch 2025
                         </div>
