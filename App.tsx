@@ -89,74 +89,82 @@ const App: React.FC = () => {
         
         const wWindow = window.innerWidth;
         const hWindow = window.innerHeight;
+        const isMobile = wWindow < 768;
+
+        // --- SPLIT SCREEN LOGIC ---
+        // If on mobile and panel is open, we restrict the "viewable" area to the top 40%
+        // This ensures the video fits in the space above the controls
+        let availableH = hWindow;
+        let topOffset = 0;
+
+        if (isMobile && panelVisible) {
+            availableH = hWindow * 0.40; // 40% height for video
+            // Controls take remaining 60%
+        }
         
         let finalW = wWindow;
         let finalH = hWindow;
 
-        // LOGIC FOR RESOLUTION
+        // LOGIC FOR RESOLUTION (Internal Canvas Size)
         if (aspectRatio === 'native') {
-             // If native, try to use video dim. If not avail, fallback to window
              if (videoRef.current && videoRef.current.videoWidth > 0) {
                  finalW = videoRef.current.videoWidth;
                  finalH = videoRef.current.videoHeight;
              } else {
-                 // Fallback if no video loaded yet
                  finalW = wWindow;
                  finalH = hWindow;
              }
         } else if (aspectRatio === '16:9') {
-             // Fixed 16:9 (Landscape) - typically 1920x1080 base
-             finalH = 1080;
-             finalW = 1920;
+             finalH = 1080; finalW = 1920;
         } else if (aspectRatio === '9:16') {
-             // TikTok/Reels - typically 1080x1920 base
-             finalW = 1080;
-             finalH = 1920;
+             finalW = 1080; finalH = 1920;
         } else if (aspectRatio === '4:5') {
-             // IG Feed
-             finalW = 1080;
-             finalH = 1350;
+             finalW = 1080; finalH = 1350;
         } else if (aspectRatio === '1:1') {
-             // Square
-             finalW = 1080;
-             finalH = 1080;
+             finalW = 1080; finalH = 1080;
         } else if (aspectRatio === '21:9') {
-             finalH = 1080;
-             finalW = 2520;
+             finalH = 1080; finalW = 2520;
         } else if (aspectRatio === 'fit') {
-             // Standard fit to window logic
-             finalW = wWindow;
-             finalH = hWindow;
+             finalW = wWindow; finalH = hWindow;
         } else if (aspectRatio === 'manual') {
             finalW = manualRes.w;
             finalH = manualRes.h;
         }
 
-        // Ensure non-zero
         if (finalW < 2) finalW = 2;
         if (finalH < 2) finalH = 2;
 
         const canvas = canvasRef.current;
         
-        // IMPORTANT: Set the ACTUAL render resolution
+        // 1. Set Internal Resolution (High Quality for Recording)
         canvas.width = finalW;
         canvas.height = finalH;
 
-        // Scale for display (CSS) to fit in the window, preserving aspect ratio
-        const scale = Math.min(wWindow / finalW, hWindow / finalH);
+        // 2. Set Visual Display Size (CSS) to fit in Available Area
+        // We scale the visual representation to fit 'availableH' (screen or top split)
+        const scale = Math.min(wWindow / finalW, availableH / finalH);
         const displayW = finalW * scale;
         const displayH = finalH * scale;
 
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
         
-        // Center logic
+        // 3. Center Logic
+        // If mobile split, center within the top area
         canvas.style.position = 'absolute';
         canvas.style.left = `${(wWindow - displayW) / 2}px`;
-        canvas.style.top = `${(hWindow - displayH) / 2}px`;
+        canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
         glService.current.resize(finalW, finalH);
-    }, [aspectRatio, manualRes]);
+    }, [aspectRatio, manualRes, panelVisible]);
+
+    // Trigger resize when panel visibility changes to adjust split screen
+    useEffect(() => {
+        handleResize();
+        // Adding a small delay because CSS transitions might affect layout calculation (though we use fixed VH here)
+        const t = setTimeout(handleResize, 300); 
+        return () => clearTimeout(t);
+    }, [panelVisible, handleResize]);
 
     useEffect(() => {
         if (!isSystemActive) return;
@@ -171,7 +179,6 @@ const App: React.FC = () => {
 
         handleResize();
         window.addEventListener('resize', handleResize);
-        // We also need to listen to video metadata load to trigger resize if "Native" is on
         const v = videoRef.current;
         if (v) {
             v.addEventListener('loadedmetadata', handleResize);
@@ -196,7 +203,7 @@ const App: React.FC = () => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = config.gain / 100;
-                const mixMult = (config.mix ?? 100) / 100; // Use mix for attenuation if needed
+                const mixMult = (config.mix ?? 100) / 100; 
                 return sourceLevel * gainMult * mixMult * 2.0; 
             };
 
@@ -290,7 +297,6 @@ const App: React.FC = () => {
                 if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
                 videoRef.current.src = url;
                 videoRef.current.play().catch(e => console.log("Auto-play prevented", e));
-                // Force a resize check after a short delay to ensure metadata is loaded if the event misses
                 setTimeout(handleResize, 500);
             } else if (type === 'audio') {
                 setCurrentTrackName(file.name.replace(/\.[^/.]+$/, ""));
@@ -302,7 +308,6 @@ const App: React.FC = () => {
     const handleCamera = async () => {
         if (!videoRef.current) return;
         try {
-            // Request high resolution if possible
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { width: { ideal: 1920 }, height: { ideal: 1080 } } 
             });
@@ -317,15 +322,12 @@ const App: React.FC = () => {
     };
 
     const handleMicrophone = async () => {
-        // TOGGLE OFF
         if (micActive) {
             audioService.current.stopMicrophone();
             setMicActive(false);
             setCurrentTrackName(null);
             return;
         }
-
-        // TOGGLE ON
         if (currentAudioElRef.current) {
             currentAudioElRef.current.pause();
         }
@@ -376,7 +378,6 @@ const App: React.FC = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
             
-            // WYSIWYG: captureStream(fps) captures the canvas content exactly as rendered
             const videoStream = (canvas as any).captureStream(60);
             const audioStream = audioService.current.getAudioStream();
             const combinedTracks = [...videoStream.getVideoTracks()];
@@ -385,7 +386,6 @@ const App: React.FC = () => {
 
             try {
                 const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-                // Use a high bitrate for better quality
                 const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000 });
                 recordedChunksRef.current = [];
                 recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
@@ -414,7 +414,6 @@ const App: React.FC = () => {
         audioService.current.updateFilters(newParams);
     };
 
-    // Helper for transforms
     const updateTransform = (key: keyof TransformConfig, val: number) => {
         setTransform(prev => ({ ...prev, [key]: val }));
     };
@@ -460,12 +459,30 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Main UI Panel */}
+            {/* Main UI Panel - RESPONSIVE LAYOUT 
+                Desktop: Sidebar on the left.
+                Mobile: Bottom Sheet occupying 60% of screen (Video takes top 40%).
+            */}
             <div 
                 ref={uiPanelRef}
-                className={`fixed top-0 left-0 h-full w-full md:w-[380px] glass-panel z-40 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.6)] ${panelVisible ? 'translate-x-0' : '-translate-x-full'}`}
+                className={`
+                    fixed z-40 glass-panel flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.6)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
+                    
+                    /* Desktop Styling */
+                    md:top-0 md:left-0 md:h-full md:w-[380px] md:border-r md:border-t-0 md:rounded-none
+                    ${panelVisible ? 'md:translate-x-0' : 'md:-translate-x-full'}
+
+                    /* Mobile Styling */
+                    bottom-0 left-0 w-full h-[60vh] rounded-t-3xl border-t border-white/10
+                    ${panelVisible ? 'translate-y-0' : 'translate-y-[110%]'}
+                `}
             >
-                <div className="p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
+                {/* Mobile Drag Handle Visual */}
+                <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setPanelVisible(false)}>
+                    <div className="w-12 h-1.5 bg-white/20 rounded-full"></div>
+                </div>
+
+                <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
                     <div>
                         <h2 className="text-2xl font-black text-white tracking-tighter">VISUS</h2>
                         <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">CONTROLLER</div>
@@ -647,8 +664,14 @@ const App: React.FC = () => {
                         </div>
                     </section>
 
-                    <div className="h-24 text-center text-[9px] text-slate-600 font-mono pt-10">
-                        VISUS ENGINE v2.8
+                     <div className="h-auto text-center text-[9px] text-slate-600 font-mono pt-10 pb-12 space-y-1">
+                        <div className="font-bold opacity-50 mb-2">VISUS ENGINE v2.8</div>
+                        <div className="opacity-40 hover:opacity-100 transition-opacity">
+                            &copy; Studio Popłoch 2025
+                        </div>
+                        <div className="text-accent/30 hover:text-accent/80 transition-colors font-bold tracking-wider">
+                            Pan Grzyb
+                        </div>
                     </div>
                 </div>
             </div>
