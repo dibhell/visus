@@ -1,6 +1,4 @@
-
-
-import { GLSL_HEADER, VERT_SRC, FxConfig, ShaderList } from '../constants';
+import { GLSL_HEADER, VERT_SRC } from '../constants';
 
 export class GLService {
     gl: WebGLRenderingContext | null = null;
@@ -89,9 +87,10 @@ export class GLService {
         // Additive Chain Controls (Layers 1-5)
         this.gl.uniform1f(u("uAdditiveMasterGain"), computedFx.additiveMasterGain);
 
-        // Transforms
+        // Transforms & Mirror
         this.gl.uniform2f(u("uTranslate"), computedFx.transform.x, computedFx.transform.y);
         this.gl.uniform1f(u("uScale"), computedFx.transform.scale);
+        this.gl.uniform1f(u("uMirror"), computedFx.isMirrored ? 1.0 : 0.0);
 
         // UFX - Levels
         this.gl.uniform1f(u("uFX1"), computedFx.fx1);

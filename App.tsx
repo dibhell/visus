@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GLService } from './services/glService';
 import { AudioEngine } from './services/audioService';
@@ -44,6 +42,7 @@ const App: React.FC = () => {
     // Resolution & Framing
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
     const [manualRes, setManualRes] = useState({ w: 1920, h: 1080 });
+    const [isMirrored, setIsMirrored] = useState(false); // New Mirror State
     // Transform: x/y are offset from center, scale is zoom level
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
 
@@ -73,12 +72,14 @@ const App: React.FC = () => {
     const isSystemActiveRef = useRef(isSystemActive);
     const additiveGainRef = useRef(additiveGain);
     const transformRef = useRef(transform);
+    const isMirroredRef = useRef(isMirrored);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { isSystemActiveRef.current = isSystemActive; }, [isSystemActive]);
     useEffect(() => { additiveGainRef.current = additiveGain; }, [additiveGain]);
     useEffect(() => { transformRef.current = transform; }, [transform]);
+    useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
 
     const getActivationLevel = (routing: string, phase: number) => {
         if (routing === 'off') return 1.0;
@@ -139,13 +140,17 @@ const App: React.FC = () => {
 
         const canvas = canvasRef.current;
         
-        canvas.width = finalW;
-        canvas.height = finalH;
+        // Set buffer size
+        if (canvas.width !== finalW || canvas.height !== finalH) {
+             canvas.width = finalW;
+             canvas.height = finalH;
+        }
 
         const scale = Math.min(wWindow / finalW, availableH / finalH);
         const displayW = finalW * scale;
         const displayH = finalH * scale;
 
+        // Set display size
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
         
@@ -153,7 +158,10 @@ const App: React.FC = () => {
         canvas.style.left = `${(wWindow - displayW) / 2}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
-        glService.current.resize(finalW, finalH);
+        // Safely call resize on GL service
+        if (glService.current && typeof glService.current.resize === 'function') {
+            glService.current.resize(finalW, finalH);
+        }
     }, [aspectRatio, manualRes, panelVisible]);
 
     // Trigger resize when panel visibility changes to adjust split screen
@@ -218,6 +226,7 @@ const App: React.FC = () => {
                 mix: currentFxState.main.mix,
                 additiveMasterGain: additiveGainRef.current / 100,
                 transform: currentTransform,
+                isMirrored: isMirroredRef.current,
                 fx1: lvls.fx1,
                 fx2: lvls.fx2,
                 fx3: lvls.fx3,
@@ -425,6 +434,7 @@ const App: React.FC = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
             
+            // 60fps recording
             const videoStream = (canvas as any).captureStream(60);
             const audioStream = audioService.current.getAudioStream();
             const combinedTracks = [...videoStream.getVideoTracks()];
@@ -432,15 +442,25 @@ const App: React.FC = () => {
             const combinedStream = new MediaStream(combinedTracks);
 
             try {
-                // Prefer mp4 if available (safari/some chrome), otherwise webm
-                let mimeType = 'video/webm;codecs=vp9';
-                if (MediaRecorder.isTypeSupported('video/mp4')) {
-                    mimeType = 'video/mp4';
-                } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
-                    mimeType = 'video/webm;codecs=h264';
+                // Android Gallery FIX: Prioritize MP4 (H264) over WebM
+                let mimeType = 'video/mp4';
+                if (!MediaRecorder.isTypeSupported('video/mp4')) {
+                     // Fallback sequence
+                     if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+                         mimeType = 'video/mp4;codecs=avc1';
+                     } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
+                         mimeType = 'video/webm;codecs=h264';
+                     } else {
+                         mimeType = 'video/webm;codecs=vp9';
+                     }
                 }
 
-                const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000 });
+                console.log("Using Recorder MimeType:", mimeType);
+
+                const recorder = new MediaRecorder(combinedStream, { 
+                    mimeType, 
+                    videoBitsPerSecond: 12000000 // High bitrate for quality
+                });
                 recordedChunksRef.current = [];
                 
                 recorder.ondataavailable = (event) => { 
@@ -453,13 +473,15 @@ const App: React.FC = () => {
                     const a = document.createElement('a');
                     a.href = url;
                     
-                    // Generate clean timestamp for sorting
+                    // Generate safe ISO timestamp for filename (YYYY-MM-DD_HH-MM-SS)
                     const now = new Date();
-                    const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    // Use ISO string but replace colons and dots to avoid filesystem issues on Android
+                    const timestamp = now.toISOString().replace(/[:.]/g, '-').split('T').join('_').slice(0, -5);
+                    
                     // Extension based on type
                     const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
                     
-                    a.download = `VISUS_Rec_${timestamp}.${ext}`;
+                    a.download = `VISUS_${timestamp}.${ext}`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -526,6 +548,7 @@ const App: React.FC = () => {
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
                 <span className="hidden md:inline">RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
                 {micActive && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC ACTIVE</span>}
+                {isMirrored && <span className="text-accent animate-pulse font-bold tracking-widest">↔ MIRROR</span>}
             </div>
 
             {/* MODALS */}
@@ -672,7 +695,16 @@ const App: React.FC = () => {
 
                             {/* Format & Framing Control */}
                             <div className="pt-4 border-t border-white/5">
-                                <div className="text-[9px] text-slate-500 font-bold uppercase mb-2 tracking-wider">Output Format</div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Output Format</div>
+                                    <button 
+                                        onClick={() => setIsMirrored(!isMirrored)}
+                                        className={`text-[9px] px-2 py-1 rounded font-bold border ${isMirrored ? 'bg-accent text-black border-transparent' : 'bg-transparent border-white/20 text-slate-400'}`}
+                                    >
+                                        ↔ MIRROR
+                                    </button>
+                                </div>
+
                                 <div className="grid grid-cols-3 gap-1 mb-3">
                                     <button onClick={() => setAspectRatio('native')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === 'native' ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>NATIVE</button>
                                     <button onClick={() => setAspectRatio('9:16')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === '9:16' ? 'bg-white text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>9:16 (TikTok)</button>

@@ -75,6 +75,7 @@ export const GLSL_HEADER = `
     // Transform Uniforms
     uniform vec2 uTranslate; 
     uniform float uScale;    
+    uniform float uMirror; // 0.0 = normal, 1.0 = flipped
     
     // Uniforms for FX slots
     uniform float uMainFXGain; // Gain for Main (Layer 0)
@@ -93,6 +94,12 @@ export const GLSL_HEADER = `
 
     vec2 getUV(vec2 fragCoord) {
         vec2 uv = fragCoord / iResolution.xy;
+        
+        // Mirror Flip Logic
+        if(uMirror > 0.5) {
+            uv.x = 1.0 - uv.x;
+        }
+
         if(iVideoResolution.x < 1.0) return uv;
         
         float sR = iResolution.x / iResolution.y;
