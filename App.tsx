@@ -423,8 +423,19 @@ const App: React.FC = () => {
             <div className="flex items-center justify-center h-screen w-screen bg-slate-950 overflow-hidden relative">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black"></div>
                 
-                <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4">
+                <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4 flex flex-col items-center">
                     <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-50"></div>
+                    
+                    {/* LOGO ON LANDING SCREEN */}
+                    <div className="mb-8 relative group">
+                        <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
+                        <img 
+                            src="./logo.png" 
+                            alt="VISUS Logo" 
+                            className="relative w-32 h-32 rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] object-cover hover:scale-105 transition-transform duration-500"
+                        />
+                    </div>
+
                     <h1 className="text-6xl md:text-8xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-400 tracking-tighter">VISUS</h1>
                     <div className="text-accent font-mono text-xs tracking-[0.6em] mb-12 uppercase">Advanced Visual Engine</div>
                     
@@ -459,10 +470,7 @@ const App: React.FC = () => {
                 />
             )}
 
-            {/* Main UI Panel - RESPONSIVE LAYOUT 
-                Desktop: Sidebar on the left.
-                Mobile: Bottom Sheet occupying 60% of screen (Video takes top 40%).
-            */}
+            {/* Main UI Panel - RESPONSIVE LAYOUT */}
             <div 
                 ref={uiPanelRef}
                 className={`
@@ -483,9 +491,13 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
-                    <div>
-                        <h2 className="text-2xl font-black text-white tracking-tighter">VISUS</h2>
-                        <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">CONTROLLER</div>
+                    <div className="flex items-center gap-3">
+                         {/* LOGO IN SIDEBAR */}
+                        <img src="./logo.png" alt="V" className="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover" />
+                        <div>
+                            <h2 className="text-2xl font-black text-white tracking-tighter leading-none">VISUS</h2>
+                            <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">CONTROLLER</div>
+                        </div>
                     </div>
                     <button onClick={() => setPanelVisible(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">✕</button>
                 </div>
