@@ -4,8 +4,15 @@ import { FilterBand, SyncParam, BandsData } from '../types';
 export class AudioEngine {
     ctx: AudioContext | null = null;
     anRaw: AnalyserNode | null = null;
-    src: MediaElementAudioSourceNode | null = null;
-    gainNode: GainNode | null = null;
+    
+    // Sources
+    src: MediaElementAudioSourceNode | null = null; // File/Element source
+    micSrc: MediaStreamAudioSourceNode | null = null; // Microphone source
+    
+    // Nodes
+    gainNode: GainNode | null = null; // Master Gain for Analyzer
+    micPreAmp: GainNode | null = null; // Gain specifically for Mic Input boost
+    
     // For Recording
     recDest: MediaStreamAudioDestinationNode | null = null;
 
@@ -13,21 +20,25 @@ export class AudioEngine {
     filters: FilterBand[] = [];
     fftData: Uint8Array = new Uint8Array(1024);
     currentParams: SyncParam[] = [];
+    
+    isMicActive: boolean = false;
 
     constructor() {
         this.bands = { sync1: 0, sync2: 0, sync3: 0 };
     }
 
-    async init(el: HTMLMediaElement): Promise<void> {
+    async initContext() {
         if (!this.ctx) {
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
             this.anRaw = this.ctx.createAnalyser();
             // Increased fftSize for better bass resolution
             this.anRaw.fftSize = 4096; 
-            this.anRaw.smoothingTimeConstant = 0.6; // Snappier response
+            this.anRaw.smoothingTimeConstant = 0.6; 
 
             this.gainNode = this.ctx.createGain();
             this.gainNode.connect(this.anRaw);
+            
+            // Default: Connect to speakers (will be disconnected for Mic)
             this.anRaw.connect(this.ctx.destination);
 
             // Create Recording Destination (Loopback for MediaRecorder)
@@ -38,24 +49,101 @@ export class AudioEngine {
         if (this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
+    }
 
-        // Clean up existing source to prevent connection errors or double playing
-        if (this.src) {
-            try {
-                this.src.disconnect();
-            } catch (e) {
-                console.warn("Could not disconnect old source", e);
-            }
-            this.src = null;
-        }
+    async enableMicrophone(initialGain: number = 2.0): Promise<void> {
+        await this.initContext();
+        this.stopAllSources();
+        this.isMicActive = true;
 
         try {
-            this.src = this.ctx.createMediaElementSource(el);
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            
+            // Create Mic Source
+            this.micSrc = this.ctx!.createMediaStreamSource(stream);
+            
+            // Create Pre-Amp Gain for Mic (to boost quiet signals)
+            this.micPreAmp = this.ctx!.createGain();
+            this.micPreAmp.gain.value = initialGain;
+
+            // Connect: Mic -> PreAmp -> MainAnalyzerGain
+            this.micSrc.connect(this.micPreAmp);
+            if (this.gainNode) {
+                this.micPreAmp.connect(this.gainNode);
+            }
+
+            // CRITICAL: Disconnect Analyzer from Speakers to prevent Feedback Loop
+            // But keep it connected to RecDest (handled in initContext)
+            try {
+                this.anRaw?.disconnect(this.ctx!.destination);
+            } catch (e) { 
+                // Ignore if already disconnected
+            }
+
+        } catch (e) {
+            console.error("Error accessing microphone", e);
+            throw e;
+        }
+    }
+
+    stopMicrophone() {
+        if (this.micSrc) {
+            try { 
+                this.micSrc.disconnect(); 
+                this.micPreAmp?.disconnect();
+            } catch (e) {}
+            this.micSrc = null;
+            this.micPreAmp = null;
+        }
+        
+        // Reconnect analyzer to speakers if we want to go back to normal mode? 
+        // For now just silence the mic path.
+        this.isMicActive = false;
+    }
+
+    setMicrophoneGain(value: number) {
+        if (this.micPreAmp) {
+            this.micPreAmp.gain.value = value;
+        }
+    }
+
+    async init(el: HTMLMediaElement): Promise<void> {
+        await this.initContext();
+        this.stopAllSources();
+        this.isMicActive = false;
+
+        try {
+            this.src = this.ctx!.createMediaElementSource(el);
             if (this.gainNode) {
                 this.src.connect(this.gainNode);
             }
+            
+            // Reconnect to speakers for file playback
+            try {
+                this.anRaw?.connect(this.ctx!.destination);
+            } catch(e) {
+                // Already connected
+            }
         } catch (e) {
             console.error("Error creating MediaElementSource", e);
+        }
+    }
+
+    private stopAllSources() {
+        // Stop File Source
+        if (this.src) {
+            try { this.src.disconnect(); } catch (e) {}
+            this.src = null;
+        }
+
+        // Stop Mic Source
+        if (this.micSrc) {
+            try { 
+                this.micSrc.disconnect(); 
+                this.micPreAmp?.disconnect();
+            } catch (e) {}
+            this.micSrc = null;
+            this.micPreAmp = null;
         }
     }
 

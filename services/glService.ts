@@ -1,3 +1,4 @@
+
 import { GLSL_HEADER, VERT_SRC } from '../constants';
 import { FxConfig, ShaderList } from '../types';
 
@@ -83,6 +84,14 @@ export class GLService {
 
         this.gl.uniform1f(u("iMix"), (computedFx.mix ?? 100) / 100);
         this.gl.uniform1f(u("uMainFXGain"), computedFx.mainFXGain);
+        
+        // New Master Gain for Additive Chain
+        this.gl.uniform1f(u("uAdditiveMasterGain"), computedFx.additiveMasterGain);
+
+        // Transforms
+        // Passed from App.tsx: x/y are normalized (e.g. 0.1)
+        this.gl.uniform2f(u("uTranslate"), computedFx.transform.x, computedFx.transform.y);
+        this.gl.uniform1f(u("uScale"), computedFx.transform.scale);
 
         // UFX - Levels
         this.gl.uniform1f(u("uFX1"), computedFx.fx1);
