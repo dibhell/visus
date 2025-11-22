@@ -10,6 +10,66 @@ import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 
+// --- INLINE LOGO COMPONENT ---
+// Embeds the vector graphics directly to prevent 404 errors on build
+const VisusLogo: React.FC<{ className?: string }> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" className={className}>
+    <defs>
+      <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#fbbf24"/> 
+        <stop offset="40%" stopColor="#f472b6"/> 
+        <stop offset="100%" stopColor="#4f46e5"/> 
+      </linearGradient>
+    </defs>
+    
+    {/* Background */}
+    <circle cx="256" cy="256" r="256" fill="url(#bgGrad)"/>
+    
+    {/* Main Graphic (Mic + EQ) */}
+    <g transform="translate(80, 60) scale(0.7)" shapeRendering="crispEdges">
+        {/* MIC HEAD */}
+        <rect x="120" y="40" width="160" height="140" fill="#1e1b4b" />
+        <rect x="130" y="50" width="140" height="120" fill="#a855f7" />
+        <rect x="130" y="50" width="40" height="40" fill="#c084fc" />
+        <rect x="230" y="50" width="40" height="40" fill="#c084fc" />
+        <rect x="180" y="90" width="40" height="40" fill="#c084fc" />
+        <rect x="130" y="130" width="40" height="40" fill="#c084fc" />
+        <rect x="230" y="130" width="40" height="40" fill="#c084fc" />
+
+        {/* MIC BODY */}
+        <rect x="120" y="180" width="160" height="140" fill="#1e1b4b" />
+        <rect x="130" y="190" width="140" height="120" fill="#06b6d4" />
+        <rect x="130" y="190" width="100" height="80" fill="#22d3ee" />
+
+        {/* MIC STAND */}
+        <rect x="80" y="140" width="40" height="140" fill="#1e1b4b" />
+        <rect x="280" y="140" width="40" height="140" fill="#1e1b4b" />
+        <rect x="80" y="280" width="240" height="40" fill="#1e1b4b" />
+        <rect x="180" y="320" width="40" height="60" fill="#1e1b4b" />
+        <rect x="120" y="380" width="160" height="30" fill="#1e1b4b" />
+
+        {/* EQ BARS */}
+        <rect x="340" y="180" width="40" height="140" fill="#fb923c" />
+        <rect x="340" y="220" width="40" height="40" fill="#fdba74" />
+        <rect x="400" y="100" width="40" height="260" fill="#f472b6" />
+        <rect x="400" y="160" width="40" height="40" fill="#fbcfe8" />
+        <rect x="400" y="260" width="40" height="40" fill="#be185d" />
+        <rect x="460" y="140" width="40" height="180" fill="#a855f7" />
+        <rect x="460" y="200" width="40" height="60" fill="#d8b4fe" />
+    </g>
+
+    {/* TEXT "VISUS" */}
+    <g transform="translate(86, 360) scale(0.65)" shapeRendering="crispEdges">
+        <path fill="white" d="M0,0 H50 V100 H100 V200 H50 V100 H0 Z" />
+        <rect x="110" y="100" width="50" height="100" fill="white" /> 
+        <rect x="180" y="0" width="50" height="200" fill="white" />
+        <path fill="white" d="M250,0 H350 V50 H250 V100 H350 V200 H250 V150 H350 V100 H250 Z" />
+        <path fill="white" d="M370,0 H420 V150 H470 V0 H520 V200 H370 Z" />
+        <path fill="white" d="M540,0 H640 V50 H540 V100 H640 V200 H540 V150 H640 V100 H540 Z" />
+    </g>
+  </svg>
+);
+
 const App: React.FC = () => {
     // --- REFS ---
     const glService = useRef<GLService>(new GLService());
@@ -418,9 +478,6 @@ const App: React.FC = () => {
         setTransform(prev => ({ ...prev, [key]: val }));
     };
 
-    // USE SVG LOGO TO PREVENT 404 ERRORS
-    const logoSrc = "./logo.svg";
-
     if (!isSystemActive) {
         return (
             <div className="flex items-center justify-center h-screen w-screen bg-slate-950 overflow-hidden relative">
@@ -429,14 +486,10 @@ const App: React.FC = () => {
                 <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4 flex flex-col items-center">
                     <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-50"></div>
                     
-                    {/* LOGO ON LANDING SCREEN */}
+                    {/* LOGO ON LANDING SCREEN (INLINED COMPONENT) */}
                     <div className="mb-8 relative group">
                         <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
-                        <img 
-                            src={logoSrc}
-                            alt="VISUS Logo" 
-                            className="relative w-32 h-32 rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] object-cover hover:scale-105 transition-transform duration-500"
-                        />
+                        <VisusLogo className="relative w-32 h-32 rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] hover:scale-105 transition-transform duration-500" />
                     </div>
 
                     <h1 className="text-6xl md:text-8xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-400 tracking-tighter">VISUS</h1>
@@ -495,12 +548,8 @@ const App: React.FC = () => {
 
                 <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
                     <div className="flex items-center gap-3">
-                         {/* LOGO IN SIDEBAR */}
-                        <img 
-                            src={logoSrc} 
-                            alt="V" 
-                            className="w-10 h-10 rounded-full border border-white/10 shadow-lg object-cover" 
-                        />
+                         {/* LOGO IN SIDEBAR (INLINED COMPONENT) */}
+                        <VisusLogo className="w-10 h-10 rounded-full border border-white/10 shadow-lg" />
                         <div>
                             <h2 className="text-2xl font-black text-white tracking-tighter leading-none">VISUS</h2>
                             <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">CONTROLLER</div>
