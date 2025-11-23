@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GLService } from './services/glService';
 import { AudioEngine } from './services/audioService';
@@ -7,19 +8,19 @@ import BandControls from './components/BandControls';
 import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
+import MixerChannel from './components/MixerChannel';
 
 const App: React.FC = () => {
     // --- REFS ---
     const glService = useRef<GLService>(new GLService());
     const audioService = useRef<AudioEngine>(new AudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
-    const currentAudioElRef = useRef<HTMLAudioElement | null>(null); // Track active audio
+    const currentAudioElRef = useRef<HTMLAudioElement | null>(null); 
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     
-    // Recording Refs
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
 
@@ -32,23 +33,23 @@ const App: React.FC = () => {
     // Modal States
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
-    
-    // Sources & Data
     const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-    const [currentTrackName, setCurrentTrackName] = useState<string | null>(null);
-    const [micActive, setMicActive] = useState(false);
-    const [micGain, setMicGain] = useState(2.0);
     
+    // MIXER STATE
+    const [mixer, setMixer] = useState({
+        video: { active: true, volume: 1.0, hasSource: false, playing: false },
+        music: { active: true, volume: 0.8, hasSource: false, playing: false, name: '' },
+        mic: { active: false, volume: 1.5, hasSource: false }
+    });
+    // For VU Meters (updated via ref/animation frame to avoid react render thrashing)
+    const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
+
     // Resolution & Framing
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
-    const [manualRes, setManualRes] = useState({ w: 1920, h: 1080 });
-    const [isMirrored, setIsMirrored] = useState(false); // New Mirror State
-    // Transform: x/y are offset from center, scale is zoom level
+    const [isMirrored, setIsMirrored] = useState(false);
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
 
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
-
-    // New: Additive Chain Master Gain (0-100)
     const [additiveGain, setAdditiveGain] = useState(80); 
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
@@ -57,7 +58,6 @@ const App: React.FC = () => {
         { bpm: 128.0, offset: 0, freq: 6000, width: 40, gain: 1.0 },
     ]);
 
-    // Reset to NONE by default for a clean slate
     const [fxState, setFxState] = useState<FxState>({
         main: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
         fx1: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
@@ -73,6 +73,7 @@ const App: React.FC = () => {
     const additiveGainRef = useRef(additiveGain);
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
+    const mixerRef = useRef(mixer); 
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -80,6 +81,16 @@ const App: React.FC = () => {
     useEffect(() => { additiveGainRef.current = additiveGain; }, [additiveGain]);
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
+    useEffect(() => { mixerRef.current = mixer; }, [mixer]);
+
+    // Apply Mixer Volume Changes
+    useEffect(() => {
+        const ae = audioService.current;
+        ae.setVolume('video', mixer.video.active ? mixer.video.volume : 0);
+        ae.setVolume('music', mixer.music.active ? mixer.music.volume : 0);
+        ae.setVolume('mic', mixer.mic.active ? mixer.mic.volume : 0);
+        // Note: Mic connection logic moved to handler to satisfy browser policies
+    }, [mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
 
     const getActivationLevel = (routing: string, phase: number) => {
         if (routing === 'off') return 1.0;
@@ -97,26 +108,20 @@ const App: React.FC = () => {
         const wWindow = window.innerWidth;
         const hWindow = window.innerHeight;
         const isMobile = wWindow < 768;
-
-        // --- SPLIT SCREEN LOGIC ---
         let availableH = hWindow;
         let topOffset = 0;
 
         if (isMobile && panelVisible) {
-            availableH = hWindow * 0.40; // 40% height for video
+            availableH = hWindow * 0.40;
         }
         
         let finalW = wWindow;
         let finalH = hWindow;
 
-        // LOGIC FOR RESOLUTION (Internal Canvas Size)
         if (aspectRatio === 'native') {
              if (videoRef.current && videoRef.current.videoWidth > 0) {
                  finalW = videoRef.current.videoWidth;
                  finalH = videoRef.current.videoHeight;
-             } else {
-                 finalW = wWindow;
-                 finalH = hWindow;
              }
         } else if (aspectRatio === '16:9') {
              finalH = 1080; finalW = 1920;
@@ -130,17 +135,9 @@ const App: React.FC = () => {
              finalH = 1080; finalW = 2520;
         } else if (aspectRatio === 'fit') {
              finalW = wWindow; finalH = hWindow;
-        } else if (aspectRatio === 'manual') {
-            finalW = manualRes.w;
-            finalH = manualRes.h;
         }
 
-        if (finalW < 2) finalW = 2;
-        if (finalH < 2) finalH = 2;
-
         const canvas = canvasRef.current;
-        
-        // Set buffer size
         if (canvas.width !== finalW || canvas.height !== finalH) {
              canvas.width = finalW;
              canvas.height = finalH;
@@ -150,21 +147,16 @@ const App: React.FC = () => {
         const displayW = finalW * scale;
         const displayH = finalH * scale;
 
-        // Set display size
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
-        
-        canvas.style.position = 'absolute';
         canvas.style.left = `${(wWindow - displayW) / 2}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
-        // Safely call resize on GL service
         if (glService.current && typeof glService.current.resize === 'function') {
             glService.current.resize(finalW, finalH);
         }
-    }, [aspectRatio, manualRes, panelVisible]);
+    }, [aspectRatio, panelVisible]);
 
-    // Trigger resize when panel visibility changes to adjust split screen
     useEffect(() => {
         handleResize();
         const t = setTimeout(handleResize, 300); 
@@ -176,24 +168,34 @@ const App: React.FC = () => {
 
         if (canvasRef.current) {
             const success = glService.current.init(canvasRef.current);
-            if (!success) return;
-            const currentShaderKey = fxStateRef.current.main.shader;
-            const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
-            glService.current.loadShader(shaderDef.src);
+            if (success) {
+                const currentShaderKey = fxStateRef.current.main.shader;
+                const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
+                glService.current.loadShader(shaderDef.src);
+            }
         }
+
+        // Init Audio Context early to allow setup
+        audioService.current.initContext().then(() => {
+             // Initial Filter Setup
+             audioService.current.setupFilters(syncParamsRef.current);
+        });
 
         handleResize();
         window.addEventListener('resize', handleResize);
         const v = videoRef.current;
-        if (v) {
-            v.addEventListener('loadedmetadata', handleResize);
-        }
+        if (v) v.addEventListener('loadedmetadata', handleResize);
 
         const loop = (t: number) => {
             if (!isSystemActiveRef.current) return;
 
             const ae = audioService.current;
             ae.update(); 
+            
+            // Read VU Meters
+            const levels = ae.getLevels();
+            // throttle VU updates slightly to 30fps effectively if needed, but doing every frame is fine
+            setVuLevels(levels);
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;
@@ -227,11 +229,7 @@ const App: React.FC = () => {
                 additiveMasterGain: additiveGainRef.current / 100,
                 transform: currentTransform,
                 isMirrored: isMirroredRef.current,
-                fx1: lvls.fx1,
-                fx2: lvls.fx2,
-                fx3: lvls.fx3,
-                fx4: lvls.fx4,
-                fx5: lvls.fx5,
+                fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5,
                 fx1_id: SHADER_LIST[currentFxState.fx1.shader]?.id || 0,
                 fx2_id: SHADER_LIST[currentFxState.fx2.shader]?.id || 0,
                 fx3_id: SHADER_LIST[currentFxState.fx3.shader]?.id || 0,
@@ -246,10 +244,7 @@ const App: React.FC = () => {
 
             if (t - lastTimeRef.current > 100) {
                  setFps(Math.round(1000 / ((t - lastTimeRef.current) / ((t - lastTimeRef.current) > 200 ? 1 : 1))));
-                 setVisualLevels({
-                     main: lvls.main,
-                     fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5
-                 });
+                 setVisualLevels(lvls);
                  lastTimeRef.current = t;
             }
 
@@ -265,163 +260,153 @@ const App: React.FC = () => {
         };
     }, [isSystemActive, handleResize]);
 
-    useEffect(() => {
-        if (isSystemActive) {
-            const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
-            glService.current.loadShader(shaderDef.src);
-        }
-    }, [fxState.main.shader, isSystemActive]);
-
     // --- HANDLERS ---
 
-    const loadAudioUrl = (url: string) => {
+    const toggleMic = async (isActive: boolean) => {
+        setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: isActive } }));
+        
+        if (isActive) {
+            try {
+                // IMPORTANT: connectMic must be called here, in response to the click
+                await audioService.current.initContext(); // ensure resumed
+                await audioService.current.connectMic();
+                setMixer(prev => ({ ...prev, mic: { ...prev.mic, hasSource: true } }));
+                audioService.current.setupFilters(syncParamsRef.current);
+            } catch (e) {
+                console.error(e);
+                alert("Could not access microphone. Please check permissions.");
+                setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: false } }));
+            }
+        } else {
+            // Optional: disconnectMic() if you want to release the hardware, 
+            // or just mute via Gain which is handled by useEffect volume sync.
+            // audioService.current.disconnectMic(); 
+        }
+    };
+
+    const updateMixer = (channel: 'video' | 'music' | 'mic', changes: any) => {
+        setMixer(prev => ({
+            ...prev,
+            [channel]: { ...prev[channel], ...changes }
+        }));
+    };
+
+    const toggleTransport = (channel: 'video' | 'music') => {
+        if (channel === 'video' && videoRef.current) {
+            if (videoRef.current.paused) {
+                videoRef.current.play();
+                updateMixer('video', { playing: true });
+            } else {
+                videoRef.current.pause();
+                updateMixer('video', { playing: false });
+            }
+        } else if (channel === 'music' && currentAudioElRef.current) {
+             if (currentAudioElRef.current.paused) {
+                currentAudioElRef.current.play();
+                updateMixer('music', { playing: true });
+            } else {
+                currentAudioElRef.current.pause();
+                updateMixer('music', { playing: false });
+            }
+        }
+    };
+
+    const stopTransport = (channel: 'video' | 'music') => {
+        if (channel === 'video' && videoRef.current) {
+            videoRef.current.pause();
+            videoRef.current.currentTime = 0;
+            updateMixer('video', { playing: false });
+        } else if (channel === 'music' && currentAudioElRef.current) {
+            currentAudioElRef.current.pause();
+            currentAudioElRef.current.currentTime = 0;
+            updateMixer('music', { playing: false });
+        }
+    };
+
+    const loadMusicTrack = (url: string, name: string) => {
         if (currentAudioElRef.current) {
             currentAudioElRef.current.pause();
-            currentAudioElRef.current.src = "";
-            currentAudioElRef.current.load(); 
-            currentAudioElRef.current = null;
         }
-        setMicActive(false);
+        
         const audio = new Audio();
         audio.src = url;
         audio.loop = true;
         audio.crossOrigin = 'anonymous';
         currentAudioElRef.current = audio;
-        audioService.current.init(audio).then(() => {
-            audioService.current.setupFilters();
-            audioService.current.updateFilters(syncParamsRef.current); 
-            audio.play().catch(e => console.log("Auto-play prevented", e));
-        });
+        
+        // Connect to Mixer
+        audioService.current.connectMusic(audio);
+        audioService.current.setupFilters(syncParamsRef.current);
+        
+        audio.play().then(() => {
+             setMixer(prev => ({
+                ...prev,
+                music: { ...prev.music, hasSource: true, active: true, name: name, playing: true }
+            }));
+        }).catch(e => console.log("Auto-play prevented", e));
+        
+        setShowCatalog(false);
     };
 
     const handleFile = (type: 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
             const url = URL.createObjectURL(file);
+            
             if (type === 'video' && videoRef.current) {
+                // Video Source Logic
                 videoRef.current.srcObject = null;
                 if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
                 videoRef.current.src = url;
-                videoRef.current.play().catch(e => console.log("Auto-play prevented", e));
+                videoRef.current.volume = 1.0; 
+                
+                audioService.current.connectVideo(videoRef.current);
+                audioService.current.setupFilters(syncParamsRef.current);
+
+                videoRef.current.play().then(() => {
+                    setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
+                }).catch(e => console.log("Auto-play prevented", e));
+                
                 setTimeout(handleResize, 500);
+
             } else if (type === 'audio') {
-                setCurrentTrackName(file.name.replace(/\.[^/.]+$/, ""));
-                loadAudioUrl(url);
+                loadMusicTrack(url, file.name.replace(/\.[^/.]+$/, ""));
             }
         }
     };
 
-    // --- CAMERA LOGIC START ---
-    const initCameraSelection = async () => {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    const initCamera = async () => {
+         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
             alert("Camera API not supported");
             return;
         }
-
         try {
-            // 1. First request permission generically to populate labels
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            // Stop this immediately, we just wanted permissions
-            stream.getTracks().forEach(t => t.stop());
-
-            // 2. Enumerate
+            await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission first
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoInputs = devices.filter(d => d.kind === 'videoinput');
             setAvailableCameras(videoInputs);
-
-            if (videoInputs.length > 1) {
-                setShowCameraSelector(true);
-            } else if (videoInputs.length === 1) {
-                startCameraStream(videoInputs[0].deviceId);
-            } else {
-                alert("No cameras found.");
-            }
-
-        } catch (e) {
-            console.error("Error accessing camera devices", e);
-            alert("Camera access denied or error.");
-        }
+            if (videoInputs.length > 0) setShowCameraSelector(true);
+            else alert("No cameras found");
+        } catch(e) { alert("Camera error or permission denied"); }
     };
 
-    const startCameraStream = async (deviceId?: string) => {
+    const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;
-        
         try {
-            const constraints: MediaStreamConstraints = {
-                video: {
-                    deviceId: deviceId ? { exact: deviceId } : undefined,
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 }
-                }
-            };
-
+            const constraints = { video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 } } };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            // Cleanup old stream if exists
-            if (videoRef.current.srcObject) {
-                const oldStream = videoRef.current.srcObject as MediaStream;
-                oldStream.getTracks().forEach(t => t.stop());
-            }
-
+            if (videoRef.current.srcObject) { (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop()); }
             videoRef.current.src = "";
             videoRef.current.srcObject = stream;
             videoRef.current.play();
             
-            // Close modal if open
+            // Connect Video Audio (even if silent, keeps pipeline valid)
+            audioService.current.connectVideo(videoRef.current);
+            setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
+            
             setShowCameraSelector(false);
             setTimeout(handleResize, 500);
-        } catch (e) {
-            console.error("Failed to start camera stream", e);
-            alert("Could not start selected camera.");
-        }
-    };
-    // --- CAMERA LOGIC END ---
-
-    const handleMicrophone = async () => {
-        if (micActive) {
-            audioService.current.stopMicrophone();
-            setMicActive(false);
-            setCurrentTrackName(null);
-            return;
-        }
-        if (currentAudioElRef.current) {
-            currentAudioElRef.current.pause();
-        }
-        try {
-            await audioService.current.enableMicrophone(micGain);
-            audioService.current.setupFilters();
-            audioService.current.updateFilters(syncParamsRef.current);
-            setMicActive(true);
-            setCurrentTrackName("Microphone Input");
-        } catch (e) {
-            alert("Microphone access failed.");
-        }
-    };
-
-    const handleMicGainChange = (val: number) => {
-        setMicGain(val);
-        audioService.current.setMicrophoneGain(val);
-    };
-
-    const handleCatalogSelect = (url: string, name: string) => {
-        setCurrentTrackName(name);
-        setShowCatalog(false);
-        loadAudioUrl(url);
-    };
-
-    const handleTransport = (action: 'play' | 'stop' | 'reset') => {
-        const vid = videoRef.current;
-        const aud = currentAudioElRef.current;
-        if (action === 'play') {
-            if (vid) vid.play();
-            if (aud) aud.play();
-        } else if (action === 'stop') {
-            if (vid) vid.pause();
-            if (aud) aud.pause();
-        } else if (action === 'reset') {
-            if (vid) vid.currentTime = 0;
-            if (aud) aud.currentTime = 0;
-        }
+        } catch (e) { alert("Failed to start camera"); }
     };
 
     const toggleRecording = () => {
@@ -433,68 +418,41 @@ const App: React.FC = () => {
         } else {
             const canvas = canvasRef.current;
             if (!canvas) return;
-            
-            // 60fps recording
+            // Record at 60fps for smoothness
             const videoStream = (canvas as any).captureStream(60);
             const audioStream = audioService.current.getAudioStream();
+            
             const combinedTracks = [...videoStream.getVideoTracks()];
-            if (audioStream) combinedTracks.push(...audioStream.getAudioTracks());
-            const combinedStream = new MediaStream(combinedTracks);
-
-            try {
-                // Android Gallery FIX: Prioritize MP4 (H264) over WebM
-                let mimeType = 'video/mp4';
-                if (!MediaRecorder.isTypeSupported('video/mp4')) {
-                     // Fallback sequence
-                     if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
-                         mimeType = 'video/mp4;codecs=avc1';
-                     } else if (MediaRecorder.isTypeSupported('video/webm;codecs=h264')) {
-                         mimeType = 'video/webm;codecs=h264';
-                     } else {
-                         mimeType = 'video/webm;codecs=vp9';
-                     }
-                }
-
-                console.log("Using Recorder MimeType:", mimeType);
-
-                const recorder = new MediaRecorder(combinedStream, { 
-                    mimeType, 
-                    videoBitsPerSecond: 12000000 // High bitrate for quality
+            if (audioStream) {
+                audioStream.getAudioTracks().forEach(track => { 
+                    if (track.enabled) combinedTracks.push(track); 
                 });
+            }
+            
+            const combinedStream = new MediaStream(combinedTracks);
+            try {
+                // Switch to WebM/VP9/Opus for better browser compatibility
+                let mimeType = 'video/webm;codecs=vp9,opus';
+                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+                
+                const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000 });
                 recordedChunksRef.current = [];
-                
-                recorder.ondataavailable = (event) => { 
-                    if (event.data.size > 0) recordedChunksRef.current.push(event.data); 
-                };
-                
+                recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
                 recorder.onstop = () => {
                     const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    
-                    // Generate safe ISO timestamp for filename (YYYY-MM-DD_HH-MM-SS)
                     const now = new Date();
-                    // Use ISO string but replace colons and dots to avoid filesystem issues on Android
-                    const timestamp = now.toISOString().replace(/[:.]/g, '-').split('T').join('_').slice(0, -5);
-                    
-                    // Extension based on type
-                    const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
-                    
-                    a.download = `VISUS_${timestamp}.${ext}`;
+                    a.download = `VISUS_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.webm`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
                 };
-                
                 recorder.start();
                 mediaRecorderRef.current = recorder;
                 setIsRecording(true);
-            } catch (e) {
-                console.error("Failed to start recording", e);
-                alert("Recording failed to start. Browser might not support this format.");
-            }
+            } catch (e) { alert("Recording failed: " + e); }
         }
     };
 
@@ -505,33 +463,20 @@ const App: React.FC = () => {
         audioService.current.updateFilters(newParams);
     };
 
-    const updateTransform = (key: keyof TransformConfig, val: number) => {
-        setTransform(prev => ({ ...prev, [key]: val }));
-    };
-
+    // --- LANDING SCREEN ---
     if (!isSystemActive) {
         return (
             <div className="flex items-center justify-center h-screen w-screen bg-slate-950 overflow-hidden relative">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black"></div>
-                
                 <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4 flex flex-col items-center">
                     <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-50"></div>
-                    
-                    {/* LOGO */}
                     <div className="mb-8 relative group w-32 h-32 flex items-center justify-center bg-black rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] hover:scale-105 transition-transform duration-500">
                          <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
                          <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 select-none">V</span>
                     </div>
-
                     <h1 className="text-6xl md:text-8xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-400 tracking-tighter">VISUS</h1>
-                    <div className="text-accent font-mono text-xs tracking-[0.6em] mb-12 uppercase">Advanced Visual Engine</div>
-                    
-                    <button 
-                        className="group relative px-16 py-5 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.15)]"
-                        onClick={() => setIsSystemActive(true)}
-                    >
-                        <div className="absolute inset-0 bg-accent opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl mix-blend-screen"></div>
-                        <span className="relative z-10 group-hover:text-white transition-colors">INITIALIZE</span>
+                    <button className="group relative px-16 py-5 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.15)]" onClick={() => setIsSystemActive(true)}>
+                        <span className="relative z-10">INITIALIZE</span>
                     </button>
                 </div>
             </div>
@@ -541,25 +486,20 @@ const App: React.FC = () => {
     return (
         <div className="w-full h-screen overflow-hidden bg-[#020617] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
             <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)'}} />
-            <video ref={videoRef} className="hidden" crossOrigin="anonymous" loop muted playsInline />
+            <video ref={videoRef} className="hidden" crossOrigin="anonymous" loop muted={false} playsInline />
 
             {/* Status Bar */}
-            <div className="fixed top-4 right-4 md:top-6 md:right-6 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
+            <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
                 <span className="hidden md:inline">RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
-                {micActive && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC ACTIVE</span>}
-                {isMirrored && <span className="text-accent animate-pulse font-bold tracking-widest">↔ MIRROR</span>}
+                {mixer.mic.active && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC</span>}
+                {isRecording && <span className="text-red-500 animate-pulse font-black tracking-widest">● REC</span>}
             </div>
 
             {/* MODALS */}
             {showCatalog && (
-                <MusicCatalog 
-                    onSelect={handleCatalogSelect} 
-                    onClose={() => setShowCatalog(false)} 
-                />
+                <MusicCatalog onSelect={loadMusicTrack} onClose={() => setShowCatalog(false)} />
             )}
-
-            {/* CAMERA SELECTOR MODAL */}
             {showCameraSelector && (
                  <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
                     <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col relative">
@@ -569,16 +509,8 @@ const App: React.FC = () => {
                         </div>
                         <div className="p-4 space-y-2">
                             {availableCameras.map((cam, idx) => (
-                                <button 
-                                    key={cam.deviceId}
-                                    onClick={() => startCameraStream(cam.deviceId)}
-                                    className="w-full p-4 rounded-xl bg-zinc-900/40 border border-white/5 hover:bg-accent/20 hover:border-accent/50 hover:text-white text-left transition-all flex items-center gap-3 group"
-                                >
-                                    <div className="w-8 h-8 rounded-full bg-black border border-white/10 flex items-center justify-center group-hover:border-accent">📷</div>
-                                    <div className="flex-1">
-                                        <div className="text-sm font-bold">{cam.label || `Camera ${idx + 1}`}</div>
-                                        <div className="text-[10px] text-zinc-500 font-mono">ID: {cam.deviceId.slice(0,8)}...</div>
-                                    </div>
+                                <button key={cam.deviceId} onClick={() => startCamera(cam.deviceId)} className="w-full p-4 rounded-xl bg-zinc-900/40 border border-white/5 hover:bg-accent/20 hover:text-white text-left transition-all flex items-center gap-3 group">
+                                    <div className="text-sm font-bold">{cam.label || `Camera ${idx + 1}`}</div>
                                 </button>
                             ))}
                         </div>
@@ -586,34 +518,18 @@ const App: React.FC = () => {
                  </div>
             )}
 
-            {/* Main UI Panel */}
-            <div 
-                ref={uiPanelRef}
-                className={`
-                    fixed z-40 glass-panel flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.6)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]
-                    
-                    /* Desktop Styling */
-                    md:top-0 md:left-0 md:h-full md:w-[380px] md:border-r md:border-t-0 md:rounded-none
-                    ${panelVisible ? 'md:translate-x-0' : 'md:-translate-x-full'}
-
-                    /* Mobile Styling */
-                    bottom-0 left-0 w-full h-[60vh] rounded-t-3xl border-t border-white/10
-                    ${panelVisible ? 'translate-y-0' : 'translate-y-[110%]'}
-                `}
-            >
-                {/* Mobile Drag Handle Visual */}
+            {/* MAIN UI PANEL */}
+            <div ref={uiPanelRef} className={`fixed z-40 glass-panel flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.6)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:top-0 md:left-0 md:h-full md:w-[380px] md:border-r md:border-t-0 md:rounded-none ${panelVisible ? 'md:translate-x-0' : 'md:-translate-x-full'} bottom-0 left-0 w-full h-[60vh] rounded-t-3xl border-t border-white/10 ${panelVisible ? 'translate-y-0' : 'translate-y-[110%]'}`}>
                 <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setPanelVisible(false)}>
                     <div className="w-12 h-1.5 bg-white/20 rounded-full"></div>
                 </div>
 
                 <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
                     <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 flex items-center justify-center">
-                            <span className="font-black text-white text-xs">V</span>
-                         </div>
+                         <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 flex items-center justify-center"><span className="font-black text-white text-xs">V</span></div>
                         <div>
                             <h2 className="text-2xl font-black text-white tracking-tighter leading-none">VISUS</h2>
-                            <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">CONTROLLER</div>
+                            <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">MIXER CONSOLE</div>
                         </div>
                     </div>
                     <button onClick={() => setPanelVisible(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">✕</button>
@@ -621,204 +537,122 @@ const App: React.FC = () => {
 
                 <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
                     
-                    {/* SECTION 1: SOURCE & RESOLUTION */}
+                    {/* MIXER SECTION */}
                     <section>
                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span> 
-                            Source & Format
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-3 bg-black/20 p-3 rounded-xl border border-white/5">
-                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-slate-800 to-black border border-white/5 flex items-center justify-center text-accent shadow-inner">♪</div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-0.5">Now Playing</div>
-                                    <div className="text-xs text-white font-bold truncate">{currentTrackName || "No Audio Loaded"}</div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-4 gap-2">
-                                <button onClick={() => handleTransport('play')} className="col-span-2 bg-slate-200 hover:bg-white text-slate-900 font-bold py-2.5 rounded-lg text-[10px] tracking-wider transition-all shadow-lg">PLAY</button>
-                                <button onClick={() => handleTransport('stop')} className="bg-white/5 hover:bg-white/10 text-slate-300 font-bold py-2.5 rounded-lg text-[10px] transition-all">STOP</button>
-                                <button onClick={() => handleTransport('reset')} className="bg-white/5 hover:bg-white/10 text-slate-300 font-bold py-2.5 rounded-lg text-[10px] transition-all">↺</button>
-                            </div>
-
-                            {/* Source Inputs */}
-                            <div className="grid grid-cols-2 gap-2 pt-1">
-                                <button 
-                                    onClick={initCameraSelection}
-                                    className="bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white py-3 rounded-lg text-[9px] font-bold transition-all tracking-wide flex flex-col items-center justify-center gap-1 border border-white/5"
-                                >
-                                    <span>📷 SELECT CAM</span>
-                                </button>
-                                <button 
-                                    onClick={handleMicrophone}
-                                    className={`bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white py-3 rounded-lg text-[9px] font-bold transition-all tracking-wide flex flex-col items-center justify-center gap-1 border border-white/5 ${micActive ? 'border-red-500/50 text-red-200 bg-red-900/20' : ''}`}
-                                >
-                                    <span>{micActive ? '🎙 STOP MIC' : '🎙 USE MIC'}</span>
-                                </button>
-                            </div>
-                            
-                            {micActive && (
-                                <div className="bg-red-900/10 border border-red-500/20 rounded-xl p-3 animate-in fade-in">
-                                    <div className="flex justify-between text-[9px] text-red-300 font-bold uppercase tracking-wider mb-2">
-                                        <span>Mic Input Gain</span>
-                                        <span className="font-mono">{micGain.toFixed(1)}x</span>
-                                    </div>
-                                    <input 
-                                        type="range" 
-                                        min="0.5" max="5.0" step="0.1"
-                                        value={micGain}
-                                        onChange={(e) => handleMicGainChange(parseFloat(e.target.value))}
-                                        className="w-full accent-red-400"
-                                    />
-                                </div>
-                            )}
-
-                             <div className="grid grid-cols-2 gap-2">
-                                    <button 
-                                        onClick={() => setShowCatalog(true)}
-                                        className="bg-white/5 hover:bg-white/10 text-white border border-white/5 font-bold py-3 rounded-lg text-[9px] tracking-wide transition-all"
-                                    >
-                                        CATALOG
-                                    </button>
-                                    <label className="bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 text-slate-400 hover:text-white py-3 rounded-lg text-[9px] font-bold cursor-pointer text-center transition-all tracking-wide flex flex-col items-center justify-center">
-                                        LOCAL MP3
-                                        <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFile('audio', e)} />
-                                    </label>
-                                    
-                                     <label className="col-span-2 bg-black/20 hover:bg-black/40 border border-white/5 hover:border-white/10 text-slate-400 hover:text-white py-3 rounded-lg text-[9px] font-bold cursor-pointer text-center transition-all tracking-wide flex items-center justify-center">
-                                        LOAD VIDEO FILE
-                                        <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFile('video', e)} />
-                                    </label>
-                            </div>
-
-                            {/* Format & Framing Control */}
-                            <div className="pt-4 border-t border-white/5">
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Output Format</div>
-                                    <button 
-                                        onClick={() => setIsMirrored(!isMirrored)}
-                                        className={`text-[9px] px-2 py-1 rounded font-bold border ${isMirrored ? 'bg-accent text-black border-transparent' : 'bg-transparent border-white/20 text-slate-400'}`}
-                                    >
-                                        ↔ MIRROR
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-1 mb-3">
-                                    <button onClick={() => setAspectRatio('native')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === 'native' ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>NATIVE</button>
-                                    <button onClick={() => setAspectRatio('9:16')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === '9:16' ? 'bg-white text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>9:16 (TikTok)</button>
-                                    <button onClick={() => setAspectRatio('4:5')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === '4:5' ? 'bg-white text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>4:5 (IG)</button>
-                                    <button onClick={() => setAspectRatio('1:1')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === '1:1' ? 'bg-white text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>1:1 (Square)</button>
-                                    <button onClick={() => setAspectRatio('16:9')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === '16:9' ? 'bg-white text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>16:9 (YT)</button>
-                                    <button onClick={() => setAspectRatio('fit')} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === 'fit' ? 'bg-white text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>FIT</button>
-                                </div>
-
-                                <div className="bg-black/30 border border-white/5 rounded-xl p-3">
-                                     <div className="text-[9px] text-slate-500 font-bold uppercase mb-2 text-center tracking-wider">Framing / Crop</div>
-                                     <div className="flex justify-around items-center">
-                                         <Knob label="Pan X" min={-0.5} max={0.5} step={0.01} value={transform.x} onChange={(v) => updateTransform('x', v)} format={(v) => v.toFixed(2)} color="#ffffff" />
-                                         <Knob label="Pan Y" min={-0.5} max={0.5} step={0.01} value={transform.y} onChange={(v) => updateTransform('y', v)} format={(v) => v.toFixed(2)} color="#ffffff" />
-                                         <Knob label="Zoom" min={0.1} max={3.0} step={0.05} value={transform.scale} onChange={(v) => updateTransform('scale', v)} format={(v) => v.toFixed(2) + 'x'} color="#2dd4bf" />
-                                     </div>
-                                </div>
-                            </div>
-
-                             <button 
-                                onClick={toggleRecording}
-                                className={`w-full py-3 mt-4 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
-                            >
-                                {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING...</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC (SAVE VIDEO)</span>}
-                            </button>
-                        </div>
-                    </section>
-
-                    {/* SECTION 2: ANALYSIS */}
-                    <section>
-                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-accent2 rounded-full shadow-[0_0_8px_rgba(45,212,191,0.8)]"></span> 
-                            Frequency Analysis
+                            Source Mixer
                         </div>
                         
-                        <SpectrumVisualizer 
-                            audioServiceRef={audioService} 
-                            syncParams={syncParams} 
-                            onParamChange={updateSyncParams}
-                        />
-                         <BandControls 
-                            syncParams={syncParams} 
-                            setSyncParams={setSyncParams} 
-                            onUpdateFilters={(p) => audioService.current.updateFilters(p)}
-                        />
+                        <div className="flex justify-between gap-2 p-2 bg-black/30 rounded-2xl border border-white/10">
+                            
+                            {/* VIDEO CHANNEL */}
+                            <MixerChannel 
+                                label="VIDEO" icon="🎞️" 
+                                isActive={mixer.video.active} 
+                                volume={mixer.video.volume}
+                                vuLevel={vuLevels.video}
+                                isPlaying={mixer.video.playing}
+                                onToggle={(val) => updateMixer('video', { active: val })}
+                                onVolumeChange={(val) => updateMixer('video', { volume: val })}
+                                onPlayPause={() => toggleTransport('video')}
+                                onStop={() => stopTransport('video')}
+                                color="#38bdf8"
+                            >
+                                <div className="flex gap-1 w-full justify-between">
+                                    <label className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded cursor-pointer flex items-center justify-center text-[10px] border border-white/5">
+                                        📁
+                                        <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFile('video', e)} />
+                                    </label>
+                                    <button onClick={initCamera} className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded flex items-center justify-center text-[10px] border border-white/5">📷</button>
+                                </div>
+                            </MixerChannel>
+
+                            {/* MUSIC CHANNEL */}
+                            <MixerChannel 
+                                label="MUSIC" icon="♫" 
+                                isActive={mixer.music.active} 
+                                volume={mixer.music.volume}
+                                vuLevel={vuLevels.music}
+                                isPlaying={mixer.music.playing}
+                                onToggle={(val) => updateMixer('music', { active: val })}
+                                onVolumeChange={(val) => updateMixer('music', { volume: val })}
+                                onPlayPause={() => toggleTransport('music')}
+                                onStop={() => stopTransport('music')}
+                                color="#f472b6"
+                            >
+                                <div className="flex gap-1 w-full justify-between">
+                                     <label className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded cursor-pointer flex items-center justify-center text-[10px] border border-white/5">
+                                        📁
+                                        <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFile('audio', e)} />
+                                    </label>
+                                    <button onClick={() => setShowCatalog(true)} className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded flex items-center justify-center text-[8px] font-bold border border-white/5">WEB</button>
+                                </div>
+                            </MixerChannel>
+
+                            {/* MIC CHANNEL */}
+                            <MixerChannel 
+                                label="MIC" icon="🎙️" 
+                                isActive={mixer.mic.active} 
+                                volume={mixer.mic.volume}
+                                vuLevel={vuLevels.mic}
+                                onToggle={toggleMic}
+                                onVolumeChange={(val) => updateMixer('mic', { volume: val })}
+                                color="#ef4444"
+                            />
+                        </div>
+                        
+                        {mixer.music.name && (
+                            <div className="mt-2 text-center text-[9px] text-accent truncate px-2 bg-accent/5 rounded py-1 border border-accent/20">
+                                ♫ {mixer.music.name}
+                            </div>
+                        )}
                     </section>
 
-                    {/* SECTION 3: FX */}
+                    {/* FORMAT SECTION */}
+                    <section>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             Output & Framing
+                        </div>
+                        <div className="grid grid-cols-3 gap-1 mb-3">
+                            {['native', '16:9', '9:16', '4:5', '1:1', 'fit'].map(r => (
+                                <button key={r} onClick={() => setAspectRatio(r as AspectRatioMode)} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === r ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>{r.toUpperCase()}</button>
+                            ))}
+                        </div>
+                         <button 
+                            onClick={toggleRecording}
+                            className={`w-full py-3 mt-2 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
+                        >
+                            {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING (WEBM)</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC VIDEO (WEBM)</span>}
+                        </button>
+                    </section>
+
+                    {/* FREQ ANALYSIS */}
+                    <section>
+                        <SpectrumVisualizer audioServiceRef={audioService} syncParams={syncParams} onParamChange={updateSyncParams} />
+                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioService.current.updateFilters(p)} />
+                    </section>
+
+                    {/* FX STACK */}
                     <section>
                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex justify-between items-center">
                             <div className="flex items-center gap-2">
                                 <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span> 
-                                Base Layer (Layer 0)
+                                FX Chain
                             </div>
-                            {visualLevels.main > 0.1 && <span className="text-[8px] text-accent animate-pulse font-bold tracking-widest">ACTIVE</span>}
                         </div>
                         <FxSlot category="main" slotName="main" fxState={fxState} setFxState={setFxState} activeLevel={visualLevels.main} />
-                    </section>
-
-                    {/* SECTION 4: STACK */}
-                    <section>
-                        <div className="flex justify-between items-center pt-6 border-t border-white/5 mb-4">
-                             <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                                Post FX Chain (Layers 1-5)
-                            </div>
-                        </div>
-                        
-                        {/* Chain Intensity Control */}
-                        <div className="bg-white/5 border border-white/5 rounded-xl p-3 mb-4">
-                            <div className="flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider mb-2">
-                                <span>Chain Intensity</span>
-                                <span className="text-accent2">{additiveGain}%</span>
-                            </div>
-                            <input 
-                                type="range" 
-                                min="0" max="100" 
-                                value={additiveGain}
-                                onChange={(e) => setAdditiveGain(parseInt(e.target.value))}
-                                className="w-full accent-accent2"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
+                        <div className="space-y-2 mt-4">
                             {['fx1', 'fx2', 'fx3', 'fx4', 'fx5'].map((fxName, i) => (
-                                <FxSlot 
-                                    key={fxName}
-                                    category="additive" 
-                                    title={`Layer ${i+1}`} 
-                                    slotName={fxName as keyof FxState} 
-                                    fxState={fxState} 
-                                    setFxState={setFxState} 
-                                    activeLevel={(visualLevels as any)[fxName]} 
-                                />
+                                <FxSlot key={fxName} category="additive" title={`Layer ${i+1}`} slotName={fxName as keyof FxState} fxState={fxState} setFxState={setFxState} activeLevel={(visualLevels as any)[fxName]} />
                             ))}
                         </div>
                     </section>
-
-                     <div className="h-auto text-center text-[9px] text-slate-600 font-mono pt-10 pb-12 space-y-1">
-                        <div className="font-bold opacity-50 mb-2">VISUS ENGINE v2.9</div>
-                        <div className="opacity-40 hover:opacity-100 transition-opacity">
-                            &copy; Studio Popłoch 2025
-                        </div>
-                        <div className="text-accent/30 hover:text-accent/80 transition-colors font-bold tracking-wider">
-                            Pan Grzyb
-                        </div>
-                    </div>
                 </div>
             </div>
 
             {!panelVisible && (
-                <button 
-                    onClick={() => setPanelVisible(true)}
-                    className="fixed bottom-8 left-8 z-50 bg-slate-900/80 border border-white/10 hover:border-accent hover:text-accent text-white w-14 h-14 flex items-center justify-center rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur transition-all hover:scale-110 group"
-                >
+                <button onClick={() => setPanelVisible(true)} className="fixed bottom-8 left-8 z-50 bg-slate-900/80 border border-white/10 hover:border-accent hover:text-accent text-white w-14 h-14 flex items-center justify-center rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur transition-all hover:scale-110 group">
                     <span className="text-2xl block group-hover:rotate-90 transition-transform duration-500">⚙</span>
                 </button>
             )}

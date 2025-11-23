@@ -1,0 +1,77 @@
+
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    tools:context=".MainActivity">
+
+    <!-- The OpenGL Canvas -->
+    <android.opengl.GLSurfaceView
+        android:id="@+id/glSurfaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- UI Overlay -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="#80000000"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Effect Intensity"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:fontFamily="monospace" />
+
+        <SeekBar
+            android:id="@+id/intensitySlider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="50"
+            android:progressTint="#A78BFA"
+            android:thumbTint="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/fpsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FPS: 60"
+            android:textColor="#2DD4BF"
+            android:fontFamily="monospace"
+            android:layout_marginTop="8dp"/>
+            
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp">
+            
+            <Button
+                android:id="@+id/btnSwitchCam"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Flip Cam"
+                android:textSize="10sp"
+                android:backgroundTint="#33FFFFFF"/>
+
+             <Button
+                android:id="@+id/btnRecord"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:text="REC"
+                android:textColor="#EF4444"
+                android:backgroundTint="#33FFFFFF"/>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
