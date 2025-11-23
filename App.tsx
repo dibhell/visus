@@ -272,15 +272,19 @@ const App: React.FC = () => {
                 await audioService.current.connectMic();
                 setMixer(prev => ({ ...prev, mic: { ...prev.mic, hasSource: true } }));
                 audioService.current.setupFilters(syncParamsRef.current);
-            } catch (e) {
-                console.error(e);
-                alert("Could not access microphone. Please check permissions.");
+            } catch (e: any) {
+                console.error("Mic Error:", e);
+                let msg = "Could not access microphone.";
+                if (e.name === 'NotAllowedError') msg += " Permission denied. Please click the Lock icon in your address bar and Allow Microphone.";
+                else if (e.name === 'NotFoundError') msg += " No microphone found.";
+                else msg += " " + e.message;
+                
+                alert(msg);
                 setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: false } }));
+                audioService.current.disconnectMic();
             }
         } else {
-            // Optional: disconnectMic() if you want to release the hardware, 
-            // or just mute via Gain which is handled by useEffect volume sync.
-            // audioService.current.disconnectMic(); 
+            audioService.current.disconnectMic(); 
         }
     };
 
@@ -291,10 +295,15 @@ const App: React.FC = () => {
         }));
     };
 
-    const toggleTransport = (channel: 'video' | 'music') => {
+    const toggleTransport = async (channel: 'video' | 'music') => {
+        // Ensure context is running whenever user clicks Play
+        if (audioService.current.ctx?.state === 'suspended') {
+            await audioService.current.ctx.resume();
+        }
+
         if (channel === 'video' && videoRef.current) {
             if (videoRef.current.paused) {
-                videoRef.current.play();
+                videoRef.current.play().catch(e => console.error("Video play fail", e));
                 updateMixer('video', { playing: true });
             } else {
                 videoRef.current.pause();
@@ -302,7 +311,7 @@ const App: React.FC = () => {
             }
         } else if (channel === 'music' && currentAudioElRef.current) {
              if (currentAudioElRef.current.paused) {
-                currentAudioElRef.current.play();
+                currentAudioElRef.current.play().catch(e => console.error("Audio play fail", e));
                 updateMixer('music', { playing: true });
             } else {
                 currentAudioElRef.current.pause();
@@ -377,36 +386,63 @@ const App: React.FC = () => {
 
     const initCamera = async () => {
          if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-            alert("Camera API not supported");
+            alert("Camera API not supported in this browser.");
             return;
         }
         try {
-            await navigator.mediaDevices.getUserMedia({ video: true }); // Request permission first
+            // Requesting basic video permission first.
+            // Using 'ideal' constraints instead of exact to avoid overconstrained error.
+            await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } }); 
+            
             const devices = await navigator.mediaDevices.enumerateDevices();
             const videoInputs = devices.filter(d => d.kind === 'videoinput');
             setAvailableCameras(videoInputs);
+            
             if (videoInputs.length > 0) setShowCameraSelector(true);
-            else alert("No cameras found");
-        } catch(e) { alert("Camera error or permission denied"); }
+            else alert("Permission granted, but no cameras found.");
+            
+        } catch(e: any) {
+            console.error(e);
+            let msg = "Camera Error: ";
+            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+                 msg += "Permission denied. Please allow camera access in your browser settings (Lock icon).";
+            } else {
+                 msg += e.message || "Unknown error.";
+            }
+            alert(msg);
+        }
     };
 
     const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;
         try {
-            const constraints = { video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 } } };
+            // Use loose constraints to prevent failure if deviceId changed or resolution unavail
+            const constraints: MediaStreamConstraints = { 
+                video: { 
+                    deviceId: deviceId ? { exact: deviceId } : undefined, 
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 } 
+                } 
+            };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            if (videoRef.current.srcObject) { (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop()); }
+            
+            // Stop existing
+            if (videoRef.current.srcObject) { 
+                (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop()); 
+            }
+            
             videoRef.current.src = "";
             videoRef.current.srcObject = stream;
             videoRef.current.play();
             
-            // Connect Video Audio (even if silent, keeps pipeline valid)
             audioService.current.connectVideo(videoRef.current);
             setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
             
             setShowCameraSelector(false);
             setTimeout(handleResize, 500);
-        } catch (e) { alert("Failed to start camera"); }
+        } catch (e: any) { 
+            alert("Failed to start camera: " + e.message); 
+        }
     };
 
     const toggleRecording = () => {

@@ -126,13 +126,21 @@ export class AudioEngine {
     async connectMic() {
         if (!this.ctx || !this.micGain) return;
         
-        if (this.micNode) { 
-            // Already active, just ensure connected
-            return; 
-        }
+        // If we have a node, we must check if it's active. 
+        // Best practice: always get a new stream to ensure we comply with user intention.
+        this.disconnectMic(); 
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            // Request audio with standard constraints
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: false 
+                }, 
+                video: false 
+            });
+            
             this.micNode = this.ctx.createMediaStreamSource(stream);
             this.micNode.connect(this.micGain);
             // NOTE: We DO NOT connect Mic to ctx.destination to avoid feedback loop
@@ -144,6 +152,10 @@ export class AudioEngine {
 
     disconnectMic() {
         if (this.micNode) {
+            // CRITICAL: Stop the tracks to release the hardware/permission lock
+            if (this.micNode.mediaStream) {
+                this.micNode.mediaStream.getTracks().forEach(track => track.stop());
+            }
             try { this.micNode.disconnect(); } catch(e){}
             this.micNode = null;
         }
