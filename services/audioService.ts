@@ -33,10 +33,12 @@ export class AudioEngine {
     // Data for Visuals
     bands: BandsData = { sync1: 0, sync2: 0, sync3: 0 };
     filters: FilterBand[] = [];
-    fftData: Uint8Array = new Uint8Array(1024);
+    
+    // FIXED: Relaxed types to 'any' to prevent TS2345 build error (Uint8Array<ArrayBufferLike> vs ArrayBuffer)
+    fftData: any = new Uint8Array(1024);
     
     // Scratch buffers for VU meters
-    vuData: Uint8Array = new Uint8Array(16); 
+    vuData: any = new Uint8Array(16); 
 
     constructor() {
         this.bands = { sync1: 0, sync2: 0, sync3: 0 };
@@ -199,6 +201,7 @@ export class AudioEngine {
     getLevels() {
         const getRMS = (analyser: AnalyserNode | null) => {
             if (!analyser) return 0;
+            // No cast needed because vuData is 'any'
             analyser.getByteTimeDomainData(this.vuData);
             let sum = 0;
             for (let i = 0; i < this.vuData.length; i++) {
@@ -272,11 +275,12 @@ export class AudioEngine {
         if (!this.mainAnalyser || !this.ctx || this.ctx.state === 'suspended') return;
 
         // 1. RAW FFT Data (Visualizer)
-        this.mainAnalyser.getByteFrequencyData(this.fftData as any);
+        // No cast needed because fftData is 'any'
+        this.mainAnalyser.getByteFrequencyData(this.fftData);
 
         // 2. Filtered Bands Data (Logic)
         this.filters.forEach((f, index) => {
-            f.analyser.getByteFrequencyData(f.data as any);
+            f.analyser.getByteFrequencyData(f.data);
             let sum = 0;
             for(let i=0; i<f.data.length; i++) sum += f.data[i];
             
