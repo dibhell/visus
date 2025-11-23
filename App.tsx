@@ -10,6 +10,18 @@ import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
 
+// --- ICONS (SVG) ---
+const ICONS = {
+    Video: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>,
+    Music: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>,
+    Mic: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>,
+    Camera: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>,
+    Folder: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>,
+    Globe: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>,
+    Mirror: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h7"></path><path d="M14 2L22 12L14 22"></path></svg>,
+    Settings: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+};
+
 const App: React.FC = () => {
     // --- REFS ---
     const glService = useRef<GLService>(new GLService());
@@ -391,7 +403,6 @@ const App: React.FC = () => {
         }
         try {
             // Requesting basic video permission first.
-            // Using 'ideal' constraints instead of exact to avoid overconstrained error.
             await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } }); 
             
             const devices = await navigator.mediaDevices.enumerateDevices();
@@ -416,7 +427,6 @@ const App: React.FC = () => {
     const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;
         try {
-            // Use loose constraints to prevent failure if deviceId changed or resolution unavail
             const constraints: MediaStreamConstraints = { 
                 video: { 
                     deviceId: deviceId ? { exact: deviceId } : undefined, 
@@ -426,7 +436,6 @@ const App: React.FC = () => {
             };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             
-            // Stop existing
             if (videoRef.current.srcObject) { 
                 (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop()); 
             }
@@ -454,7 +463,6 @@ const App: React.FC = () => {
         } else {
             const canvas = canvasRef.current;
             if (!canvas) return;
-            // Record at 60fps for smoothness
             const videoStream = (canvas as any).captureStream(60);
             const audioStream = audioService.current.getAudioStream();
             
@@ -467,7 +475,6 @@ const App: React.FC = () => {
             
             const combinedStream = new MediaStream(combinedTracks);
             try {
-                // Switch to WebM/VP9/Opus for better browser compatibility
                 let mimeType = 'video/webm;codecs=vp9,opus';
                 if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
                 
@@ -497,6 +504,10 @@ const App: React.FC = () => {
         newParams[index] = { ...newParams[index], ...changes };
         setSyncParams(newParams);
         audioService.current.updateFilters(newParams);
+    };
+
+    const updateTransform = (key: keyof TransformConfig, value: number) => {
+        setTransform(prev => ({ ...prev, [key]: value }));
     };
 
     // --- LANDING SCREEN ---
@@ -584,7 +595,7 @@ const App: React.FC = () => {
                             
                             {/* VIDEO CHANNEL */}
                             <MixerChannel 
-                                label="VIDEO" icon="🎞️" 
+                                label="VIDEO" icon={ICONS.Video} 
                                 isActive={mixer.video.active} 
                                 volume={mixer.video.volume}
                                 vuLevel={vuLevels.video}
@@ -596,17 +607,19 @@ const App: React.FC = () => {
                                 color="#38bdf8"
                             >
                                 <div className="flex gap-1 w-full justify-between">
-                                    <label className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded cursor-pointer flex items-center justify-center text-[10px] border border-white/5">
-                                        📁
+                                    <label className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded cursor-pointer flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Open Video File">
+                                        {ICONS.Folder}
                                         <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFile('video', e)} />
                                     </label>
-                                    <button onClick={initCamera} className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded flex items-center justify-center text-[10px] border border-white/5">📷</button>
+                                    <button onClick={initCamera} className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Select Camera">
+                                        {ICONS.Camera}
+                                    </button>
                                 </div>
                             </MixerChannel>
 
                             {/* MUSIC CHANNEL */}
                             <MixerChannel 
-                                label="MUSIC" icon="♫" 
+                                label="MUSIC" icon={ICONS.Music} 
                                 isActive={mixer.music.active} 
                                 volume={mixer.music.volume}
                                 vuLevel={vuLevels.music}
@@ -618,17 +631,19 @@ const App: React.FC = () => {
                                 color="#f472b6"
                             >
                                 <div className="flex gap-1 w-full justify-between">
-                                     <label className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded cursor-pointer flex items-center justify-center text-[10px] border border-white/5">
-                                        📁
+                                     <label className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded cursor-pointer flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Open Audio File">
+                                        {ICONS.Folder}
                                         <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFile('audio', e)} />
                                     </label>
-                                    <button onClick={() => setShowCatalog(true)} className="w-8 h-6 bg-white/5 hover:bg-white/10 rounded flex items-center justify-center text-[8px] font-bold border border-white/5">WEB</button>
+                                    <button onClick={() => setShowCatalog(true)} className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Search iTunes">
+                                        {ICONS.Globe}
+                                    </button>
                                 </div>
                             </MixerChannel>
 
                             {/* MIC CHANNEL */}
                             <MixerChannel 
-                                label="MIC" icon="🎙️" 
+                                label="MIC" icon={ICONS.Mic} 
                                 isActive={mixer.mic.active} 
                                 volume={mixer.mic.volume}
                                 vuLevel={vuLevels.mic}
@@ -655,9 +670,43 @@ const App: React.FC = () => {
                                 <button key={r} onClick={() => setAspectRatio(r as AspectRatioMode)} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === r ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>{r.toUpperCase()}</button>
                             ))}
                         </div>
+                        
+                        {/* GEOMETRY CONTROLS */}
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 mb-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-[9px] text-slate-500 font-bold tracking-wider">GEOMETRY</div>
+                                <button 
+                                    onClick={() => setIsMirrored(!isMirrored)}
+                                    className={`flex items-center gap-2 px-2 py-1 rounded text-[9px] font-bold border ${isMirrored ? 'bg-accent/20 border-accent text-accent' : 'bg-white/5 border-white/5 text-slate-400'}`}
+                                >
+                                    {ICONS.Mirror} MIRROR
+                                </button>
+                            </div>
+                            <div className="flex justify-around items-center">
+                                <Knob 
+                                    label="Scale" value={transform.scale} 
+                                    min={0.1} max={3.0} step={0.05} 
+                                    onChange={(v) => updateTransform('scale', v)} 
+                                    format={(v) => v.toFixed(2)} color="#2dd4bf" 
+                                />
+                                <Knob 
+                                    label="Pan X" value={transform.x} 
+                                    min={-1.0} max={1.0} step={0.05} 
+                                    onChange={(v) => updateTransform('x', v)} 
+                                    format={(v) => v.toFixed(1)} color="#2dd4bf" 
+                                />
+                                <Knob 
+                                    label="Pan Y" value={transform.y} 
+                                    min={-1.0} max={1.0} step={0.05} 
+                                    onChange={(v) => updateTransform('y', v)} 
+                                    format={(v) => v.toFixed(1)} color="#2dd4bf" 
+                                />
+                            </div>
+                        </div>
+
                          <button 
                             onClick={toggleRecording}
-                            className={`w-full py-3 mt-2 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
+                            className={`w-full py-3 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
                         >
                             {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING (WEBM)</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC VIDEO (WEBM)</span>}
                         </button>
@@ -689,7 +738,7 @@ const App: React.FC = () => {
 
             {!panelVisible && (
                 <button onClick={() => setPanelVisible(true)} className="fixed bottom-8 left-8 z-50 bg-slate-900/80 border border-white/10 hover:border-accent hover:text-accent text-white w-14 h-14 flex items-center justify-center rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur transition-all hover:scale-110 group">
-                    <span className="text-2xl block group-hover:rotate-90 transition-transform duration-500">⚙</span>
+                    <span className="text-white group-hover:text-accent group-hover:rotate-90 transition-all duration-500">{ICONS.Settings}</span>
                 </button>
             )}
         </div>

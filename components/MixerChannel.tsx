@@ -3,7 +3,7 @@ import React from 'react';
 
 interface Props {
     label: string;
-    icon: string;
+    icon: React.ReactNode;
     isActive: boolean;
     volume: number; // 0 to 1
     vuLevel: number; // 0 to 1
@@ -21,87 +21,98 @@ const MixerChannel: React.FC<Props> = ({
 }) => {
     
     // Create VU meter segments
-    const segments = 10;
+    const segments = 12;
     const activeSegments = Math.round(vuLevel * segments);
 
     return (
-        <div className="flex flex-col items-center gap-2 p-2 bg-black/40 rounded-xl border border-white/10 w-24">
+        <div className="flex flex-col items-center gap-2 p-3 bg-black/40 rounded-2xl border border-white/5 w-28 shadow-lg backdrop-blur-sm">
             {/* Header */}
-            <div className="flex flex-col items-center justify-center h-10 text-center">
-                <div className="text-lg leading-none">{icon}</div>
-                <div className="text-[8px] font-bold uppercase tracking-wider text-slate-400 mt-1">{label}</div>
+            <div className="flex flex-col items-center justify-center h-12 text-center text-slate-300">
+                <div className="opacity-90">{icon}</div>
+                <div className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mt-2">{label}</div>
             </div>
 
             {/* Master Toggle */}
-            <div className="flex flex-col items-center gap-2 w-full mb-1">
-                 <label className="relative inline-flex items-center cursor-pointer">
+            <div className="flex flex-col items-center gap-2 w-full mb-2">
+                 <label className="relative inline-flex items-center cursor-pointer group">
                     <input 
                         type="checkbox" 
                         checked={isActive} 
                         onChange={(e) => onToggle(e.target.checked)} 
                         className="sr-only peer" 
                     />
-                    <div className="w-8 h-4 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-accent"></div>
+                    <div className="w-10 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent peer-checked:after:bg-white shadow-inner"></div>
                 </label>
             </div>
 
             {/* Slider & Meter Container */}
-            <div className="relative h-28 w-full flex justify-center items-center gap-2 bg-black/20 rounded-lg py-2 border border-white/5">
+            <div className="relative h-32 w-full flex justify-center items-center gap-3 bg-black/20 rounded-xl py-3 border border-white/5 shadow-inner">
                 
                 {/* VU Meter */}
-                <div className="h-full w-2 bg-black/50 rounded-full flex flex-col justify-end overflow-hidden py-[1px]">
+                <div className="h-full w-1.5 bg-black/50 rounded-full flex flex-col justify-end overflow-hidden py-[1px]">
                     {Array.from({length: segments}).map((_, i) => (
                         <div 
                             key={i} 
-                            className="w-full h-[8%] mb-[2%] rounded-[1px] transition-colors duration-75"
+                            className="w-full h-[6%] mb-[2%] rounded-[1px] transition-colors duration-75"
                             style={{ 
                                 backgroundColor: (segments - 1 - i) < activeSegments 
                                     ? ((segments - 1 - i) > segments * 0.8 ? '#ef4444' : color) 
-                                    : '#333'
+                                    : '#1e293b'
                             }}
                         />
                     ))}
                 </div>
 
                 {/* Vertical Slider Wrapper */}
-                <div className="h-full w-8 relative flex items-center justify-center">
+                <div className="h-full w-8 relative flex items-center justify-center group">
                     <input 
                         type="range" 
                         min="0" max="1.2" step="0.01"
                         value={volume}
                         onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                        className="absolute w-24 h-8 rotate-270 origin-center bg-transparent cursor-pointer appearance-none"
+                        className="absolute w-28 h-8 rotate-270 origin-center bg-transparent cursor-pointer appearance-none z-10"
                         style={{
                             WebkitAppearance: 'none',
                         }}
                     />
+                    
                     {/* Custom Track Visual */}
-                    <div className="pointer-events-none absolute w-1.5 h-full bg-white/10 rounded-full overflow-hidden">
+                    <div className="pointer-events-none absolute w-1.5 h-full bg-slate-800/80 rounded-full overflow-hidden">
                         <div 
-                            className="absolute bottom-0 w-full bg-slate-200 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                            className="absolute bottom-0 w-full bg-slate-300 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.3)] transition-all duration-75"
                             style={{ height: `${Math.min(100, (volume / 1.2) * 100)}%` }}
                         ></div>
                     </div>
+                    
+                    {/* Thumb visual enhancement (fake) */}
+                    <div 
+                         className="pointer-events-none absolute w-4 h-3 bg-slate-200 rounded shadow-md border border-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                         style={{ bottom: `calc(${Math.min(100, (volume / 1.2) * 100)}% - 6px)` }}
+                    />
                 </div>
             </div>
 
             {/* Transport Controls (Only if handlers provided) */}
             {(onPlayPause || onStop) && (
-                <div className="flex gap-1 w-full justify-center">
+                <div className="flex gap-1 w-full justify-center mt-1">
                     {onPlayPause && (
                         <button 
                             onClick={onPlayPause}
-                            className={`flex-1 h-6 rounded flex items-center justify-center text-[10px] transition-colors ${isPlaying ? 'bg-accent text-white shadow-[0_0_10px_rgba(167,139,250,0.5)]' : 'bg-white/10 text-slate-300 hover:bg-white/20'}`}
+                            className={`flex-1 h-7 rounded-lg flex items-center justify-center transition-all border border-white/5 ${isPlaying ? 'bg-accent text-white shadow-[0_0_10px_rgba(167,139,250,0.4)] border-accent/50' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'}`}
                         >
-                            {isPlaying ? '❚❚' : '▶'}
+                            {isPlaying ? (
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+                            ) : (
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z" /></svg>
+                            )}
                         </button>
                     )}
                     {onStop && (
                         <button 
                             onClick={onStop}
-                            className="w-6 h-6 rounded bg-white/10 text-slate-300 hover:bg-red-500/80 hover:text-white flex items-center justify-center text-[8px]"
+                            className="w-7 h-7 rounded-lg bg-white/5 text-slate-400 border border-white/5 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50 flex items-center justify-center transition-all"
                         >
-                            ◼
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
                         </button>
                     )}
                 </div>
