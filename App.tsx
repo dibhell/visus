@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GLService } from './services/glService';
 import { AudioEngine } from './services/audioService';
@@ -371,27 +372,32 @@ const App: React.FC = () => {
 
     const handleFile = (type: 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            const url = URL.createObjectURL(file);
-            
-            if (type === 'video' && videoRef.current) {
-                // Video Source Logic
-                videoRef.current.srcObject = null;
-                if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
-                videoRef.current.src = url;
-                videoRef.current.volume = 1.0; 
+            try {
+                const file = e.target.files[0];
+                const url = URL.createObjectURL(file);
                 
-                audioService.current.connectVideo(videoRef.current);
-                audioService.current.setupFilters(syncParamsRef.current);
+                if (type === 'video' && videoRef.current) {
+                    // Video Source Logic
+                    videoRef.current.srcObject = null;
+                    if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
+                    videoRef.current.src = url;
+                    videoRef.current.volume = 1.0; 
+                    
+                    audioService.current.connectVideo(videoRef.current);
+                    audioService.current.setupFilters(syncParamsRef.current);
 
-                videoRef.current.play().then(() => {
-                    setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
-                }).catch(e => console.log("Auto-play prevented", e));
-                
-                setTimeout(handleResize, 500);
+                    videoRef.current.play().then(() => {
+                        setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
+                    }).catch(e => console.log("Auto-play prevented", e));
+                    
+                    setTimeout(handleResize, 500);
 
-            } else if (type === 'audio') {
-                loadMusicTrack(url, file.name.replace(/\.[^/.]+$/, ""));
+                } else if (type === 'audio') {
+                    loadMusicTrack(url, file.name.replace(/\.[^/.]+$/, ""));
+                }
+            } catch (err) {
+                console.error("File loading error", err);
+                alert("Could not load file. Please try another.");
             }
         }
     };

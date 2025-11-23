@@ -1,4 +1,5 @@
 
+
 import { FilterBand, SyncParam, BandsData } from '../constants';
 
 export class AudioEngine {
@@ -16,6 +17,8 @@ export class AudioEngine {
     videoNode: MediaElementAudioSourceNode | null = null;
     videoGain: GainNode | null = null;
     videoAnalyser: AnalyserNode | null = null;
+    // Keep track of the element to avoid re-creation errors
+    boundVideoElement: HTMLMediaElement | null = null;
 
     // Channel 2: Music
     musicNode: MediaElementAudioSourceNode | null = null;
@@ -99,18 +102,36 @@ export class AudioEngine {
     connectVideo(videoEl: HTMLMediaElement) {
         if (!this.ctx || !this.videoGain) return;
         
-        // Disconnect old if exists
-        if (this.videoNode) { try { this.videoNode.disconnect(); } catch(e){} }
+        // 1. Check if we already created a source for this EXACT element
+        if (this.boundVideoElement === videoEl && this.videoNode) {
+            // Already connected. Just ensure the audio graph path is active.
+            try {
+                this.videoNode.disconnect();
+                this.videoNode.connect(this.videoGain);
+            } catch(e) {
+                // Ignore disconnect errors
+            }
+            return;
+        }
+        
+        // 2. Disconnect old source if it exists (and is different)
+        if (this.videoNode) { 
+            try { this.videoNode.disconnect(); } catch(e){} 
+        }
 
-        this.videoNode = this.ctx.createMediaElementSource(videoEl);
-        
-        // Path 1: To Mixer (Visuals)
-        this.videoNode.connect(this.videoGain);
-        
-        // Path 2: To Speakers (Hearing)
-        // We connect directly from source to destination for playback, 
-        // BUT to control volume via our slider, we should actually go: Source -> Gain -> Destination
-        this.videoGain.connect(this.ctx.destination);
+        // 3. Create new source
+        try {
+            this.videoNode = this.ctx.createMediaElementSource(videoEl);
+            this.boundVideoElement = videoEl;
+            
+            // Path 1: To Mixer (Visuals)
+            this.videoNode.connect(this.videoGain);
+            
+            // Path 2: To Speakers (Hearing)
+            this.videoGain.connect(this.ctx.destination);
+        } catch(e) {
+            console.error("AudioEngine: Error connecting video source. It might be already connected.", e);
+        }
     }
 
     connectMusic(audioEl: HTMLMediaElement) {

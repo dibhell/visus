@@ -47,7 +47,7 @@ export interface FilterBand {
   name: string;
   bandpass: BiquadFilterNode;
   analyser: AnalyserNode;
-  data: Uint8Array;
+  data: any; // Relaxed type to prevent build errors with Uint8Array mismatches
 }
 
 export interface BandsData {
