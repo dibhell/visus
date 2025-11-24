@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GLService } from './services/glService';
 import { AudioEngine } from './services/audioService';
@@ -10,6 +8,11 @@ import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
+// USUNIĘTE: import icon from '../icon.png';
+
+// jeśli icon.png jest w katalogu głównym obok index.html użyj '/icon.png'
+// jeśli jest obok bundla/HTML, możesz zmienić na inną ścieżkę
+const ICON_PNG = '/icon.png';
 
 // --- ICONS (SVG) ---
 const ICONS = {
@@ -377,20 +380,25 @@ const App: React.FC = () => {
                 const url = URL.createObjectURL(file);
                 
                 if (type === 'video' && videoRef.current) {
-                    // Video Source Logic
-                    videoRef.current.srcObject = null;
-                    if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
-                    videoRef.current.src = url;
-                    videoRef.current.volume = 1.0; 
-                    
-                    audioService.current.connectVideo(videoRef.current);
-                    audioService.current.setupFilters(syncParamsRef.current);
+                    // Video Source Logic - WITH REUSE CHECK
+                    try {
+                        videoRef.current.srcObject = null;
+                        if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
+                        videoRef.current.src = url;
+                        videoRef.current.volume = 1.0; 
+                        
+                        // Safe connect
+                        audioService.current.connectVideo(videoRef.current);
+                        audioService.current.setupFilters(syncParamsRef.current);
 
-                    videoRef.current.play().then(() => {
-                        setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
-                    }).catch(e => console.log("Auto-play prevented", e));
-                    
-                    setTimeout(handleResize, 500);
+                        videoRef.current.play().then(() => {
+                            setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
+                        }).catch(e => console.log("Auto-play prevented", e));
+                        
+                        setTimeout(handleResize, 500);
+                    } catch(err) {
+                        console.error("Error setting video source", err);
+                    }
 
                 } else if (type === 'audio') {
                     loadMusicTrack(url, file.name.replace(/\.[^/.]+$/, ""));
@@ -523,9 +531,9 @@ const App: React.FC = () => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black"></div>
                 <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4 flex flex-col items-center">
                     <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-50"></div>
-                    <div className="mb-8 relative group w-32 h-32 flex items-center justify-center bg-black rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] hover:scale-105 transition-transform duration-500">
+                    <div className="mb-8 relative group w-40 h-40 flex items-center justify-center bg-black rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] hover:scale-105 transition-transform duration-500 overflow-hidden">
                          <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
-                         <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 select-none">V</span>
+                         <img src={ICON_PNG} alt="VISUS Logo" className="w-full h-full object-cover p-2" />
                     </div>
                     <h1 className="text-6xl md:text-8xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-400 tracking-tighter">VISUS</h1>
                     <button className="group relative px-16 py-5 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.15)]" onClick={() => setIsSystemActive(true)}>
@@ -579,7 +587,7 @@ const App: React.FC = () => {
 
                 <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
                     <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-gradient-to-br from-amber-400 via-pink-500 to-indigo-600 flex items-center justify-center"><span className="font-black text-white text-xs">V</span></div>
+                         <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-black flex items-center justify-center overflow-hidden"><img src={ICON_PNG} alt="Logo" className="w-full h-full object-cover" /></div>
                         <div>
                             <h2 className="text-2xl font-black text-white tracking-tighter leading-none">VISUS</h2>
                             <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">MIXER CONSOLE</div>
