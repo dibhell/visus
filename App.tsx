@@ -8,7 +8,7 @@ import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
-const ICON_PNG = 'icon.png';
+const ICON_PNG = '/visus/icon.png';
 
 // --- ICONS (SVG) ---
 const ICONS = {
