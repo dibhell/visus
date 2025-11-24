@@ -8,11 +8,7 @@ import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
-// USUNIĘTE: import icon from '../icon.png';
-
-// jeśli icon.png jest w katalogu głównym obok index.html użyj '/icon.png'
-// jeśli jest obok bundla/HTML, możesz zmienić na inną ścieżkę
-const ICON_PNG = '/icon.png';
+const ICON_PNG = 'icon.png';
 
 // --- ICONS (SVG) ---
 const ICONS = {
