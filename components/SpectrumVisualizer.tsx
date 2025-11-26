@@ -90,9 +90,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const analyser = (ae as any).mainAnalyser as AnalyserNode | null;
             if (analyser) {
                 fftData = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(fftData);
+                analyser.getByteFrequencyData(fftData as any);
             } else if (ae.fftData) {
-                fftData = ae.fftData as Uint8Array;
+                fftData = new Uint8Array(ae.fftData as Uint8Array); // copy to ArrayBuffer-backed view
             }
 
             if (fftData && fftData.length > 0) {
