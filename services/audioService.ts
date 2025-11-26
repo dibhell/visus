@@ -33,6 +33,8 @@ export class AudioEngine {
     // Data for Visuals
     bands: BandsData = { sync1: 0, sync2: 0, sync3: 0 };
     filters: FilterBand[] = [];
+    vuWorkletLevels = { video: 0, music: 0, mic: 0 };
+    vuWorkletReady = false;
     
     // FIXED: Relaxed types to 'any' to prevent TS2345 build error (Uint8Array<ArrayBufferLike> vs ArrayBuffer)
     fftData: any = new Uint8Array(1024);
@@ -60,6 +62,15 @@ export class AudioEngine {
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
             this.masterMix.connect(this.recDest);
+
+            // 3. Try load VU Worklet (optional)
+            try {
+                await this.ctx.audioWorklet.addModule(new URL('./worklets/vu-processor.js', import.meta.url));
+                this.vuWorkletReady = true;
+            } catch (err) {
+                console.warn('VU worklet not available, falling back to analyser nodes', err);
+                this.vuWorkletReady = false;
+            }
             
             // Initialize Channels
             this.initChannelNodes();
@@ -78,25 +89,47 @@ export class AudioEngine {
             const analyser = this.ctx!.createAnalyser();
             analyser.fftSize = 32; // Small for VU meter
             analyser.smoothingTimeConstant = 0.3;
-            gain.connect(analyser); // For VU
-            gain.connect(this.masterMix!); // To Main Mix (Visuals)
-            return { gain, analyser };
+
+            let vuNode: AudioWorkletNode | null = null;
+            if (this.vuWorkletReady) {
+                try {
+                    vuNode = new AudioWorkletNode(this.ctx!, 'vu-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+                    vuNode.port.onmessage = () => { /* handler assigned per channel */ };
+                } catch (e) {
+                    vuNode = null;
+                }
+            }
+
+            if (vuNode) {
+                gain.connect(vuNode);
+                vuNode.connect(analyser);
+                vuNode.connect(this.masterMix!); // to mix/recording
+                vuNode.connect(this.ctx!.destination); // to speakers
+            } else {
+                gain.connect(analyser);
+                gain.connect(this.masterMix!);
+                gain.connect(this.ctx!.destination);
+            }
+            return { gain, analyser, vuNode };
         };
 
         // Video
         const v = createChannel();
         this.videoGain = v.gain;
         this.videoAnalyser = v.analyser;
+        if (v.vuNode) v.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.video = ev.data.rms * 5; };
 
         // Music
         const m = createChannel();
         this.musicGain = m.gain;
         this.musicAnalyser = m.analyser;
+        if (m.vuNode) m.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.music = ev.data.rms * 5; };
 
         // Mic
         const mic = createChannel();
         this.micGain = mic.gain;
         this.micAnalyser = mic.analyser;
+        if (mic.vuNode) mic.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.mic = ev.data.rms * 5; };
     }
 
     // --- SOURCE CONNECTORS ---
@@ -199,6 +232,14 @@ export class AudioEngine {
     }
 
     getLevels() {
+        if (this.vuWorkletReady) {
+            return {
+                video: this.vuWorkletLevels.video,
+                music: this.vuWorkletLevels.music,
+                mic: this.vuWorkletLevels.mic
+            };
+        }
+
         const getRMS = (analyser: AnalyserNode | null) => {
             if (!analyser) return 0;
             // No cast needed because vuData is 'any'

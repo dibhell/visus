@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
 import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST } from './constants';
+import RenderWorker from './services/renderWorker?worker';
 import FxSlot from './components/FxSlot';
 import BandControls from './components/BandControls';
 import SpectrumVisualizer from './components/SpectrumVisualizer';
@@ -35,6 +36,10 @@ const Credits: React.FC = () => (
 
 const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const rendererRef = useRef<FastGLService>(new FastGLService());
+    const workerRef = useRef<Worker | null>(null);
+    const workerReadyRef = useRef(false);
+    const bitmapInFlightRef = useRef(false);
+    const useWorkerRenderRef = useRef(false);
     const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
@@ -168,7 +173,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         canvas.style.left = `${(wWindow - displayW) / 2}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
-        rendererRef.current.resize(renderW, renderH);
+        if (useWorkerRenderRef.current && workerRef.current) {
+            workerRef.current.postMessage({ type: 'resize', width: renderW, height: renderH });
+        } else {
+            rendererRef.current.resize(renderW, renderH);
+        }
     }, [aspectRatio, panelVisible]);
 
     useEffect(() => {
@@ -186,20 +195,56 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
     useEffect(() => {
         if (!canvasRef.current) return;
-        rendererRef.current.init(canvasRef.current);
-        const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-        rendererRef.current.loadShader(shaderDef.src);
+
+        const tryWorker = () => {
+            if (!(canvasRef.current as any).transferControlToOffscreen) return false;
+            try {
+                const worker = new (RenderWorker as any)();
+                workerRef.current = worker;
+                const offscreen = (canvasRef.current as any).transferControlToOffscreen();
+                const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
+                worker.onmessage = (ev: MessageEvent) => {
+                    if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
+                };
+                workerReadyRef.current = true;
+                useWorkerRenderRef.current = true;
+                return true;
+            } catch (err) {
+                workerReadyRef.current = false;
+                useWorkerRenderRef.current = false;
+                return false;
+            }
+        };
+
+        const workerUsed = tryWorker();
+        if (!workerUsed) {
+            rendererRef.current.init(canvasRef.current);
+            const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+            rendererRef.current.loadShader(shaderDef.src);
+        }
 
         audioRef.current.initContext().then(() => {
             audioRef.current.setupFilters(syncParamsRef.current);
         });
         handleResize();
+
+        return () => {
+            if (workerRef.current) {
+                workerRef.current.terminate();
+                workerRef.current = null;
+            }
+        };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
         const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
-        rendererRef.current.loadShader(shaderDef.src);
+        if (workerReadyRef.current && workerRef.current) {
+            workerRef.current.postMessage({ type: 'loadShader', fragSrc: shaderDef.src });
+        } else {
+            rendererRef.current.loadShader(shaderDef.src);
+        }
     }, [fxState.main.shader]);
 
     useEffect(() => {
@@ -273,7 +318,22 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
             };
 
-            if (videoRef.current && rendererRef.current.isReady()) {
+            if (useWorkerRenderRef.current && workerRef.current && videoRef.current && !bitmapInFlightRef.current) {
+                if (videoRef.current.readyState >= 2) {
+                    bitmapInFlightRef.current = true;
+                    createImageBitmap(videoRef.current)
+                        .then((bitmap) => {
+                            workerRef.current?.postMessage({
+                                type: 'frame',
+                                bitmap,
+                                time: now,
+                                fx: computedFx,
+                                videoSize: { w: videoRef.current?.videoWidth || 0, h: videoRef.current?.videoHeight || 0 }
+                            }, [bitmap]);
+                        })
+                        .catch(() => { bitmapInFlightRef.current = false; });
+                }
+            } else if (videoRef.current && rendererRef.current.isReady()) {
                 rendererRef.current.updateTexture(videoRef.current);
                 rendererRef.current.draw(now, videoRef.current, computedFx);
             }
