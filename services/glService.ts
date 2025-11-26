@@ -83,6 +83,7 @@ export class GLService {
         // Main Layer Controls (Layer 0)
         this.gl.uniform1f(u("uMainFXGain"), computedFx.mainFXGain);
         this.gl.uniform1i(u("uMainFX_ID"), computedFx.main_id);
+        this.gl.uniform1f(u("uMainMix"), computedFx.mainMix || 1.0);
         
         // Additive Chain Controls (Layers 1-5)
         this.gl.uniform1f(u("uAdditiveMasterGain"), computedFx.additiveMasterGain);
@@ -98,6 +99,11 @@ export class GLService {
         this.gl.uniform1f(u("uFX3"), computedFx.fx3);
         this.gl.uniform1f(u("uFX4"), computedFx.fx4);
         this.gl.uniform1f(u("uFX5"), computedFx.fx5);
+        this.gl.uniform1f(u("uFX1Mix"), computedFx.fx1Mix || 1.0);
+        this.gl.uniform1f(u("uFX2Mix"), computedFx.fx2Mix || 1.0);
+        this.gl.uniform1f(u("uFX3Mix"), computedFx.fx3Mix || 1.0);
+        this.gl.uniform1f(u("uFX4Mix"), computedFx.fx4Mix || 1.0);
+        this.gl.uniform1f(u("uFX5Mix"), computedFx.fx5Mix || 1.0);
 
         // UFX - IDs
         this.gl.uniform1i(u("uFX1_ID"), computedFx.fx1_id);

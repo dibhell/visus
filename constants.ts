@@ -80,9 +80,11 @@ export const GLSL_HEADER = `
     // Uniforms for FX slots
     uniform float uMainFXGain; // Gain for Main (Layer 0)
     uniform int uMainFX_ID;    // ID for Main (Layer 0)
+    uniform float uMainMix;    // Wet/Dry for Main
 
     uniform float uFX1; uniform float uFX2; uniform float uFX3; uniform float uFX4; uniform float uFX5;
     uniform int uFX1_ID; uniform int uFX2_ID; uniform int uFX3_ID; uniform int uFX4_ID; uniform int uFX5_ID;
+    uniform float uFX1Mix; uniform float uFX2Mix; uniform float uFX3Mix; uniform float uFX4Mix; uniform float uFX5Mix;
     
     // Master control for additive chain
     uniform float uAdditiveMasterGain;
@@ -428,11 +430,16 @@ export const GLSL_HEADER = `
     
     vec4 applyAdditiveFX(vec4 baseCol, vec2 uv) {
         vec4 col = baseCol;
-        col = applyLayer(col, uv, uFX1 * uAdditiveMasterGain, uFX1_ID);
-        col = applyLayer(col, uv, uFX2 * uAdditiveMasterGain, uFX2_ID); 
-        col = applyLayer(col, uv, uFX3 * uAdditiveMasterGain, uFX3_ID); 
-        col = applyLayer(col, uv, uFX4 * uAdditiveMasterGain, uFX4_ID);
-        col = applyLayer(col, uv, uFX5 * uAdditiveMasterGain, uFX5_ID);
+        vec4 p1 = applyLayer(col, uv, uFX1 * uAdditiveMasterGain, uFX1_ID);
+        col = mix(col, p1, clamp(uFX1Mix, 0.0, 1.0));
+        vec4 p2 = applyLayer(col, uv, uFX2 * uAdditiveMasterGain, uFX2_ID); 
+        col = mix(col, p2, clamp(uFX2Mix, 0.0, 1.0));
+        vec4 p3 = applyLayer(col, uv, uFX3 * uAdditiveMasterGain, uFX3_ID); 
+        col = mix(col, p3, clamp(uFX3Mix, 0.0, 1.0));
+        vec4 p4 = applyLayer(col, uv, uFX4 * uAdditiveMasterGain, uFX4_ID);
+        col = mix(col, p4, clamp(uFX4Mix, 0.0, 1.0));
+        vec4 p5 = applyLayer(col, uv, uFX5 * uAdditiveMasterGain, uFX5_ID);
+        col = mix(col, p5, clamp(uFX5Mix, 0.0, 1.0));
         return col;
     }
 `;
@@ -442,7 +449,8 @@ const BASE_SHADER_BODY = `void main(){
     vec2 uv = getUV(gl_FragCoord.xy);
     vec4 base = getVideo(uv);
     // Layer 0 (Main Scene)
-    base = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
+    vec4 processedMain = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
+    base = mix(base, processedMain, clamp(uMainMix, 0.0, 1.0));
     // Post Chain (Layers 1-5)
     gl_FragColor = applyAdditiveFX(base, uv); 
 }`;
