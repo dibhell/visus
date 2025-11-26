@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GLService } from './services/glService';
-import { AudioEngine } from './services/audioService';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
+import { ExperimentalAudioEngine } from './services/experimentalAudioService';
 import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST } from './constants';
 import FxSlot from './components/FxSlot';
 import BandControls from './components/BandControls';
@@ -8,10 +8,9 @@ import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
-import ExperimentalApp from './ExperimentalApp';
+
 const ICON_PNG = '/visus/icon.png';
 
-// --- ICONS (SVG) ---
 const ICONS = {
     Video: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>,
     Music: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>,
@@ -23,100 +22,97 @@ const ICONS = {
     Settings: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 };
 
+interface ExperimentalProps {
+    onExit: () => void;
+}
+
 const Credits: React.FC = () => (
     <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-400 bg-black/50 border border-white/10 px-3 py-1 rounded-full backdrop-blur pointer-events-none">
-        Studio Popłoch C © 2025 • Pan Grzyb -
+        Studio Poploch C (c) 2025 - Pan Grzyb -
         <a className="underline ml-1 pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
     </div>
 );
 
-const App: React.FC = () => {
-    // --- REFS ---
-    const glService = useRef<GLService>(new GLService());
-    const audioService = useRef<AudioEngine>(new AudioEngine());
+const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
+    const rendererRef = useRef<FastGLService>(new FastGLService());
+    const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
-    const currentAudioElRef = useRef<HTMLAudioElement | null>(null); 
+    const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const uiPanelRef = useRef<HTMLDivElement>(null);
-    const animationFrameRef = useRef<number>(0);
-    const lastTimeRef = useRef<number>(0);
-    
+
+    const rafRef = useRef<number>(0);
+    const lastFrameRef = useRef<number>(0);
+    const lastUiUpdateRef = useRef<number>(0);
+    const lastFpsTickRef = useRef<number>(0);
+
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
 
-    // --- STATE ---
-    const [isSystemActive, setIsSystemActive] = useState(false);
-    const [launchMode, setLaunchMode] = useState<'legacy' | 'experimental'>('legacy');
-    const [fps, setFps] = useState(0);
     const [panelVisible, setPanelVisible] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
-    
-    // Modal States
+    const [fps, setFps] = useState(0);
+    const [frameCap, setFrameCap] = useState(60);
+    const [recordFps, setRecordFps] = useState(45);
+    const [recordBitrate, setRecordBitrate] = useState(8000000);
+    const [renderScale, setRenderScale] = useState(1);
+
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
     const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
-    
-    // MIXER STATE
+
+    const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
+    const [isMirrored, setIsMirrored] = useState(false);
+    const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
+    const [additiveGain, setAdditiveGain] = useState(80);
+    const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
+    const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
+
+    const [syncParams, setSyncParams] = useState<SyncParam[]>([
+        { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
+        { bpm: 128.0, offset: 0, freq: 800, width: 40, gain: 1.0 },
+        { bpm: 128.0, offset: 0, freq: 6000, width: 40, gain: 1.0 },
+    ]);
+
+    const [fxState, setFxState] = useState<FxState>({
+        main: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
+        fx1: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
+        fx2: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
+        fx3: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
+        fx4: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
+        fx5: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
+    });
+
     const [mixer, setMixer] = useState({
         video: { active: true, volume: 1.0, hasSource: false, playing: false },
         music: { active: true, volume: 0.8, hasSource: false, playing: false, name: '' },
         mic: { active: false, volume: 1.5, hasSource: false }
     });
-    // For VU Meters (updated via ref/animation frame to avoid react render thrashing)
-    const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
-
-    // Resolution & Framing
-    const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
-    const [isMirrored, setIsMirrored] = useState(false);
-    const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
-
-    const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
-    const [additiveGain, setAdditiveGain] = useState(80); 
-
-    const [syncParams, setSyncParams] = useState<SyncParam[]>([
-        { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
-        { bpm: 128.0, offset: 0, freq: 800, width: 40, gain: 1.0 }, 
-        { bpm: 128.0, offset: 0, freq: 6000, width: 40, gain: 1.0 },
-    ]);
-
-    const [fxState, setFxState] = useState<FxState>({
-        main: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
-        fx1: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
-        fx2: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
-        fx3: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
-        fx4: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
-        fx5: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
-    });
 
     const fxStateRef = useRef(fxState);
     const syncParamsRef = useRef(syncParams);
-    const isSystemActiveRef = useRef(isSystemActive);
     const additiveGainRef = useRef(additiveGain);
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
-    const mixerRef = useRef(mixer); 
+    const renderScaleRef = useRef(renderScale);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
-    useEffect(() => { isSystemActiveRef.current = isSystemActive; }, [isSystemActive]);
     useEffect(() => { additiveGainRef.current = additiveGain; }, [additiveGain]);
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
-    useEffect(() => { mixerRef.current = mixer; }, [mixer]);
+    useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
 
-    // Apply Mixer Volume Changes
     useEffect(() => {
-        const ae = audioService.current;
+        const ae = audioRef.current;
         ae.setVolume('video', mixer.video.active ? mixer.video.volume : 0);
         ae.setVolume('music', mixer.music.active ? mixer.music.volume : 0);
         ae.setVolume('mic', mixer.mic.active ? mixer.mic.volume : 0);
-        // Note: Mic connection logic moved to handler to satisfy browser policies
     }, [mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
 
     const getActivationLevel = (routing: string, phase: number) => {
         if (routing === 'off') return 1.0;
         if (routing === 'bpm') return (phase < 0.15) ? 1.0 : 0.0;
-        const ae = audioService.current;
+        const ae = audioRef.current;
         if (routing === 'sync1') return ae.bands.sync1;
         if (routing === 'sync2') return ae.bands.sync2;
         if (routing === 'sync3') return ae.bands.sync3;
@@ -125,7 +121,7 @@ const App: React.FC = () => {
 
     const handleResize = useCallback(() => {
         if (!canvasRef.current) return;
-        
+
         const wWindow = window.innerWidth;
         const hWindow = window.innerHeight;
         const isMobile = wWindow < 768;
@@ -135,88 +131,97 @@ const App: React.FC = () => {
         if (isMobile && panelVisible) {
             availableH = hWindow * 0.40;
         }
-        
+
         let finalW = wWindow;
         let finalH = hWindow;
 
         if (aspectRatio === 'native') {
-             if (videoRef.current && videoRef.current.videoWidth > 0) {
-                 finalW = videoRef.current.videoWidth;
-                 finalH = videoRef.current.videoHeight;
-             }
+            if (videoRef.current && videoRef.current.videoWidth > 0) {
+                finalW = videoRef.current.videoWidth;
+                finalH = videoRef.current.videoHeight;
+            }
         } else if (aspectRatio === '16:9') {
-             finalH = 1080; finalW = 1920;
+            finalH = 1080; finalW = 1920;
         } else if (aspectRatio === '9:16') {
-             finalW = 1080; finalH = 1920;
+            finalW = 1080; finalH = 1920;
         } else if (aspectRatio === '4:5') {
-             finalW = 1080; finalH = 1350;
+            finalW = 1080; finalH = 1350;
         } else if (aspectRatio === '1:1') {
-             finalW = 1080; finalH = 1080;
+            finalW = 1080; finalH = 1080;
         } else if (aspectRatio === '21:9') {
-             finalH = 1080; finalW = 2520;
+            finalH = 1080; finalW = 2520;
         } else if (aspectRatio === 'fit') {
-             finalW = wWindow; finalH = hWindow;
+            finalW = wWindow; finalH = hWindow;
         }
 
         const canvas = canvasRef.current;
-        if (canvas.width !== finalW || canvas.height !== finalH) {
-             canvas.width = finalW;
-             canvas.height = finalH;
-        }
-
         const scale = Math.min(wWindow / finalW, availableH / finalH);
         const displayW = finalW * scale;
         const displayH = finalH * scale;
+
+        const renderW = Math.max(4, Math.round(finalW * renderScaleRef.current));
+        const renderH = Math.max(4, Math.round(finalH * renderScaleRef.current));
 
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
         canvas.style.left = `${(wWindow - displayW) / 2}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
-        if (glService.current && typeof glService.current.resize === 'function') {
-            glService.current.resize(finalW, finalH);
-        }
+        rendererRef.current.resize(renderW, renderH);
     }, [aspectRatio, panelVisible]);
 
     useEffect(() => {
         handleResize();
-        const t = setTimeout(handleResize, 300); 
-        return () => clearTimeout(t);
-    }, [panelVisible, handleResize]);
-
-    useEffect(() => {
-        if (!isSystemActive) return;
-
-        if (canvasRef.current) {
-            const success = glService.current.init(canvasRef.current);
-            if (success) {
-                const currentShaderKey = fxStateRef.current.main.shader;
-                const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
-                glService.current.loadShader(shaderDef.src);
-            }
-        }
-
-        // Init Audio Context early to allow setup
-        audioService.current.initContext().then(() => {
-             // Initial Filter Setup
-             audioService.current.setupFilters(syncParamsRef.current);
-        });
-
-        handleResize();
+        const t = setTimeout(handleResize, 300);
         window.addEventListener('resize', handleResize);
         const v = videoRef.current;
         if (v) v.addEventListener('loadedmetadata', handleResize);
+        return () => {
+            clearTimeout(t);
+            window.removeEventListener('resize', handleResize);
+            if (v) v.removeEventListener('loadedmetadata', handleResize);
+        };
+    }, [handleResize]);
+
+    useEffect(() => {
+        if (!canvasRef.current) return;
+        rendererRef.current.init(canvasRef.current);
+        const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+        rendererRef.current.loadShader(shaderDef.src);
+
+        audioRef.current.initContext().then(() => {
+            audioRef.current.setupFilters(syncParamsRef.current);
+        });
+        handleResize();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
+        rendererRef.current.loadShader(shaderDef.src);
+    }, [fxState.main.shader]);
+
+    useEffect(() => {
+        let mounted = true;
+        const frameBudget = frameCap > 0 ? (1000 / frameCap) : 0;
 
         const loop = (t: number) => {
-            if (!isSystemActiveRef.current) return;
+            if (!mounted) return;
+            if (frameBudget && (t - lastFrameRef.current) < frameBudget) {
+                rafRef.current = requestAnimationFrame(loop);
+                return;
+            }
+            const now = t;
+            const dt = now - lastFrameRef.current;
+            lastFrameRef.current = now;
 
-            const ae = audioService.current;
-            ae.update(); 
-            
-            // Read VU Meters
-            const levels = ae.getLevels();
-            // throttle VU updates slightly to 30fps effectively if needed, but doing every frame is fine
-            setVuLevels(levels);
+            const ae = audioRef.current;
+            ae.update();
+            const vu = ae.getLevelsFast(0.18);
+            if (now - lastUiUpdateRef.current > 80) {
+                setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
+                lastUiUpdateRef.current = now;
+            }
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;
@@ -225,13 +230,13 @@ const App: React.FC = () => {
             const bpm = currentSyncParams[0].bpm;
             const offset = currentSyncParams[0].offset;
             const beatMs = 60000 / bpm;
-            const adjustedTime = t - offset;
+            const adjustedTime = now - offset;
             const phase = (adjustedTime % beatMs) / beatMs;
 
             const computeFxVal = (config: any) => {
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = config.gain / 100;
-                return sourceLevel * gainMult; 
+                return sourceLevel * gainMult;
             };
 
             const lvls = {
@@ -243,10 +248,13 @@ const App: React.FC = () => {
                 fx5: computeFxVal(currentFxState.fx5),
             };
 
-            const computedFx = {
-                mainFXGain: lvls.main, 
+            if (now - lastUiUpdateRef.current > 80) {
+                setVisualLevels(lvls);
+            }
+
+            const computedFx: ExperimentalFxPacket = {
+                mainFXGain: lvls.main,
                 main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
-                mix: currentFxState.main.mix,
                 additiveMasterGain: additiveGainRef.current / 100,
                 transform: currentTransform,
                 isMirrored: isMirroredRef.current,
@@ -258,54 +266,48 @@ const App: React.FC = () => {
                 fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
             };
 
-            if (videoRef.current) {
-                glService.current.updateTexture(videoRef.current);
-                glService.current.draw(t, videoRef.current, computedFx);
+            if (videoRef.current && rendererRef.current.isReady()) {
+                rendererRef.current.updateTexture(videoRef.current);
+                rendererRef.current.draw(now, videoRef.current, computedFx);
             }
 
-            if (t - lastTimeRef.current > 100) {
-                 setFps(Math.round(1000 / ((t - lastTimeRef.current) / ((t - lastTimeRef.current) > 200 ? 1 : 1))));
-                 setVisualLevels(lvls);
-                 lastTimeRef.current = t;
+            if (now - lastFpsTickRef.current > 400 && dt > 0) {
+                const calcFps = Math.round(1000 / dt);
+                setFps(calcFps);
+                lastFpsTickRef.current = now;
             }
 
-            animationFrameRef.current = requestAnimationFrame(loop);
+            rafRef.current = requestAnimationFrame(loop);
         };
 
-        animationFrameRef.current = requestAnimationFrame(loop);
-
+        rafRef.current = requestAnimationFrame(loop);
         return () => {
-            window.removeEventListener('resize', handleResize);
-            if (v) v.removeEventListener('loadedmetadata', handleResize);
-            cancelAnimationFrame(animationFrameRef.current);
+            mounted = false;
+            cancelAnimationFrame(rafRef.current);
         };
-    }, [isSystemActive, handleResize]);
-
-    // --- HANDLERS ---
+    }, [frameCap]);
 
     const toggleMic = async (isActive: boolean) => {
         setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: isActive } }));
-        
+
         if (isActive) {
             try {
-                // IMPORTANT: connectMic must be called here, in response to the click
-                await audioService.current.initContext(); // ensure resumed
-                await audioService.current.connectMic();
+                await audioRef.current.initContext();
+                await audioRef.current.connectMic();
                 setMixer(prev => ({ ...prev, mic: { ...prev.mic, hasSource: true } }));
-                audioService.current.setupFilters(syncParamsRef.current);
+                audioRef.current.setupFilters(syncParamsRef.current);
             } catch (e: any) {
-                console.error("Mic Error:", e);
-                let msg = "Could not access microphone.";
-                if (e.name === 'NotAllowedError') msg += " Permission denied. Please click the Lock icon in your address bar and Allow Microphone.";
-                else if (e.name === 'NotFoundError') msg += " No microphone found.";
-                else msg += " " + e.message;
-                
+                console.error('Mic Error:', e);
+                let msg = 'Could not access microphone.';
+                if (e.name === 'NotAllowedError') msg += ' Permission denied. Please allow microphone access.';
+                else if (e.name === 'NotFoundError') msg += ' No microphone found.';
+                else msg += ' ' + e.message;
                 alert(msg);
                 setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: false } }));
-                audioService.current.disconnectMic();
+                audioRef.current.disconnectMic();
             }
         } else {
-            audioService.current.disconnectMic(); 
+            audioRef.current.disconnectMic();
         }
     };
 
@@ -317,25 +319,24 @@ const App: React.FC = () => {
     };
 
     const toggleTransport = async (channel: 'video' | 'music') => {
-        // Ensure context is running whenever user clicks Play
-        if (audioService.current.ctx?.state === 'suspended') {
-            await audioService.current.ctx.resume();
+        if (audioRef.current.ctx?.state === 'suspended') {
+            await audioRef.current.ctx.resume();
         }
 
         if (channel === 'video' && videoRef.current) {
             if (videoRef.current.paused) {
-                videoRef.current.play().catch(e => console.error("Video play fail", e));
+                videoRef.current.play().catch(e => console.error('Video play fail', e));
                 updateMixer('video', { playing: true });
             } else {
                 videoRef.current.pause();
                 updateMixer('video', { playing: false });
             }
-        } else if (channel === 'music' && currentAudioElRef.current) {
-             if (currentAudioElRef.current.paused) {
-                currentAudioElRef.current.play().catch(e => console.error("Audio play fail", e));
+        } else if (channel === 'music' && audioElRef.current) {
+            if (audioElRef.current.paused) {
+                audioElRef.current.play().catch(e => console.error('Audio play fail', e));
                 updateMixer('music', { playing: true });
             } else {
-                currentAudioElRef.current.pause();
+                audioElRef.current.pause();
                 updateMixer('music', { playing: false });
             }
         }
@@ -346,35 +347,34 @@ const App: React.FC = () => {
             videoRef.current.pause();
             videoRef.current.currentTime = 0;
             updateMixer('video', { playing: false });
-        } else if (channel === 'music' && currentAudioElRef.current) {
-            currentAudioElRef.current.pause();
-            currentAudioElRef.current.currentTime = 0;
+        } else if (channel === 'music' && audioElRef.current) {
+            audioElRef.current.pause();
+            audioElRef.current.currentTime = 0;
             updateMixer('music', { playing: false });
         }
     };
 
     const loadMusicTrack = (url: string, name: string) => {
-        if (currentAudioElRef.current) {
-            currentAudioElRef.current.pause();
+        if (audioElRef.current) {
+            audioElRef.current.pause();
         }
-        
+
         const audio = new Audio();
         audio.src = url;
         audio.loop = true;
         audio.crossOrigin = 'anonymous';
-        currentAudioElRef.current = audio;
-        
-        // Connect to Mixer
-        audioService.current.connectMusic(audio);
-        audioService.current.setupFilters(syncParamsRef.current);
-        
+        audioElRef.current = audio;
+
+        audioRef.current.connectMusic(audio);
+        audioRef.current.setupFilters(syncParamsRef.current);
+
         audio.play().then(() => {
-             setMixer(prev => ({
+            setMixer(prev => ({
                 ...prev,
                 music: { ...prev.music, hasSource: true, active: true, name: name, playing: true }
             }));
-        }).catch(e => console.log("Auto-play prevented", e));
-        
+        }).catch(e => console.log('Auto-play prevented', e));
+
         setShowCatalog(false);
     };
 
@@ -383,138 +383,107 @@ const App: React.FC = () => {
             try {
                 const file = e.target.files[0];
                 const url = URL.createObjectURL(file);
-                
+
                 if (type === 'video' && videoRef.current) {
-                    // Video Source Logic - WITH REUSE CHECK
                     try {
                         videoRef.current.srcObject = null;
                         if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
                         videoRef.current.src = url;
-                        videoRef.current.volume = 1.0; 
-                        
-                        // Safe connect
-                        audioService.current.connectVideo(videoRef.current);
-                        audioService.current.setupFilters(syncParamsRef.current);
-
-                        videoRef.current.play().then(() => {
-                            setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
-                        }).catch(e => console.log("Auto-play prevented", e));
-                        
-                        setTimeout(handleResize, 500);
-                    } catch(err) {
-                        console.error("Error setting video source", err);
+                        videoRef.current.muted = false;
+                        videoRef.current.loop = true;
+                        videoRef.current.play().catch(() => {});
+                        audioRef.current.connectVideo(videoRef.current);
+                        audioRef.current.setupFilters(syncParamsRef.current);
+                        setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
+                    } catch (err) {
+                        console.error('Video load failed', err);
                     }
-
                 } else if (type === 'audio') {
-                    loadMusicTrack(url, file.name.replace(/\.[^/.]+$/, ""));
+                    loadMusicTrack(url, file.name);
                 }
             } catch (err) {
-                console.error("File loading error", err);
-                alert("Could not load file. Please try another.");
+                console.error(err);
             }
-        }
-    };
-
-    const initCamera = async () => {
-         if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-            alert("Camera API not supported in this browser.");
-            return;
-        }
-        try {
-            // Requesting basic video permission first.
-            await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } }); 
-            
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoInputs = devices.filter(d => d.kind === 'videoinput');
-            setAvailableCameras(videoInputs);
-            
-            if (videoInputs.length > 0) setShowCameraSelector(true);
-            else alert("Permission granted, but no cameras found.");
-            
-        } catch(e: any) {
-            console.error(e);
-            let msg = "Camera Error: ";
-            if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-                 msg += "Permission denied. Please allow camera access in your browser settings (Lock icon).";
-            } else {
-                 msg += e.message || "Unknown error.";
-            }
-            alert(msg);
         }
     };
 
     const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;
         try {
-            const constraints: MediaStreamConstraints = { 
-                video: { 
-                    deviceId: deviceId ? { exact: deviceId } : undefined, 
-                    width: { ideal: 1280 }, 
-                    height: { ideal: 720 } 
-                } 
+            const constraints: MediaStreamConstraints = {
+                video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
             };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            
-            if (videoRef.current.srcObject) { 
-                (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop()); 
-            }
-            
-            videoRef.current.src = "";
             videoRef.current.srcObject = stream;
             videoRef.current.play();
-            
-            audioService.current.connectVideo(videoRef.current);
+            audioRef.current.connectVideo(videoRef.current);
             setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
-            
             setShowCameraSelector(false);
-            setTimeout(handleResize, 500);
-        } catch (e: any) { 
-            alert("Failed to start camera: " + e.message); 
+        } catch (err) {
+            alert('Could not start camera: ' + err);
+        }
+    };
+
+    const initCamera = async () => {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cams = devices.filter(d => d.kind === 'videoinput');
+            setAvailableCameras(cams);
+            if (cams.length === 1) {
+                startCamera(cams[0].deviceId);
+            } else {
+                setShowCameraSelector(true);
+            }
+        } catch (err) {
+            alert('Camera access failed: ' + err);
         }
     };
 
     const toggleRecording = () => {
         if (isRecording) {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-                setIsRecording(false);
-            }
-        } else {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const videoStream = (canvas as any).captureStream(60);
-            const audioStream = audioService.current.getAudioStream();
-            
-            const combinedTracks = [...videoStream.getVideoTracks()];
-            if (audioStream) {
-                audioStream.getAudioTracks().forEach(track => { 
-                    if (track.enabled) combinedTracks.push(track); 
-                });
-            }
-            
-            const combinedStream = new MediaStream(combinedTracks);
-            try {
-                let mimeType = 'video/webm;codecs=vp9,opus';
-                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
-                
-                const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000 });
-                recordedChunksRef.current = [];
-                recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
-                recorder.onstop = () => {
-                    const blob = new Blob(recordedChunksRef.current, { type: mimeType });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    const now = new Date();
-                    a.download = `VISUS_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.webm`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                };
-                recorder.start();
-                mediaRecorderRef.current = recorder;
-                setIsRecording(true);
-            } catch (e) { alert("Recording failed: " + e); }
+            mediaRecorderRef.current?.stop();
+            setIsRecording(false);
+            return;
+        }
+
+        if (!canvasRef.current) {
+            alert('Canvas not ready yet.');
+            return;
+        }
+
+        const canvasStream = canvasRef.current.captureStream(recordFps);
+        const audioStream = audioRef.current.getAudioStream();
+        const tracks: MediaStreamTrack[] = [];
+        canvasStream.getVideoTracks().forEach(track => tracks.push(track));
+        if (audioStream) {
+            audioStream.getAudioTracks().forEach(track => {
+                if (track.enabled) tracks.push(track);
+            });
+        }
+        const combinedStream = new MediaStream(tracks);
+        try {
+            let mimeType = 'video/webm;codecs=vp9,opus';
+            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+            const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate });
+            recordedChunksRef.current = [];
+            recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
+            recorder.onstop = () => {
+                const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const now = new Date();
+                a.download = `VISUS_EXPERIMENTAL_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+            recorder.start(500);
+            mediaRecorderRef.current = recorder;
+            setIsRecording(true);
+        } catch (e) {
+            alert('Recording failed: ' + e);
         }
     };
 
@@ -522,66 +491,43 @@ const App: React.FC = () => {
         const newParams = [...syncParams];
         newParams[index] = { ...newParams[index], ...changes };
         setSyncParams(newParams);
-        audioService.current.updateFilters(newParams);
+        audioRef.current.updateFilters(newParams);
     };
 
     const updateTransform = (key: keyof TransformConfig, value: number) => {
         setTransform(prev => ({ ...prev, [key]: value }));
     };
 
-    if (launchMode === 'experimental') {
-        return <ExperimentalApp onExit={() => { setLaunchMode('legacy'); setIsSystemActive(false); }} />;
-    }
-
-    // --- LANDING SCREEN ---
-    if (!isSystemActive) {
-        return (
-            <div className="flex items-center justify-center h-screen w-screen bg-slate-950 overflow-hidden relative">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black"></div>
-                <div className="text-center p-12 bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl max-w-lg relative z-10 animate-in fade-in duration-700 mx-4 flex flex-col items-center">
-                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-accent to-transparent opacity-50"></div>
-                    <div className="mb-8 relative group w-40 h-40 flex items-center justify-center bg-black rounded-full border-4 border-white/10 shadow-[0_0_50px_rgba(167,139,250,0.3)] hover:scale-105 transition-transform duration-500 overflow-hidden">
-                         <div className="absolute inset-0 bg-accent rounded-full blur-xl opacity-30 group-hover:opacity-50 transition-opacity duration-500 animate-pulse"></div>
-                         <img src={ICON_PNG} alt="VISUS Logo" className="w-full h-full object-cover p-2" />
-                    </div>
-                    <h1 className="text-6xl md:text-8xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-400 tracking-tighter">VISUS</h1>
-                    <div className="flex gap-3 flex-col sm:flex-row">
-                        <button className="group relative px-16 py-5 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.15)]" onClick={() => { setLaunchMode('legacy'); setIsSystemActive(true); }}>
-                            <span className="relative z-10">INITIALIZE</span>
-                        </button>
-                        <button className="group relative px-16 py-5 bg-gradient-to-r from-amber-200 to-orange-400 text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(251,191,36,0.35)]" onClick={() => { setLaunchMode('experimental'); setIsSystemActive(false); }}>
-                            <span className="relative z-10">EXPERIMENTAL</span>
-                        </button>
-                    </div>
-                </div>
-                <Credits />
-            </div>
-        );
-    }
+    const exitToLanding = () => {
+        if (isRecording) toggleRecording();
+        if (videoRef.current && videoRef.current.srcObject) {
+            (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        }
+        onExit();
+    };
 
     return (
-        <div className="w-full h-screen overflow-hidden bg-[#020617] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
-            <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)'}} />
+        <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
+            <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{ boxShadow: '0 0 80px rgba(0,0,0,0.5)' }} />
             <video ref={videoRef} className="hidden" crossOrigin="anonymous" loop muted={false} playsInline />
 
-            {/* Status Bar */}
-            <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
+            <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-3 bg-black/60 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
                 <span className="hidden md:inline">RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
-                {mixer.mic.active && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC</span>}
-                {isRecording && <span className="text-red-500 animate-pulse font-black tracking-widest">● REC</span>}
+                <span className="hidden md:inline">Scale: {Math.round(renderScale * 100)}%</span>
+                {mixer.mic.active && <span className="text-red-400 font-black tracking-widest">MIC</span>}
+                {isRecording && <span className="text-red-400 font-black tracking-widest">REC</span>}
             </div>
 
-            {/* MODALS */}
             {showCatalog && (
                 <MusicCatalog onSelect={loadMusicTrack} onClose={() => setShowCatalog(false)} />
             )}
             {showCameraSelector && (
-                 <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
+                <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-200">
                     <div className="bg-[#0a0a0a] border border-white/10 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col relative">
                         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
                             <h3 className="text-white font-black tracking-widest text-lg">SELECT CAMERA</h3>
-                            <button onClick={() => setShowCameraSelector(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white">✕</button>
+                            <button onClick={() => setShowCameraSelector(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white">x</button>
                         </div>
                         <div className="p-4 space-y-2">
                             {availableCameras.map((cam, idx) => (
@@ -591,10 +537,9 @@ const App: React.FC = () => {
                             ))}
                         </div>
                     </div>
-                 </div>
+                </div>
             )}
 
-            {/* MAIN UI PANEL */}
             <div ref={uiPanelRef} className={`fixed z-40 glass-panel flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.6)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] md:top-0 md:left-0 md:h-full md:w-[380px] md:border-r md:border-t-0 md:rounded-none ${panelVisible ? 'md:translate-x-0' : 'md:-translate-x-full'} bottom-0 left-0 w-full h-[60vh] rounded-t-3xl border-t border-white/10 ${panelVisible ? 'translate-y-0' : 'translate-y-[110%]'}`}>
                 <div className="md:hidden w-full flex justify-center pt-3 pb-1" onClick={() => setPanelVisible(false)}>
                     <div className="w-12 h-1.5 bg-white/20 rounded-full"></div>
@@ -602,30 +547,79 @@ const App: React.FC = () => {
 
                 <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
                     <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-black flex items-center justify-center overflow-hidden"><img src={ICON_PNG} alt="Logo" className="w-full h-full object-cover" /></div>
+                        <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-black flex items-center justify-center overflow-hidden"><img src={ICON_PNG} alt="Logo" className="w-full h-full object-cover" /></div>
                         <div>
                             <h2 className="text-2xl font-black text-white tracking-tighter leading-none">VISUS</h2>
-                            <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">MIXER CONSOLE</div>
+                            <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">EXPERIMENTAL ENGINE</div>
                         </div>
                     </div>
-                    <button onClick={() => setPanelVisible(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">✕</button>
+                    <div className="flex gap-2">
+                        <button onClick={exitToLanding} className="px-3 py-2 text-[10px] rounded-full bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10">Exit</button>
+                        <button onClick={() => setPanelVisible(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">x</button>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
-                    
-                    {/* MIXER SECTION */}
+
                     <section>
-                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span> 
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+                            Performance Lab
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">Render Scale</div>
+                                <select value={renderScale} onChange={(e) => setRenderScale(parseFloat(e.target.value))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value={1}>100% (Quality)</option>
+                                    <option value={0.85}>85% (Balanced)</option>
+                                    <option value={0.7}>70% (Performance)</option>
+                                    <option value={0.55}>55% (Max FPS)</option>
+                                </select>
+                                <p className="text-[10px] text-slate-500 mt-1">Scales internal canvas to ease GPU load.</p>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">Frame Cap</div>
+                                <select value={frameCap} onChange={(e) => setFrameCap(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value={75}>75</option>
+                                    <option value={60}>60</option>
+                                    <option value={45}>45</option>
+                                    <option value={30}>30</option>
+                                </select>
+                                <p className="text-[10px] text-slate-500 mt-1">Skips draws when frame budget is exceeded.</p>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">Recording FPS</div>
+                                <select value={recordFps} onChange={(e) => setRecordFps(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value={60}>60</option>
+                                    <option value={50}>50</option>
+                                    <option value={45}>45</option>
+                                    <option value={30}>30</option>
+                                </select>
+                                <p className="text-[10px] text-slate-500 mt-1">Lower FPS reduces recorder overhead.</p>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">Recorder Bitrate</div>
+                                <select value={recordBitrate} onChange={(e) => setRecordBitrate(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value={12000000}>12 Mbps</option>
+                                    <option value={9000000}>9 Mbps</option>
+                                    <option value={8000000}>8 Mbps</option>
+                                    <option value={6000000}>6 Mbps</option>
+                                </select>
+                                <p className="text-[10px] text-slate-500 mt-1">Tune for speed vs quality when exporting.</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
                             Source Mixer
                         </div>
-                        
+
                         <div className="flex justify-between gap-2 p-2 bg-black/30 rounded-2xl border border-white/10">
-                            
-                            {/* VIDEO CHANNEL */}
-                            <MixerChannel 
-                                label="VIDEO" icon={ICONS.Video} 
-                                isActive={mixer.video.active} 
+                            <MixerChannel
+                                label="VIDEO" icon={ICONS.Video}
+                                isActive={mixer.video.active}
                                 volume={mixer.video.volume}
                                 vuLevel={vuLevels.video}
                                 isPlaying={mixer.video.playing}
@@ -646,10 +640,9 @@ const App: React.FC = () => {
                                 </div>
                             </MixerChannel>
 
-                            {/* MUSIC CHANNEL */}
-                            <MixerChannel 
-                                label="MUSIC" icon={ICONS.Music} 
-                                isActive={mixer.music.active} 
+                            <MixerChannel
+                                label="MUSIC" icon={ICONS.Music}
+                                isActive={mixer.music.active}
                                 volume={mixer.music.volume}
                                 vuLevel={vuLevels.music}
                                 isPlaying={mixer.music.playing}
@@ -660,7 +653,7 @@ const App: React.FC = () => {
                                 color="#f472b6"
                             >
                                 <div className="flex gap-1 w-full justify-between">
-                                     <label className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded cursor-pointer flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Open Audio File">
+                                    <label className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded cursor-pointer flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Open Audio File">
                                         {ICONS.Folder}
                                         <input type="file" accept="audio/*" className="hidden" onChange={(e) => handleFile('audio', e)} />
                                     </label>
@@ -670,10 +663,9 @@ const App: React.FC = () => {
                                 </div>
                             </MixerChannel>
 
-                            {/* MIC CHANNEL */}
-                            <MixerChannel 
-                                label="MIC" icon={ICONS.Mic} 
-                                isActive={mixer.mic.active} 
+                            <MixerChannel
+                                label="MIC" icon={ICONS.Mic}
+                                isActive={mixer.mic.active}
                                 volume={mixer.mic.volume}
                                 vuLevel={vuLevels.mic}
                                 onToggle={toggleMic}
@@ -681,30 +673,28 @@ const App: React.FC = () => {
                                 color="#ef4444"
                             />
                         </div>
-                        
+
                         {mixer.music.name && (
                             <div className="mt-2 text-center text-[9px] text-accent truncate px-2 bg-accent/5 rounded py-1 border border-accent/20">
-                                ♫ {mixer.music.name}
+                                >> {mixer.music.name}
                             </div>
                         )}
                     </section>
 
-                    {/* FORMAT SECTION */}
                     <section>
                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                             Output & Framing
+                            Output &amp; Framing
                         </div>
                         <div className="grid grid-cols-3 gap-1 mb-3">
                             {['native', '16:9', '9:16', '4:5', '1:1', 'fit'].map(r => (
                                 <button key={r} onClick={() => setAspectRatio(r as AspectRatioMode)} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === r ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>{r.toUpperCase()}</button>
                             ))}
                         </div>
-                        
-                        {/* GEOMETRY CONTROLS */}
+
                         <div className="bg-black/20 p-3 rounded-xl border border-white/5 mb-3">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-[9px] text-slate-500 font-bold tracking-wider">GEOMETRY</div>
-                                <button 
+                                <button
                                     onClick={() => setIsMirrored(!isMirrored)}
                                     className={`flex items-center gap-2 px-2 py-1 rounded text-[9px] font-bold border ${isMirrored ? 'bg-accent/20 border-accent text-accent' : 'bg-white/5 border-white/5 text-slate-400'}`}
                                 >
@@ -712,28 +702,28 @@ const App: React.FC = () => {
                                 </button>
                             </div>
                             <div className="flex justify-around items-center">
-                                <Knob 
-                                    label="Scale" value={transform.scale} 
-                                    min={0.1} max={3.0} step={0.05} 
-                                    onChange={(v) => updateTransform('scale', v)} 
-                                    format={(v) => v.toFixed(2)} color="#2dd4bf" 
+                                <Knob
+                                    label="Scale" value={transform.scale}
+                                    min={0.1} max={3.0} step={0.05}
+                                    onChange={(v) => updateTransform('scale', v)}
+                                    format={(v) => v.toFixed(2)} color="#2dd4bf"
                                 />
-                                <Knob 
-                                    label="Pan X" value={transform.x} 
-                                    min={-1.0} max={1.0} step={0.05} 
-                                    onChange={(v) => updateTransform('x', v)} 
-                                    format={(v) => v.toFixed(1)} color="#2dd4bf" 
+                                <Knob
+                                    label="Pan X" value={transform.x}
+                                    min={-1.0} max={1.0} step={0.05}
+                                    onChange={(v) => updateTransform('x', v)}
+                                    format={(v) => v.toFixed(1)} color="#2dd4bf"
                                 />
-                                <Knob 
-                                    label="Pan Y" value={transform.y} 
-                                    min={-1.0} max={1.0} step={0.05} 
-                                    onChange={(v) => updateTransform('y', v)} 
-                                    format={(v) => v.toFixed(1)} color="#2dd4bf" 
+                                <Knob
+                                    label="Pan Y" value={transform.y}
+                                    min={-1.0} max={1.0} step={0.05}
+                                    onChange={(v) => updateTransform('y', v)}
+                                    format={(v) => v.toFixed(1)} color="#2dd4bf"
                                 />
                             </div>
                         </div>
 
-                         <button 
+                        <button
                             onClick={toggleRecording}
                             className={`w-full py-3 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
                         >
@@ -741,25 +731,28 @@ const App: React.FC = () => {
                         </button>
                     </section>
 
-                    {/* FREQ ANALYSIS */}
                     <section>
-                        <SpectrumVisualizer audioServiceRef={audioService} syncParams={syncParams} onParamChange={updateSyncParams} />
-                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioService.current.updateFilters(p)} />
+                        <SpectrumVisualizer audioServiceRef={audioRef} syncParams={syncParams} onParamChange={updateSyncParams} />
+                        <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />
                     </section>
 
-                    {/* FX STACK */}
                     <section>
-                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex justify-between items-center">
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex justify-between items-center">
                             <div className="flex items-center gap-2">
-                                <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span> 
+                                <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
                                 FX Chain
                             </div>
+                            <div className="text-[9px] text-slate-500">Additive Gain: <span className="text-accent font-semibold">{additiveGain}%</span></div>
                         </div>
                         <FxSlot category="main" slotName="main" fxState={fxState} setFxState={setFxState} activeLevel={visualLevels.main} />
                         <div className="space-y-2 mt-4">
                             {['fx1', 'fx2', 'fx3', 'fx4', 'fx5'].map((fxName, i) => (
-                                <FxSlot key={fxName} category="additive" title={`Layer ${i+1}`} slotName={fxName as keyof FxState} fxState={fxState} setFxState={setFxState} activeLevel={(visualLevels as any)[fxName]} />
+                                <FxSlot key={fxName} category="additive" title={`Layer ${i + 1}`} slotName={fxName as keyof FxState} fxState={fxState} setFxState={setFxState} activeLevel={(visualLevels as any)[fxName]} />
                             ))}
+                        </div>
+                        <div className="mt-3 bg-white/5 border border-white/10 rounded-xl p-3">
+                            <div className="text-[10px] text-slate-400 mb-1">Additive Master</div>
+                            <input type="range" min={0} max={200} step={1} value={additiveGain} onChange={(e) => setAdditiveGain(parseInt(e.target.value, 10))} className="w-full" />
                         </div>
                     </section>
                 </div>
@@ -775,4 +768,4 @@ const App: React.FC = () => {
     );
 };
 
-export default App;
+export default ExperimentalApp;
