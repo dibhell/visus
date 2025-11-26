@@ -39,6 +39,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const uiPanelRef = useRef<HTMLDivElement>(null);
 
     const rafRef = useRef<number>(0);
     const lastFrameRef = useRef<number>(0);
