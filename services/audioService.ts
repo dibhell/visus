@@ -36,8 +36,8 @@ export class AudioEngine {
     vuWorkletLevels = { video: 0, music: 0, mic: 0 };
     vuWorkletReady = false;
     
-    // FIXED: Relaxed types to 'any' to prevent TS2345 build error (Uint8Array<ArrayBufferLike> vs ArrayBuffer)
-    fftData: any = new Uint8Array(1024);
+    // FFT buffer sized to analyser.frequencyBinCount
+    fftData: Uint8Array = new Uint8Array(1024);
     
     // Scratch buffers for VU meters
     vuData: any = new Uint8Array(16); 
@@ -54,6 +54,7 @@ export class AudioEngine {
             this.mainAnalyser = this.ctx.createAnalyser();
             this.mainAnalyser.fftSize = 4096;
             this.mainAnalyser.smoothingTimeConstant = 0.6;
+            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
             this.masterMix = this.ctx.createGain();
             this.masterMix.gain.value = 1.0;
@@ -265,6 +266,15 @@ export class AudioEngine {
         return this.recDest ? this.recDest.stream : null;
     }
 
+    getFFTData(): Uint8Array | null {
+        if (!this.mainAnalyser) return null;
+        if (this.fftData.length !== this.mainAnalyser.frequencyBinCount) {
+            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+        }
+        this.mainAnalyser.getByteFrequencyData(this.fftData);
+        return new Uint8Array(this.fftData);
+    }
+
     setupFilters(syncParams: SyncParam[]) {
         if (!this.ctx || !this.masterMix) return;
 
@@ -316,7 +326,9 @@ export class AudioEngine {
         if (!this.mainAnalyser || !this.ctx || this.ctx.state === 'suspended') return;
 
         // 1. RAW FFT Data (Visualizer)
-        // No cast needed because fftData is 'any'
+        if (this.fftData.length !== this.mainAnalyser.frequencyBinCount) {
+            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+        }
         this.mainAnalyser.getByteFrequencyData(this.fftData);
 
         // 2. Filtered Bands Data (Logic)

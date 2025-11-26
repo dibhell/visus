@@ -85,18 +85,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             drawGridLine(10000, '10k');
 
             // 3. Spectrum Fill
-            // Grab fresh FFT data from analyser to guarantee visualization
-            let fftData: Uint8Array | null = null;
-            const analyser = (ae as any).mainAnalyser as AnalyserNode | null;
-            if (analyser) {
-                const buf: any = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(buf);
-                fftData = buf;
-            } else if (ae.fftData) {
-                const src = ae.fftData as Uint8Array;
-                const copy = new Uint8Array(src.length);
-                copy.set(src);
-                fftData = copy;
+            let fftData: Uint8Array | null = (ae as any).getFFTData ? (ae as any).getFFTData() : null;
+            if (!fftData) {
+                const analyser = (ae as any).mainAnalyser as AnalyserNode | null;
+                if (analyser) {
+                    const buf = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(buf);
+                    fftData = buf;
+                }
             }
 
             if (fftData && fftData.length > 0) {
