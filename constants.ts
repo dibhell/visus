@@ -126,6 +126,7 @@ export const GLSL_HEADER = `
 
     vec4 getVideo(vec2 uv) {
         vec2 p = abs(fract(uv * 0.5 + 0.5) * 2.0 - 1.0);
+        p.y = 1.0 - p.y; // flip vertically to keep video upright
         if(iVideoResolution.x < 2.0) return vec4(0.0);
         return texture2D(iChannel0, p);
     }
