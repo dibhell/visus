@@ -87,8 +87,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 const step = 2;
                 for (let x = 0; x < W; x += step) {
                     const freq = getFreqFromX(x, W);
-                    const nyquist = 24000; 
-                    const binIndex = Math.floor((freq / nyquist) * fftData.length);
+                    const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
+                    const binIndex = Math.min(fftData.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData.length)));
                     const val = fftData[binIndex] || 0;
                     
                     const barHeight = (val / 255) * (H * 0.9);
@@ -187,7 +187,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
         frameRef.current = requestAnimationFrame(draw);
         return () => cancelAnimationFrame(frameRef.current);
-    }, [syncParams, audioServiceRef, hoveredBand]);
+    }, [audioServiceRef]);
 
 
     // --- INTERACTION HANDLERS ---
