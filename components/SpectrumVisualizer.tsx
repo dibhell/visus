@@ -14,9 +14,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const frameRef = useRef<number>(0);
     const containerRef = useRef<HTMLDivElement>(null);
+    const syncParamsRef = useRef<SyncParam[]>(syncParams);
+    const hoveredBandRef = useRef<number | null>(null);
     
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
+
+    useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
+    useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
 
     // --- MATH HELPERS ---
     const getLogX = (freq: number, width: number) => {
@@ -117,8 +122,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             // 4. Interactive Points
             const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             
-            if (syncParams && syncParams.length >= 3) {
-                syncParams.slice(0, 3).forEach((param, i) => {
+            const bands = syncParamsRef.current;
+            if (bands && bands.length >= 3) {
+                bands.slice(0, 3).forEach((param, i) => {
                     const x = getLogX(param.freq, W);
                     // Normalize gain for visualization Y pos
                     const gainYFactor = Math.min(3.0, Math.max(0.1, param.gain)) / 3.0; 
@@ -135,7 +141,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.setLineDash([]);
 
                     // Handle Interaction State
-                    const isHovered = hoveredBand === i;
+                    const isHovered = hoveredBandRef.current === i;
                     const isDraggingThis = isDragging.current === i;
                     
                     // Width (Q) Visualizer (Halo)
