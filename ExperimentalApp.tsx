@@ -40,6 +40,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const workerReadyRef = useRef(false);
     const bitmapInFlightRef = useRef(false);
     const useWorkerRenderRef = useRef(false);
+    const webCodecsSupported = typeof (window as any).VideoEncoder !== 'undefined' && typeof (window as any).MediaStreamTrackProcessor !== 'undefined';
     const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
@@ -50,6 +51,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastFrameRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
+    const fpsSmoothRef = useRef<number>(60);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -60,6 +62,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [frameCap, setFrameCap] = useState(60);
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(8000000);
+    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
+    const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(1);
 
     const [showCatalog, setShowCatalog] = useState(false);
@@ -191,7 +195,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             window.removeEventListener('resize', handleResize);
             if (v) v.removeEventListener('loadedmetadata', handleResize);
         };
-    }, [handleResize]);
+    }, [handleResize, renderScale]);
 
     useEffect(() => {
         if (!canvasRef.current) return;
@@ -340,7 +344,26 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             if (now - lastFpsTickRef.current > 400 && dt > 0) {
                 const calcFps = Math.round(1000 / dt);
+                fpsSmoothRef.current = fpsSmoothRef.current * 0.7 + calcFps * 0.3;
                 setFps(calcFps);
+
+                if (autoScale) {
+                    const targets = [1, 0.85, 0.7, 0.55];
+                    const currentIdx = targets.indexOf(renderScaleRef.current);
+                    const targetFps = frameCap || 60;
+                    if (fpsSmoothRef.current < targetFps - 8 && currentIdx < targets.length - 1) {
+                        const nextScale = targets[currentIdx + 1];
+                        setRenderScale(nextScale);
+                        renderScaleRef.current = nextScale;
+                        handleResize();
+                    } else if (fpsSmoothRef.current > targetFps + 5 && currentIdx > 0) {
+                        const nextScale = targets[currentIdx - 1];
+                        setRenderScale(nextScale);
+                        renderScaleRef.current = nextScale;
+                        handleResize();
+                    }
+                }
+
                 lastFpsTickRef.current = now;
             }
 
@@ -507,9 +530,96 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
     };
 
-    const toggleRecording = () => {
+    const encoderRef = useRef<VideoEncoder | null>(null);
+    const readerRef = useRef<ReadableStreamDefaultReader<VideoFrame> | null>(null);
+    const videoTrackRef = useRef<MediaStreamTrack | null>(null);
+    const encodedChunksRef = useRef<Uint8Array[]>([]);
+
+    const stopWebCodecsRecording = async () => {
+        try { await readerRef.current?.cancel(); } catch {}
+        if (videoTrackRef.current) videoTrackRef.current.stop();
+        if (encoderRef.current) {
+            try { await encoderRef.current.flush(); } catch {}
+            encoderRef.current.close();
+        }
+        readerRef.current = null;
+        videoTrackRef.current = null;
+        const blob = new Blob(encodedChunksRef.current, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const now = new Date();
+        a.download = `VISUS_EXPERIMENTAL_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    const startWebCodecsRecording = async () => {
+        if (!canvasRef.current) {
+            alert('Canvas not ready yet.');
+            return false;
+        }
+        const canvasStream = canvasRef.current.captureStream(recordFps);
+        const track = canvasStream.getVideoTracks()[0];
+        if (!track) {
+            alert('No video track from canvas.');
+            return false;
+        }
+        const processor = new (window as any).MediaStreamTrackProcessor({ track });
+        const reader = processor.readable.getReader();
+        readerRef.current = reader;
+        videoTrackRef.current = track;
+        encodedChunksRef.current = [];
+
+        const config: VideoEncoderConfig = {
+            codec: 'vp09.00.10.08',
+            width: canvasRef.current.width,
+            height: canvasRef.current.height,
+            framerate: recordFps,
+            bitrate: recordBitrate,
+            hardwareAcceleration: 'prefer-hardware'
+        };
+
+        const supported = await (window as any).VideoEncoder.isConfigSupported(config).catch(() => ({ supported: false }));
+        if (!supported.supported) {
+            alert('VideoEncoder config not supported, falling back to MediaRecorder.');
+            return false;
+        }
+
+        const encoder = new (window as any).VideoEncoder({
+            output: (chunk: EncodedVideoChunk) => {
+                const buf = new Uint8Array(chunk.byteLength);
+                chunk.copyTo(buf);
+                encodedChunksRef.current.push(buf);
+            },
+            error: (e: any) => console.error('Encoder error', e)
+        });
+        encoder.configure(config);
+        encoderRef.current = encoder;
+
+        let frameCount = 0;
+        const pump = async () => {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                const frame = value as VideoFrame;
+                encoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
+                frame.close();
+                frameCount++;
+            }
+        };
+        pump().catch((e) => console.error('Processor pump error', e));
+        return true;
+    };
+
+    const toggleRecording = async () => {
         if (isRecording) {
-            mediaRecorderRef.current?.stop();
+            if (useWebCodecsRecord && encoderRef.current) {
+                await stopWebCodecsRecording();
+            } else {
+                mediaRecorderRef.current?.stop();
+            }
             setIsRecording(false);
             return;
         }
@@ -517,6 +627,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (!canvasRef.current) {
             alert('Canvas not ready yet.');
             return;
+        }
+
+        if (useWebCodecsRecord && webCodecsSupported) {
+            const started = await startWebCodecsRecording();
+            if (started) {
+                setIsRecording(true);
+                return;
+            }
         }
 
         const canvasStream = canvasRef.current.captureStream(recordFps);
@@ -673,6 +791,22 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                     <option value={6000000}>6 Mbps</option>
                                 </select>
                                 <p className="text-[10px] text-slate-500 mt-1">Tune for speed vs quality when exporting.</p>
+                            </div>
+                            {webCodecsSupported && (
+                                <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                    <div className="text-[10px] text-slate-400 mb-1">WebCodecs (video)</div>
+                                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                                        <input type="checkbox" checked={useWebCodecsRecord} onChange={(e) => setUseWebCodecsRecord(e.target.checked)} />
+                                        Prefer WebCodecs encoder (video-only if audio unsupported)
+                                    </label>
+                                </div>
+                            )}
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">Auto Scale (LOD)</div>
+                                <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                                    <input type="checkbox" checked={autoScale} onChange={(e) => setAutoScale(e.target.checked)} />
+                                    Adjust render scale based on FPS
+                                </label>
                             </div>
                         </div>
                     </section>
