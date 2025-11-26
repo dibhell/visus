@@ -676,7 +676,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
                         {mixer.music.name && (
                             <div className="mt-2 text-center text-[9px] text-accent truncate px-2 bg-accent/5 rounded py-1 border border-accent/20">
-                                >> {mixer.music.name}
+                                {`>> ${mixer.music.name}`}
                             </div>
                         )}
                     </section>
