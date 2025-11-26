@@ -89,13 +89,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             let fftData: Uint8Array<ArrayBuffer> | null = null;
             const analyser = (ae as any).mainAnalyser as AnalyserNode | null;
             if (analyser) {
-                fftData = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)) as Uint8Array<ArrayBuffer>;
-                analyser.getByteFrequencyData(fftData);
+                fftData = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
+                (analyser as any).getByteFrequencyData(fftData as Uint8Array<ArrayBuffer>);
             } else if (ae.fftData) {
-                const src = ae.fftData as Uint8Array<ArrayBufferLike>;
-                const buf = new ArrayBuffer(src.length);
-                const copy = new Uint8Array(buf) as Uint8Array<ArrayBuffer>;
-                copy.set(src as ArrayLike<number>);
+                const src = ae.fftData as Uint8Array;
+                const copy = new Uint8Array(src.length) as Uint8Array<ArrayBuffer>;
+                copy.set(src);
                 fftData = copy;
             }
 
