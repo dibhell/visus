@@ -544,7 +544,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
         readerRef.current = null;
         videoTrackRef.current = null;
-        const blob = new Blob(encodedChunksRef.current, { type: 'video/webm' });
+        const blobParts: BlobPart[] = encodedChunksRef.current.map((u) => new Uint8Array(u));
+        const blob = new Blob(blobParts, { type: 'video/webm' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
