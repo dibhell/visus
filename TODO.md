@@ -1,21 +1,15 @@
-# TODO – VISUS Experimental
+# TODO — VISUS Experimental
 
-1) Naprawa FX audio-reactive
-   - Usuń duplikaty `fxVuLevels` / refów w `App.tsx` i `ExperimentalApp.tsx` (konflikt TS “Cannot redeclare…”).
-   - W ExperimentalApp: dodać `fxVuLevels` state+ref, w pętli renderowej liczyć `computeFxVu` (band level * band gain, pow < 1, clamp) i ustawiać razem z `visualLevels`.
-   - Przekazać `vuLevel` do `FxSlot` (dla main i layerów) – pasek ma odzwierciedlać bieżące pasmo.
-   - Wzmocnić `computeFxVal` (pow 0.3–0.4, mnożnik ~20–24, offset dla routingu band/BPM), clamp.
-   - Smoothing (opcjonalnie) na `fxVuLevels` żeby pasek był płynny.
-   - Test: tryb Experimental, FX na Bass/Mid/High, Depth/Wet na górze – ma pulsować w rytm muzyki, VU slotów ma żyć.
+1) FX audio-reactive & VU (pilne)
+   - Naprawić zamrożone VU w FX Chain: zweryfikować przepływ bandLevels → setFxVuLevels → FxSlot; dodać logging/overlay debug w pętli renderowej (wartości band/VU na ekranie).
+   - Upewnić się, że bandLevels (Bass/Mid/High) są aktualne co klatkę i trafiają do computeFxVu/computeFxVal bez dodatkowych offsetów.
+   - Dostroić mapowanie (pow/multiplier/clamp) i smoothing tak, by VU/Depth realnie pulsowały w rytm pasma; Depth jako max, pasmo jako bieżące sterowanie.
+   - Test: tryb Experimental, FX na Bass/Mid/High, wyraźne widmo — paski VU i efekty muszą reagować.
 
-2) Porządek w buildzie
-   - Po usunięciu duplikatów w App/ExperimentalApp uruchomić `npm run build`.
+2) Diagnostyka
+   - Dodać tymczasowy overlay/console log dla bandLevels i fxVuLevels w pętli renderowej.
+   - Sprawdzić, czy setFxVuLevels jest wywoływane po zmianie bandLevels (brak throttlingu, brak podmiany przez stare wartości).
 
-3) Dalsze optymalizacje (opcjonalne po powyższym)
-   - Regulacja czułości FX (globalny slider “FX Sensitivity”).
-   - Dodatkowy fallback analyser bezpośrednio na elemencie audio tylko dla FX (low smoothing).
-   - Wizualne podbicie VU (kolor, blur) po stronie UI jeśli nadal za mało czytelne.
-
-4) Source Mixer – slidery (wg screena)
-   - Usunąć duplikaty suwaków poziomych w sekcji Source Mixer; zostawić tylko pionowe.
-   - Ustawić wartości range na pełną regulację (nie 0/50/100), sprawdzić min/max/step dla input range (vertical) w MixerChannel/Mixer UI.
+3) Dokumentacja/porządek
+   - Zaktualizować instrukcje po naprawie VU/FX i usunięciu UI gain/threshold (w tej chwili wyłączone).
+   - Po fixie: `npm run build`.

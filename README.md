@@ -14,12 +14,10 @@ VISUS to przeglądarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (pli
 - **Adaptacja jakości:** pętla FPS zmienia `renderScale` (LOD) zależnie od wydajności.
 
 ## Wersjonowanie (bieżący stan)
-- **Repo branch:** `main`
-- **Ostatnie commit-y:** sprawdź `git log --oneline` (np. `2db9b4a` i późniejsze) – zawierają poprawki FFT, tap analyserów, wzmocnienie modulacji FX i dokumentację usprawnień.
-- **TODO / plan (skrót):**
-  - Dynamiczne VU dla slotów FX (`fxVuLevels`), mocniejsza modulacja FX według pasm.
-  - Finalny tuning routingu FX i czułości.
-  - Dodatkowe testy WebCodecs/WebGL w przeglądarce.
+- **Branch:** `main`
+- **Ostatnie zmiany:** eksperymentalne podbicie modulacji FX per pasmo (Bass/Mid/High), uproszczony routing (bez gain/threshold UI), szybsze odświeżanie VU.
+- **Znane problemy:** VU w FX Chain wciąż potrafi się zamrozić; modulacja Depth per pasmo wymaga dalszej naprawy/diagnozy.
+- **Następne kroki:** zdiagnozować przepływ bandLevels → `setFxVuLevels` → `FxSlot`; sprawdzić `computeFxVal`/VU na żywo i ewentualnie dodać logging/overlay debug w pętli; ponownie dostroić mapowanie i smoothing.
 
 ## Uruchomienie lokalne
 **Wymagania:** Node.js 18+
