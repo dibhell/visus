@@ -207,6 +207,12 @@ export class AudioEngine {
             
             // Path 2: To Speakers (Hearing)
             this.videoGain.connect(this.ctx.destination);
+
+            // Path 3: Direct tap for metering (pre-fader)
+            if (this.videoTapAnalyser) {
+                this.videoNode.connect(this.videoTapAnalyser);
+                if (this.analysisSink) this.videoTapAnalyser.connect(this.analysisSink);
+            }
         } catch(e) {
             console.error("AudioEngine: Error connecting video source. It might be already connected.", e);
         }
@@ -220,6 +226,12 @@ export class AudioEngine {
         this.musicNode = this.ctx.createMediaElementSource(audioEl);
         this.musicNode.connect(this.musicGain);
         this.musicGain.connect(this.ctx.destination);
+
+        // Direct tap pre-fader for VU/FFT
+        if (this.musicTapAnalyser) {
+            this.musicNode.connect(this.musicTapAnalyser);
+            if (this.analysisSink) this.musicTapAnalyser.connect(this.analysisSink);
+        }
     }
 
     async connectMic() {
@@ -243,6 +255,12 @@ export class AudioEngine {
             this.micNode = this.ctx.createMediaStreamSource(stream);
             this.micNode.connect(this.micGain);
             // NOTE: We DO NOT connect Mic to ctx.destination to avoid feedback loop
+
+            // Direct tap for metering (pre-fader)
+            if (this.micTapAnalyser) {
+                this.micNode.connect(this.micTapAnalyser);
+                if (this.analysisSink) this.micTapAnalyser.connect(this.analysisSink);
+            }
         } catch (e) {
             console.error("Mic access failed", e);
             throw e;
