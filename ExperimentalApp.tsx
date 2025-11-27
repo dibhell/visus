@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
 import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST } from './constants';
@@ -294,12 +294,49 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const adjustedTime = now - offset;
             const phase = (adjustedTime % beatMs) / beatMs;
 
-            // Fresh band values per frame (no extra gating)
-            const bandLevels = {
+            // Fresh band values per frame (no extra gating) + FFT fallback
+            let bandLevels = {
                 sync1: Math.max(0, ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1)),
                 sync2: Math.max(0, ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1)),
                 sync3: Math.max(0, ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1)),
             };
+
+            const fftData = (ae as any).getFFTData ? (ae as any).getFFTData() : null;
+            if (fftData && fftData.length > 0) {
+                const nyquist = ((ae as any).ctx?.sampleRate || 48000) / 2;
+                const sampleBand = (freq: number, width: number, gain: number) => {
+                    const minF = Math.max(20, freq * Math.max(0.1, 1 - width / 100));
+                    const maxF = Math.min(nyquist, freq * (1 + width / 100));
+                    const minBin = Math.max(0, Math.floor((minF / nyquist) * fftData.length));
+                    const maxBin = Math.min(fftData.length - 1, Math.ceil((maxF / nyquist) * fftData.length));
+                    let sum = 0;
+                    let count = 0;
+                    for (let i = minBin; i <= maxBin; i++) {
+                        sum += fftData[i];
+                        count++;
+                    }
+                    const avg = count > 0 ? sum / count : 0;
+                    const norm = Math.min(1, avg / 255);
+                    return norm * gain;
+                };
+
+                const fftBands = {
+                    sync1: sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1),
+                    sync2: sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1),
+                    sync3: sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1),
+                };
+
+                const anyBand = bandLevels.sync1 + bandLevels.sync2 + bandLevels.sync3;
+                if (anyBand < 0.001) {
+                    bandLevels = fftBands;
+                } else {
+                    bandLevels = {
+                        sync1: Math.max(bandLevels.sync1, fftBands.sync1),
+                        sync2: Math.max(bandLevels.sync2, fftBands.sync2),
+                        sync3: Math.max(bandLevels.sync3, fftBands.sync3),
+                    };
+                }
+            }
 
             const getLevel = (routing: string, forVu = false) => {
                 if (routing === 'off') return forVu ? 0.0 : 1.0;
@@ -313,7 +350,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                // Mocne, liniowe mapowanie żeby uwidocznić modulację
+                // Mocne, liniowe mapowanie +-eby uwidoczni¦ç modulacj¦Ö
                 const boosted = sourceLevel * gainMult * 60.0;
                 return Math.min(60.0, boosted);
             };
@@ -342,7 +379,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 fx5: computeFxVu(currentFxState.fx5),
             };
 
-            // Aktualizuj FX VU / visualLevels na każdej klatce (bez throttlingu)
+            // Aktualizuj FX VU / visualLevels na ka+-dej klatce (bez throttlingu)
             setVisualLevels(lvls);
             setFxVuLevels(vuPacket);
             fxVuLevelsRef.current = vuPacket;
