@@ -330,6 +330,16 @@ export class AudioEngine {
             mixInto(this.videoAnalyser);
             mixInto(this.musicAnalyser);
             mixInto(this.micAnalyser);
+
+            // Last resort: use time-domain energy to synthesize a floor so the UI shows activity.
+            if (this.vizData.every(v => v === 0)) {
+                const timeBuf = new Uint8Array(analyser.fftSize);
+                analyser.getByteTimeDomainData(timeBuf as Uint8Array<ArrayBuffer>);
+                for (let i = 0; i < timeBuf.length && i < this.vizData.length; i++) {
+                    const v = Math.abs(timeBuf[i] - 128) * 2;
+                    this.vizData[i] = Math.min(255, v);
+                }
+            }
         }
 
         return new Uint8Array(this.vizData);
