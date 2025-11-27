@@ -297,13 +297,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const anySourceActive = activeVu.some(v => v > 0.0001);
 
             const bandLevels = {
-                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1), fallbackRms * 0.25) : 0,
-                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1), fallbackRms * 0.25) : 0,
-                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1), fallbackRms * 0.25) : 0,
+                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1), fallbackRms * 0.18) : 0,
+                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1), fallbackRms * 0.18) : 0,
+                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1), fallbackRms * 0.18) : 0,
             };
 
-            const getLevel = (routing: string) => {
-                if (routing === 'off') return 1.0;
+            const getLevel = (routing: string, forVu = false) => {
+                if (routing === 'off') return forVu ? 0.0 : 1.0;
                 if (routing === 'bpm') return (phase < 0.15) ? 1.0 : 0.0;
                 if (routing === 'sync1') return bandLevels.sync1;
                 if (routing === 'sync2') return bandLevels.sync2;
@@ -314,14 +314,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100;
-                const boosted = (Math.pow(sourceLevel, 0.35) * gainMult * 16.0) + (config.routing === 'off' ? 0 : 0.5);
-                return Math.min(18.0, boosted);
+                const boosted = (Math.pow(sourceLevel, 0.35) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
+                return Math.min(16.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
-                const sourceLevel = getLevel(config.routing);
+                const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(1.0, Math.pow(sourceLevel, 0.5) * gainMult);
+                return Math.min(0.8, Math.pow(sourceLevel, 0.5) * gainMult);
             };
 
             const lvls = {
