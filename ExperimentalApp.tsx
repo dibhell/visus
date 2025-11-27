@@ -300,13 +300,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 currentMixer.music.active ? vu[1] : 0,
                 currentMixer.mic.active ? vu[2] : 0,
             ];
-            const fallbackRms = Math.max(...activeVu, 0) * spectrumGainLinear;
             const anySourceActive = activeVu.some(v => v > 0.0001);
 
             const bandLevels = {
-                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * spectrumGainLinear, fallbackRms * 0.12) : 0,
-                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * spectrumGainLinear, fallbackRms * 0.12) : 0,
-                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * spectrumGainLinear, fallbackRms * 0.12) : 0,
+                sync1: anySourceActive ? ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * spectrumGainLinear : 0,
+                sync2: anySourceActive ? ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * spectrumGainLinear : 0,
+                sync3: anySourceActive ? ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * spectrumGainLinear : 0,
             };
 
             const getLevel = (routing: string, forVu = false) => {
