@@ -286,6 +286,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const currentFxState = fxStateRef.current;
             const currentTransform = transformRef.current;
             const currentMixer = mixerRef.current;
+            const spectrumGainLinear = Math.pow(10, spectrumGainDb / 20);
 
             const bpm = currentSyncParams[0].bpm;
             const offset = currentSyncParams[0].offset;
@@ -299,13 +300,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 currentMixer.music.active ? vu[1] : 0,
                 currentMixer.mic.active ? vu[2] : 0,
             ];
-            const fallbackRms = Math.max(...activeVu, 0);
+            const fallbackRms = Math.max(...activeVu, 0) * spectrumGainLinear;
             const anySourceActive = activeVu.some(v => v > 0.0001);
 
             const bandLevels = {
-                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1), fallbackRms * 0.12) : 0,
-                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1), fallbackRms * 0.12) : 0,
-                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1), fallbackRms * 0.12) : 0,
+                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * spectrumGainLinear, fallbackRms * 0.12) : 0,
+                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * spectrumGainLinear, fallbackRms * 0.12) : 0,
+                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * spectrumGainLinear, fallbackRms * 0.12) : 0,
             };
 
             const getLevel = (routing: string, forVu = false) => {
@@ -1013,7 +1014,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                 />
                             </div>
                             <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-4 w-16">
-                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center">GAIN</div>
+                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">SPECTRUM<br/>GAIN</div>
                                 <input
                                     type="range"
                                     min={-24}

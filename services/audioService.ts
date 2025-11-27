@@ -48,7 +48,7 @@ export class AudioEngine {
     
     // Scratch buffers for VU meters
     vuData: any = new Uint8Array(16); 
-    channelActive = { video: true, music: true, mic: false };
+    channelActive = { video: false, music: false, mic: false };
 
     constructor() {
         this.bands = { sync1: 0, sync2: 0, sync3: 0 };
