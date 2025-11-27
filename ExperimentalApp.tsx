@@ -279,8 +279,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             const ae = audioRef.current;
             ae.update();
-            const vu = ae.getLevelsFast(0.18); // channel RMS (video, music, mic)
-            const shouldUpdateUi = (now - lastUiUpdateRef.current) > 80;
+            const vu = ae.getLevelsFast(0.12); // channel RMS (video, music, mic)
+            const shouldUpdateUi = (now - lastUiUpdateRef.current) > 50;
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;
@@ -300,12 +300,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 currentMixer.music.active ? vu[1] : 0,
                 currentMixer.mic.active ? vu[2] : 0,
             ];
-            const anySourceActive = activeVu.some(v => v > 0.0001);
+            const fallbackRms = Math.max(...activeVu, 0) * spectrumGainLinear;
 
             const bandLevels = {
-                sync1: anySourceActive ? ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * spectrumGainLinear : 0,
-                sync2: anySourceActive ? ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * spectrumGainLinear : 0,
-                sync3: anySourceActive ? ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * spectrumGainLinear : 0,
+                sync1: (ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * spectrumGainLinear) + fallbackRms * 0.02,
+                sync2: (ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * spectrumGainLinear) + fallbackRms * 0.02,
+                sync3: (ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * spectrumGainLinear) + fallbackRms * 0.02,
             };
 
             const getLevel = (routing: string, forVu = false) => {
@@ -320,14 +320,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                const boosted = (Math.pow(sourceLevel, 0.42) * gainMult * 18.0) + (config.routing === 'off' ? 0 : 0.35);
-                return Math.min(18.0, boosted);
+                const boosted = (Math.pow(sourceLevel, 0.42) * gainMult * 22.0) + (config.routing === 'off' ? 0 : 0.45);
+                return Math.min(22.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(2.0, Math.pow(sourceLevel, 0.38) * gainMult * 1.6);
+                return Math.min(2.5, Math.pow(sourceLevel, 0.35) * gainMult * 2.0);
             };
 
             const lvls = {
@@ -353,12 +353,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const prevVu = fxVuLevelsRef.current;
                 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
                 const smoothedVu = {
-                    main: lerp(prevVu.main, vuPacket.main, 0.15),
-                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.15),
-                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.15),
-                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.15),
-                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.15),
-                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.15),
+                    main: lerp(prevVu.main, vuPacket.main, 0.1),
+                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.1),
+                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.1),
+                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.1),
+                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.1),
+                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.1),
                 };
 
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
