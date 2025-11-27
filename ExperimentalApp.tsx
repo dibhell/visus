@@ -65,6 +65,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(1);
+    const [spectrumGain, setSpectrumGain] = useState(1.0);
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -297,9 +298,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const anySourceActive = activeVu.some(v => v > 0.0001);
 
             const bandLevels = {
-                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1), fallbackRms * 0.18) : 0,
-                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1), fallbackRms * 0.18) : 0,
-                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1), fallbackRms * 0.18) : 0,
+                sync1: anySourceActive ? Math.max(ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1), fallbackRms * 0.12) : 0,
+                sync2: anySourceActive ? Math.max(ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1), fallbackRms * 0.12) : 0,
+                sync3: anySourceActive ? Math.max(ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1), fallbackRms * 0.12) : 0,
             };
 
             const getLevel = (routing: string, forVu = false) => {
@@ -314,14 +315,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100;
-                const boosted = (Math.pow(sourceLevel, 0.35) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
-                return Math.min(16.0, boosted);
+                const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 12.0) + (config.routing === 'off' ? 0 : 0.25);
+                return Math.min(12.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(0.8, Math.pow(sourceLevel, 0.5) * gainMult);
+                return Math.min(0.6, Math.pow(sourceLevel, 0.5) * gainMult);
             };
 
             const lvls = {
@@ -347,12 +348,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const prevVu = fxVuLevelsRef.current;
                 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
                 const smoothedVu = {
-                    main: lerp(prevVu.main, vuPacket.main, 0.45),
-                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.45),
-                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.45),
-                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.45),
-                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.45),
-                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.45),
+                    main: lerp(prevVu.main, vuPacket.main, 0.4),
+                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.4),
+                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.4),
+                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.4),
+                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.4),
+                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.4),
                 };
 
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
@@ -996,7 +997,30 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     </section>
 
                     <section>
-                        <SpectrumVisualizer audioServiceRef={audioRef} syncParams={syncParams} onParamChange={updateSyncParams} />
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1">
+                                <SpectrumVisualizer
+                                    audioServiceRef={audioRef}
+                                    syncParams={syncParams}
+                                    onParamChange={updateSyncParams}
+                                    gain={spectrumGain}
+                                    enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
+                                />
+                            </div>
+                            <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-2 py-3 w-16">
+                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center">GAIN</div>
+                                <input
+                                    type="range"
+                                    min={0.2}
+                                    max={4}
+                                    step={0.1}
+                                    value={spectrumGain}
+                                    onChange={(e) => setSpectrumGain(parseFloat(e.target.value))}
+                                    className="w-40 h-2 rotate-270 origin-center accent-accent"
+                                />
+                                <div className="text-[10px] text-slate-300 font-mono">{spectrumGain.toFixed(1)}x</div>
+                            </div>
+                        </div>
                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />
                     </section>
 
