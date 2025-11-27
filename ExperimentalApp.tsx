@@ -287,9 +287,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 // Map routing to a 0..1 level; 'off' treated as 1 (manual always-on)
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = (config.gain ?? 100) / 100;
-                // Boost a bit so low audio bands are still visible in FX
-                const boosted = sourceLevel * gainMult * 2.2;
-                return Math.min(3.0, boosted);
+                // Stronger boost so band-driven FX są widoczne na klipie
+                const boosted = (sourceLevel * gainMult * 6.0) + (config.routing === 'off' ? 0 : 0.15);
+                return Math.min(8.0, boosted);
             };
 
             const lvls = {
