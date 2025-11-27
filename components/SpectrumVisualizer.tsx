@@ -9,10 +9,9 @@ interface Props {
     syncParams: SyncParam[];
     onParamChange: (index: number, changes: Partial<SyncParam>) => void;
     enabled?: boolean;
-    threshold?: number;
 }
 
-const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onParamChange, enabled = true, threshold = 0 }) => {
+const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onParamChange, enabled = true }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const frameRef = useRef<number>(0);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -128,17 +127,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.lineWidth = 1.5;
                 ctx.strokeStyle = '#2dd4bf';
                 ctx.stroke();
-
-                // Threshold line (normalized 0..1 of bar height)
-                const thY = H - Math.min(1, Math.max(0, threshold)) * (H * 0.9);
-                ctx.strokeStyle = 'rgba(248,113,113,0.55)';
-                ctx.lineWidth = 1;
-                ctx.setLineDash([4, 2]);
-                ctx.beginPath();
-                ctx.moveTo(0, thY);
-                ctx.lineTo(W, thY);
-                ctx.stroke();
-                ctx.setLineDash([]);
             }
 
             // 4. Interactive Points

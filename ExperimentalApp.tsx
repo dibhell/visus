@@ -65,8 +65,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(1);
-    const [bandThreshold, setBandThreshold] = useState(0.05);
-    const [spectrumGain, setSpectrumGain] = useState(1.0);
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -109,8 +107,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const renderScaleRef = useRef(renderScale);
     const fxVuLevelsRef = useRef(fxVuLevels);
     const mixerRef = useRef(mixer);
-    const bandThresholdRef = useRef(bandThreshold);
-    const spectrumGainRef = useRef(spectrumGain);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -120,8 +116,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
-    useEffect(() => { bandThresholdRef.current = bandThreshold; }, [bandThreshold]);
-    useEffect(() => { spectrumGainRef.current = spectrumGain; }, [spectrumGain]);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -305,13 +299,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 currentMixer.mic.active ? vu[2] : 0,
             ];
 
-            // Take fresh band values per frame without gating staleness
-            const th = bandThresholdRef.current;
-            const gainBoost = spectrumGainRef.current;
+            // Fresh band values per frame (no extra gating)
             const bandLevels = {
-                sync1: Math.max(0, (ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * gainBoost) - th),
-                sync2: Math.max(0, (ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * gainBoost) - th),
-                sync3: Math.max(0, (ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * gainBoost) - th),
+                sync1: Math.max(0, ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1)),
+                sync2: Math.max(0, ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1)),
+                sync3: Math.max(0, ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1)),
             };
 
             const getLevel = (routing: string, forVu = false) => {
@@ -335,7 +327,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 // VU odpowiada bezpośrednio poziomowi pasma (po progu/gain)
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(3.0, sourceLevel * gainMult * 2.5);
+                return Math.min(3.0, sourceLevel * gainMult * 3.0);
             };
 
             const lvls = {
@@ -361,12 +353,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const prevVu = fxVuLevelsRef.current;
                 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
                 const smoothedVu = {
-                    main: lerp(prevVu.main, vuPacket.main, 0.25),
-                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.25),
-                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.25),
-                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.25),
-                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.25),
-                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.25),
+                    main: lerp(prevVu.main, vuPacket.main, 0.35),
+                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.35),
+                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.35),
+                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.35),
+                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.35),
+                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.35),
                 };
 
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
@@ -1010,41 +1002,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     </section>
 
                     <section>
-                        <div className="flex items-start gap-3">
-                            <div className="flex-1">
-                                <SpectrumVisualizer
-                                    audioServiceRef={audioRef}
-                                    syncParams={syncParams}
-                                    onParamChange={updateSyncParams}
-                                    enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
-                                    threshold={bandThreshold}
-                                />
-                            </div>
-                            <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-4 w-16">
-                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">THRESH</div>
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={1}
-                                    step={0.01}
-                                    value={bandThreshold}
-                                    onChange={(e) => setBandThreshold(parseFloat(e.target.value))}
-                                    className="w-36 h-3 rotate-270 origin-center accent-accent"
-                                />
-                                <div className="text-[10px] text-slate-300 font-mono">{(bandThreshold * 100).toFixed(0)}%</div>
-                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">GAIN</div>
-                                <input
-                                    type="range"
-                                    min={0.25}
-                                    max={4}
-                                    step={0.05}
-                                    value={spectrumGain}
-                                    onChange={(e) => setSpectrumGain(parseFloat(e.target.value))}
-                                    className="w-36 h-3 rotate-270 origin-center accent-accent"
-                                />
-                                <div className="text-[10px] text-slate-300 font-mono">{spectrumGain.toFixed(2)}x</div>
-                            </div>
-                        </div>
+                        <SpectrumVisualizer
+                            audioServiceRef={audioRef}
+                            syncParams={syncParams}
+                            onParamChange={updateSyncParams}
+                            enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
+                        />
                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />
                     </section>
 
