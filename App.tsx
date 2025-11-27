@@ -71,6 +71,7 @@ const App: React.FC = () => {
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
 
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
+    const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [additiveGain, setAdditiveGain] = useState(80); 
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
@@ -95,6 +96,7 @@ const App: React.FC = () => {
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
     const mixerRef = useRef(mixer); 
+    const fxVuLevelsRef = useRef(fxVuLevels);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -103,6 +105,7 @@ const App: React.FC = () => {
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
+    useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
 
     // Apply Mixer Volume Changes
     useEffect(() => {
@@ -232,8 +235,14 @@ const App: React.FC = () => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = (config.gain ?? 100) / 100;
-                const boosted = (sourceLevel * gainMult * 10.0) + (config.routing === 'off' ? 0 : 0.35);
-                return Math.min(15.0, boosted);
+                const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
+                return Math.min(18.0, boosted);
+            };
+
+            const computeFxVu = (config: any) => {
+                const sourceLevel = getActivationLevel(config.routing, phase);
+                const gainMult = (config.gain ?? 100) / 100;
+                return Math.min(1.5, Math.pow(sourceLevel, 0.5) * gainMult);
             };
 
             const lvls = {

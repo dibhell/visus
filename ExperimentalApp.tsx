@@ -75,6 +75,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
     const [additiveGain, setAdditiveGain] = useState(80);
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
+    const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
@@ -104,6 +105,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
     const renderScaleRef = useRef(renderScale);
+    const fxVuLevelsRef = useRef(fxVuLevels);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -111,6 +113,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
+    useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -269,10 +272,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const ae = audioRef.current;
             ae.update();
             const vu = ae.getLevelsFast(0.18);
-            if (now - lastUiUpdateRef.current > 80) {
-                setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
-                lastUiUpdateRef.current = now;
-            }
+            const shouldUpdateUi = (now - lastUiUpdateRef.current) > 80;
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;
@@ -285,12 +285,16 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const phase = (adjustedTime % beatMs) / beatMs;
 
             const computeFxVal = (config: any) => {
-                // Map routing to a 0..1 level; 'off' treated as 1 (manual always-on)
                 const sourceLevel = getActivationLevel(config.routing, phase);
                 const gainMult = (config.gain ?? 100) / 100;
-                // Aggressive boost so audio visibly modulates the shader
-                const boosted = (sourceLevel * gainMult * 10.0) + (config.routing === 'off' ? 0 : 0.35);
-                return Math.min(15.0, boosted);
+                const boosted = (Math.pow(sourceLevel, 0.3) * gainMult * 22.0) + (config.routing === 'off' ? 0 : 0.8);
+                return Math.min(24.0, boosted);
+            };
+
+            const computeFxVu = (config: any) => {
+                const sourceLevel = getActivationLevel(config.routing, phase);
+                const gainMult = (config.gain ?? 100) / 100;
+                return Math.min(2.2, Math.pow(sourceLevel, 0.5) * gainMult);
             };
 
             const lvls = {
@@ -302,8 +306,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 fx5: computeFxVal(currentFxState.fx5),
             };
 
-            if (now - lastUiUpdateRef.current > 80) {
+            const vuPacket = {
+                main: computeFxVu(currentFxState.main),
+                fx1: computeFxVu(currentFxState.fx1),
+                fx2: computeFxVu(currentFxState.fx2),
+                fx3: computeFxVu(currentFxState.fx3),
+                fx4: computeFxVu(currentFxState.fx4),
+                fx5: computeFxVu(currentFxState.fx5),
+            };
+
+            if (shouldUpdateUi) {
+                setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
                 setVisualLevels(lvls);
+                setFxVuLevels(vuPacket);
+                lastUiUpdateRef.current = now;
             }
 
             const computedFx: ExperimentalFxPacket = {
@@ -952,10 +968,19 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                             </div>
                             <div className="text-[9px] text-slate-500">Additive Gain: <span className="text-accent font-semibold">{additiveGain}%</span></div>
                         </div>
-                        <FxSlot category="main" slotName="main" fxState={fxState} setFxState={setFxState} activeLevel={visualLevels.main} />
+                        <FxSlot category="main" slotName="main" fxState={fxState} setFxState={setFxState} activeLevel={visualLevels.main} vuLevel={fxVuLevels.main} />
                         <div className="space-y-2 mt-4">
                             {['fx1', 'fx2', 'fx3', 'fx4', 'fx5'].map((fxName, i) => (
-                                <FxSlot key={fxName} category="additive" title={`Layer ${i + 1}`} slotName={fxName as keyof FxState} fxState={fxState} setFxState={setFxState} activeLevel={(visualLevels as any)[fxName]} />
+                                <FxSlot
+                                    key={fxName}
+                                    category="additive"
+                                    title={`Layer ${i + 1}`}
+                                    slotName={fxName as keyof FxState}
+                                    fxState={fxState}
+                                    setFxState={setFxState}
+                                    activeLevel={(visualLevels as any)[fxName]}
+                                    vuLevel={(fxVuLevels as any)[fxName]}
+                                />
                             ))}
                         </div>
                         <div className="mt-3 bg-white/5 border border-white/10 rounded-xl p-3">

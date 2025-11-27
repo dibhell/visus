@@ -9,10 +9,11 @@ interface FxSlotProps {
     setFxState: React.Dispatch<React.SetStateAction<FxState>>;
     title?: string;
     category?: 'main' | 'additive'; // Kept for styling, not filtering
-    activeLevel?: number;
+    activeLevel?: number; // FX modulation level (for glow)
+    vuLevel?: number;      // Source/routing meter level (for meter)
 }
 
-const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, category, activeLevel = 0 }) => {
+const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, category, activeLevel = 0, vuLevel = 0 }) => {
     const isMain = slotName === 'main';
     const config = fxState[slotName];
     const routingColor = (() => {
@@ -96,7 +97,7 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                                 <div
                                     className="w-full rounded-full transition-all duration-60"
                                     style={{
-                                        height: `${Math.min(100, Math.max(5, activeLevel * 120))}%`,
+                                        height: `${Math.min(100, Math.max(5, vuLevel * 120))}%`,
                                         background: `linear-gradient(180deg, ${routingColor} 0%, ${routingColor}55 70%, transparent 100%)`,
                                         position: 'absolute',
                                         bottom: 0,
