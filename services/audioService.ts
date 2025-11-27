@@ -10,6 +10,7 @@ export class AudioEngine {
     mainAnalyser: AnalyserNode | null = null;
     vizAnalyser: AnalyserNode | null = null;
     recDest: MediaStreamAudioDestinationNode | null = null;
+    vizOut: GainNode | null = null;
 
     // Channel Nodes [Source -> Gain -> VU Analyser -> MasterMix]
     //                               \-> Destination (Speakers, except Mic)
@@ -67,6 +68,12 @@ export class AudioEngine {
             this.masterMix.gain.value = 1.0;
             this.masterMix.connect(this.mainAnalyser);
             this.masterMix.connect(this.vizAnalyser);
+
+            // Ensure analyser nodes are pulled by the graph (0 gain tap to destination)
+            this.vizOut = this.ctx.createGain();
+            this.vizOut.gain.value = 0.0;
+            this.masterMix.connect(this.vizOut);
+            this.vizOut.connect(this.ctx.destination);
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
@@ -366,6 +373,18 @@ export class AudioEngine {
                 this.fftData = new Uint8Array(analyser.frequencyBinCount);
             }
             analyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
+
+            // If still empty (possible if graph not yet flowing), try time-domain energy
+            let energy = 0;
+            for (let i = 0; i < this.fftData.length; i++) energy += this.fftData[i];
+            if (energy === 0) {
+                const timeBuf = new Uint8Array(analyser.fftSize);
+                analyser.getByteTimeDomainData(timeBuf as Uint8Array<ArrayBuffer>);
+                for (let i = 0; i < timeBuf.length && i < this.fftData.length; i++) {
+                    const v = Math.abs(timeBuf[i] - 128) * 2;
+                    this.fftData[i] = Math.min(255, v);
+                }
+            }
         }
 
         // 2. Filtered Bands Data (Logic)
