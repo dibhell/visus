@@ -9,6 +9,7 @@ export class AudioEngine {
     masterMix: GainNode | null = null;
     mainAnalyser: AnalyserNode | null = null;
     vizAnalyser: AnalyserNode | null = null;
+    analysisSink: GainNode | null = null;
     recDest: MediaStreamAudioDestinationNode | null = null;
     vizOut: GainNode | null = null;
 
@@ -64,6 +65,12 @@ export class AudioEngine {
             this.vizAnalyser.smoothingTimeConstant = 0.55;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
 
+            // Silent sink to keep analyser branches pulling without audible output
+            this.analysisSink = this.ctx.createGain();
+            this.analysisSink.gain.value = 0.0;
+            this.mainAnalyser.connect(this.analysisSink);
+            this.vizAnalyser.connect(this.analysisSink);
+
             this.masterMix = this.ctx.createGain();
             this.masterMix.gain.value = 1.0;
             this.masterMix.connect(this.mainAnalyser);
@@ -74,6 +81,7 @@ export class AudioEngine {
             this.vizOut.gain.value = 0.0;
             this.masterMix.connect(this.vizOut);
             this.vizOut.connect(this.ctx.destination);
+            this.analysisSink.connect(this.ctx.destination);
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
@@ -344,6 +352,9 @@ export class AudioEngine {
 
             this.masterMix.connect(bandpass);
             bandpass.connect(analyser);
+
+            // Connect analyser to silent sink so it keeps processing
+            if (this.analysisSink) analyser.connect(this.analysisSink);
 
             this.filters.push({ name, bandpass, analyser, data: new Uint8Array(analyser.frequencyBinCount) });
         });
