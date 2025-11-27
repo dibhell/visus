@@ -751,18 +751,35 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const audioTracks = audioStream.getAudioTracks();
             audioTracksCount = audioTracks.length;
             if (audioTracks.length === 0) {
-                console.warn('No audio tracks available for recording fallback (audio stream has 0 tracks).');
+                console.warn('No audio tracks available from recDest (0 tracks).');
             }
             audioTracks.forEach(track => {
                 track.enabled = true;
                 tracks.push(track);
             });
         } else {
-            console.warn('audioStream is null after re-init, recording will be video-only.');
+            console.warn('audioStream is null after re-init, will try element capture.');
+        }
+
+        // Fallback: spróbuj przechwycić audio bezpośrednio z elementu muzyki
+        if (tracks.filter(t => t.kind === 'audio').length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
+            try {
+                const elemStream = (audioElRef.current as any).captureStream();
+                const elemTracks = elemStream.getAudioTracks();
+                if (elemTracks.length > 0) {
+                    elemTracks.forEach((t: MediaStreamTrack) => tracks.push(t));
+                    audioTracksCount = elemTracks.length;
+                    console.warn('Using audio element captureStream for recording fallback.');
+                } else {
+                    console.warn('captureStream on audio element returned 0 audio tracks.');
+                }
+            } catch (e) {
+                console.warn('captureStream on audio element failed:', e);
+            }
         }
 
         if (audioTracksCount === 0) {
-            alert('Brak ścieżki audio w nagraniu (audio stream ma 0 tracków). Upewnij się, że źródło audio jest ON i dostępne.');
+            alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest ON, a przeglądarka wspiera captureStream/MediaStreamDestination.');
         }
 
         const combinedStream = new MediaStream(tracks);
