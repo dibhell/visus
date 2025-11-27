@@ -271,7 +271,7 @@ export class AudioEngine {
         if (this.fftData.length !== this.mainAnalyser.frequencyBinCount) {
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
         }
-        this.mainAnalyser.getByteFrequencyData(this.fftData);
+        this.mainAnalyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
         return new Uint8Array(this.fftData);
     }
 
@@ -329,7 +329,7 @@ export class AudioEngine {
         if (this.fftData.length !== this.mainAnalyser.frequencyBinCount) {
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
         }
-        this.mainAnalyser.getByteFrequencyData(this.fftData);
+        this.mainAnalyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
 
         // 2. Filtered Bands Data (Logic)
         this.filters.forEach((f, index) => {
