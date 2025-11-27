@@ -290,6 +290,11 @@ export class AudioEngine {
     }
 
     getFFTData(): Uint8Array | null {
+        // Keep context alive to ensure analysers flow
+        if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+        }
+
         // Prefer the dedicated viz analyser if present, fall back to main analyser.
         const analyser = this.vizAnalyser || this.mainAnalyser;
         if (!analyser) return null;
@@ -375,7 +380,11 @@ export class AudioEngine {
     }
 
     update() {
-        if (!this.mainAnalyser || !this.ctx || this.ctx.state === 'suspended') return;
+        if (!this.ctx) return;
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+            return;
+        }
 
         // 1. RAW FFT Data (Visualizer)
         const analyser = this.vizAnalyser || this.mainAnalyser;

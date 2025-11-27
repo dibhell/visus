@@ -325,6 +325,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             if (useWorkerRenderRef.current && workerRef.current && videoRef.current && !bitmapInFlightRef.current) {
                 if (videoRef.current.readyState >= 2) {
                     bitmapInFlightRef.current = true;
+                    const timeout = window.setTimeout(() => { bitmapInFlightRef.current = false; }, 80);
                     createImageBitmap(videoRef.current)
                         .then((bitmap) => {
                             workerRef.current?.postMessage({
@@ -334,8 +335,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                 fx: computedFx,
                                 videoSize: { w: videoRef.current?.videoWidth || 0, h: videoRef.current?.videoHeight || 0 }
                             }, [bitmap]);
+                            window.clearTimeout(timeout);
                         })
-                        .catch(() => { bitmapInFlightRef.current = false; });
+                        .catch(() => { bitmapInFlightRef.current = false; window.clearTimeout(timeout); });
                 }
             } else if (videoRef.current && rendererRef.current.isReady()) {
                 rendererRef.current.updateTexture(videoRef.current);
