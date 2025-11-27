@@ -314,14 +314,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
                 // Mocne, liniowe mapowanie żeby uwidocznić modulację
-                const boosted = sourceLevel * gainMult * 40.0;
-                return Math.min(40.0, boosted);
+                const boosted = sourceLevel * gainMult * 60.0;
+                return Math.min(60.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(10.0, sourceLevel * gainMult * 10.0);
+                return Math.min(12.0, sourceLevel * gainMult * 12.0);
             };
 
             const lvls = {
@@ -347,9 +347,10 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             setFxVuLevels(vuPacket);
             fxVuLevelsRef.current = vuPacket;
 
-            // Debug overlay co ~120 ms
+            // Debug overlay co ~120 ms + log
             if (now - lastDebugRef.current > 120) {
-                setDebugBandText(`B:${bandLevels.sync1.toFixed(3)} M:${bandLevels.sync2.toFixed(3)} H:${bandLevels.sync3.toFixed(3)} | VU main:${vuPacket.main.toFixed(2)}`);
+                setDebugBandText(`B:${bandLevels.sync1.toFixed(3)} M:${bandLevels.sync2.toFixed(3)} H:${bandLevels.sync3.toFixed(3)} | VU main:${vuPacket.main.toFixed(2)} fx1:${vuPacket.fx1.toFixed(2)}`);
+                console.debug('Bands', bandLevels, 'VU', vuPacket);
                 lastDebugRef.current = now;
             }
 
