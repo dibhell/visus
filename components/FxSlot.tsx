@@ -15,6 +15,13 @@ interface FxSlotProps {
 const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, category, activeLevel = 0 }) => {
     const isMain = slotName === 'main';
     const config = fxState[slotName];
+    const routingColor = (() => {
+        if (config.routing === 'sync1') return '#f472b6';
+        if (config.routing === 'sync2') return '#38bdf8';
+        if (config.routing === 'sync3') return '#fbbf24';
+        if (config.routing === 'bpm') return '#a78bfa';
+        return '#94a3b8';
+    })();
 
     const handleChange = (key: string, value: any) => {
         setFxState(prev => ({
@@ -82,7 +89,22 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
 
                 {/* Bottom Row: Knobs Grid */}
                 {config.shader !== '00_NONE' && (
-                    <div className="flex justify-around items-center pt-2 pb-1 bg-black/20 rounded-lg border border-white/5">
+                    <div className="flex justify-around items-center pt-2 pb-1 bg-black/20 rounded-lg border border-white/5 relative overflow-hidden">
+                        {/* Band VU (if routed to band/BPM) */}
+                        {config.routing !== 'off' && (
+                            <div className="absolute left-1 top-2 bottom-2 w-1.5 bg-slate-900/70 rounded-full overflow-hidden">
+                                <div
+                                    className="w-full rounded-full transition-all duration-60"
+                                    style={{
+                                        height: `${Math.min(100, Math.max(0, activeLevel * 100))}%`,
+                                        background: `linear-gradient(180deg, ${routingColor} 0%, ${routingColor}55 70%, transparent 100%)`,
+                                        position: 'absolute',
+                                        bottom: 0
+                                    }}
+                                />
+                            </div>
+                        )}
+
                         {/* Depth/Gain Knob */}
                         <Knob 
                             label="Depth"
