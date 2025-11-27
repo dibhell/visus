@@ -92,14 +92,15 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
                     <div className="flex justify-around items-center pt-2 pb-1 bg-black/20 rounded-lg border border-white/5 relative overflow-hidden">
                         {/* Band VU (if routed to band/BPM) */}
                         {config.routing !== 'off' && (
-                            <div className="absolute left-1 top-2 bottom-2 w-1.5 bg-slate-900/70 rounded-full overflow-hidden">
+                            <div className="absolute left-1 top-2 bottom-2 w-2.5 bg-slate-900/70 rounded-full overflow-hidden">
                                 <div
                                     className="w-full rounded-full transition-all duration-60"
                                     style={{
-                                        height: `${Math.min(100, Math.max(0, activeLevel * 100))}%`,
+                                        height: `${Math.min(100, Math.max(5, activeLevel * 120))}%`,
                                         background: `linear-gradient(180deg, ${routingColor} 0%, ${routingColor}55 70%, transparent 100%)`,
                                         position: 'absolute',
-                                        bottom: 0
+                                        bottom: 0,
+                                        boxShadow: `0 0 8px ${routingColor}55`
                                     }}
                                 />
                             </div>
