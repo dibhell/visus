@@ -458,15 +458,13 @@ export class AudioEngine {
         // 2. Filtered Bands Data (Logic)
         this.filters.forEach((f, index) => {
             f.analyser.getByteFrequencyData(f.data);
-            let sum = 0;
-            for(let i=0; i<f.data.length; i++) sum += f.data[i];
-            
-            const avg = sum / f.data.length;
-            const rawNorm = avg / 180.0; 
-            // Gain applied in Logic, not audio path
-            const normalizedLevel = Math.min(1.2, (rawNorm * rawNorm * 0.5 + rawNorm)); 
-            
-            this.bands[f.name] = Math.min(1.0, normalizedLevel);
+            let peak = 0;
+            for (let i = 0; i < f.data.length; i++) {
+                if (f.data[i] > peak) peak = f.data[i];
+            }
+            // Use peak with soft power curve for more responsive band activation
+            const norm = Math.pow(peak / 255, 0.65) * 1.4;
+            this.bands[f.name] = Math.min(1.0, norm);
         });
     }
 }

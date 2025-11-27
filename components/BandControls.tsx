@@ -61,7 +61,20 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
             {/* Bands Knob View */}
             <div className="space-y-2">
                 {syncParams.slice(0, 3).map((sync, i) => (
-                    <div key={i} className={`relative p-2 bg-white/5 rounded-xl border-l-2 ${borderColors[i]} flex items-center gap-2`}>
+                    <div key={i} className={`relative p-2 bg-white/5 rounded-xl border-l-2 ${borderColors[i]} flex items-center gap-2 overflow-hidden`}>
+                        {/* Band VU */}
+                        <div className="absolute left-2 top-2 bottom-2 w-1.5 bg-slate-900/70 rounded-full overflow-hidden">
+                            <div
+                                className="w-full rounded-full transition-all duration-80"
+                                style={{
+                                    height: `${Math.min(100, Math.max(0, sync.gain * 30))}%`,
+                                    background: `linear-gradient(180deg, ${colors[i]} 0%, ${colors[i]}55 70%, transparent 100%)`,
+                                    position: 'absolute',
+                                    bottom: 0
+                                }}
+                            />
+                        </div>
+
                         <div className={`text-[10px] font-black uppercase w-8 -rotate-90 ${textColors[i]} text-center`}>
                             {names[i]}
                         </div>
