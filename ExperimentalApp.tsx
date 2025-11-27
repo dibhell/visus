@@ -313,14 +313,15 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                const boosted = Math.pow(sourceLevel, 0.3) * gainMult * 32.0;
-                return Math.min(32.0, boosted);
+                // Mocne, liniowe mapowanie żeby uwidocznić modulację
+                const boosted = sourceLevel * gainMult * 40.0;
+                return Math.min(40.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(4.0, sourceLevel * gainMult * 4.0);
+                return Math.min(10.0, sourceLevel * gainMult * 10.0);
             };
 
             const lvls = {
