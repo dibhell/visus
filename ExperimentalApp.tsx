@@ -735,20 +735,30 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
 
         const canvasStream = canvasRef.current.captureStream(recordFps);
-        const audioStream = audioRef.current.getAudioStream();
+        let audioStream = audioRef.current.getAudioStream();
+        if (!audioStream) {
+            console.warn('audioStream is null, trying to re-init audio context for recording.');
+            await audioRef.current.initContext();
+            audioRef.current.setupFilters(syncParamsRef.current);
+            audioStream = audioRef.current.getAudioStream();
+        }
+
         const tracks: MediaStreamTrack[] = [];
         canvasStream.getVideoTracks().forEach(track => tracks.push(track));
+
         if (audioStream) {
             const audioTracks = audioStream.getAudioTracks();
             if (audioTracks.length === 0) {
-                console.warn('No audio tracks available for recording fallback.');
+                console.warn('No audio tracks available for recording fallback (audio stream has 0 tracks).');
             }
             audioTracks.forEach(track => {
-                if (track.enabled) tracks.push(track);
+                track.enabled = true;
+                tracks.push(track);
             });
         } else {
-            console.warn('audioStream is null, recording will be video-only.');
+            console.warn('audioStream is null after re-init, recording will be video-only.');
         }
+
         const combinedStream = new MediaStream(tracks);
         try {
             let mimeType = 'video/webm;codecs=vp8,opus';
