@@ -134,6 +134,12 @@ export class AudioEngine {
                 gain.connect(this.masterMix!);
                 gain.connect(this.ctx!.destination);
             }
+
+            // Keep analyser branch active even if its output is unused
+            if (this.analysisSink) {
+                analyser.connect(this.analysisSink);
+            }
+
             return { gain, analyser, vuNode };
         };
 
