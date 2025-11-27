@@ -15,3 +15,7 @@
    - Regulacja czułości FX (globalny slider “FX Sensitivity”).
    - Dodatkowy fallback analyser bezpośrednio na elemencie audio tylko dla FX (low smoothing).
    - Wizualne podbicie VU (kolor, blur) po stronie UI jeśli nadal za mało czytelne.
+
+4) Source Mixer – slidery (wg screena)
+   - Usunąć duplikaty suwaków poziomych w sekcji Source Mixer; zostawić tylko pionowe.
+   - Ustawić wartości range na pełną regulację (nie 0/50/100), sprawdzić min/max/step dla input range (vertical) w MixerChannel/Mixer UI.

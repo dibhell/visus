@@ -42,3 +42,7 @@
 ## Notatki
 - Obecne problemy: brak dynamicznej reakcji FX i zamrożony pasek VU w slotach to skutek braku aktualizacji `fxVuLevels` i/lub przekazania `vuLevel` do `FxSlot`, plus za słaba modulacja w `computeFxVal`.
 - Zmiany dotyczą tylko `App.tsx`, `ExperimentalApp.tsx`, `components/FxSlot.tsx`.
+
+## 7) Source Mixer (wg screena)
+- Usuń poziome slidery w sekcji Source Mixer; pozostaw pionowe (głośność).
+- Popraw step/min/max pionowych suwaków, żeby pozwalały na płynną regulację (nie tylko 0/50/100). Sprawdź komponent `MixerChannel` lub miejsce, gdzie rysowane są te suwakowe inputy (vertical range).
