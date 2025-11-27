@@ -348,23 +348,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 fx5: computeFxVu(currentFxState.fx5),
             };
 
-            if (shouldUpdateUi) {
-                // Light smoothing on FX VU so meters move even with sparse peaks
-                const prevVu = fxVuLevelsRef.current;
-                const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-                const smoothedVu = {
-                    main: lerp(prevVu.main, vuPacket.main, 0.35),
-                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.35),
-                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.35),
-                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.35),
-                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.35),
-                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.35),
-                };
+            // Aktualizuj FX VU / visualLevels na każdej klatce (bez throttlingu)
+            setVisualLevels(lvls);
+            setFxVuLevels(vuPacket);
+            fxVuLevelsRef.current = vuPacket;
 
+            if (shouldUpdateUi) {
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
-                setVisualLevels(lvls);
-                setFxVuLevels(smoothedVu);
-                fxVuLevelsRef.current = smoothedVu;
                 lastUiUpdateRef.current = now;
             }
 
