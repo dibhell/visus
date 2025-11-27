@@ -65,7 +65,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(1);
-    const [spectrumGain, setSpectrumGain] = useState(1.0);
+    const [spectrumGainDb, setSpectrumGainDb] = useState(0);
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -123,6 +123,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         ae.setVolume('video', mixer.video.active ? mixer.video.volume : 0);
         ae.setVolume('music', mixer.music.active ? mixer.music.volume : 0);
         ae.setVolume('mic', mixer.mic.active ? mixer.mic.volume : 0);
+        if ((ae as any).setChannelActive) {
+            (ae as any).setChannelActive('video', mixer.video.active);
+            (ae as any).setChannelActive('music', mixer.music.active);
+            (ae as any).setChannelActive('mic', mixer.mic.active);
+        }
     }, [mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
 
     const getActivationLevel = (routing: string, phase: number) => {
@@ -1003,7 +1008,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                     audioServiceRef={audioRef}
                                     syncParams={syncParams}
                                     onParamChange={updateSyncParams}
-                                    gain={spectrumGain}
+                                    gainDb={spectrumGainDb}
                                     enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
                                 />
                             </div>
@@ -1011,14 +1016,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                 <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center">GAIN</div>
                                 <input
                                     type="range"
-                                    min={0.2}
-                                    max={4}
-                                    step={0.1}
-                                    value={spectrumGain}
-                                    onChange={(e) => setSpectrumGain(parseFloat(e.target.value))}
+                                    min={-24}
+                                    max={12}
+                                    step={1}
+                                    value={spectrumGainDb}
+                                    onChange={(e) => setSpectrumGainDb(parseFloat(e.target.value))}
                                     className="w-40 h-2 rotate-270 origin-center accent-accent"
                                 />
-                                <div className="text-[10px] text-slate-300 font-mono">{spectrumGain.toFixed(1)}x</div>
+                                <div className="text-[10px] text-slate-300 font-mono">{spectrumGainDb} dB</div>
                             </div>
                         </div>
                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />

@@ -48,6 +48,7 @@ export class AudioEngine {
     
     // Scratch buffers for VU meters
     vuData: any = new Uint8Array(16); 
+    channelActive = { video: true, music: true, mic: false };
 
     constructor() {
         this.bands = { sync1: 0, sync2: 0, sync3: 0 };
@@ -292,6 +293,10 @@ export class AudioEngine {
         }
     }
 
+    setChannelActive(channel: 'video' | 'music' | 'mic', active: boolean) {
+        this.channelActive[channel] = active;
+    }
+
     getLevels() {
         if (this.vuWorkletReady) {
             return {
@@ -332,8 +337,14 @@ export class AudioEngine {
             this.ctx.resume().catch(() => {});
         }
 
-        // Prefer the tap on MUSIC (most common source), then video tap, then viz/main
-        const analyser = this.musicTapAnalyser || this.videoTapAnalyser || this.vizAnalyser || this.mainAnalyser;
+        // Prefer active sources only; if none active, return null (spectrum should be blank)
+        const pickActive = (an: AnalyserNode | null, active: boolean) => active ? an : null;
+        const analyser =
+            pickActive(this.musicTapAnalyser, this.channelActive.music) ||
+            pickActive(this.videoTapAnalyser, this.channelActive.video) ||
+            pickActive(this.micTapAnalyser, this.channelActive.mic) ||
+            null;
+
         if (!analyser) return null;
 
         if (this.vizData.length !== analyser.frequencyBinCount) {

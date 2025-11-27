@@ -8,11 +8,11 @@ interface Props {
     audioServiceRef: React.MutableRefObject<AudioEngine>;
     syncParams: SyncParam[];
     onParamChange: (index: number, changes: Partial<SyncParam>) => void;
-    gain?: number;
+    gainDb?: number;
     enabled?: boolean;
 }
 
-const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onParamChange, gain = 1.0, enabled = true }) => {
+const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onParamChange, gainDb = 0, enabled = true }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const frameRef = useRef<number>(0);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -97,6 +97,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
             }
 
+            const gainLinear = Math.pow(10, gainDb / 20);
+
             if (enabled && fftData && fftData.length > 0) {
                 ctx.beginPath();
                 
@@ -105,7 +107,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const freq = getFreqFromX(x, W);
                     const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
                     const binIndex = Math.min(fftData.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData.length)));
-                    const val = Math.min(255, (fftData[binIndex] || 0) * gain);
+                    const val = Math.min(255, (fftData[binIndex] || 0) * gainLinear);
                     
                     const barHeight = (val / 255) * (H * 0.9);
                     const y = H - barHeight;
