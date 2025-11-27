@@ -285,7 +285,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const ae = audioRef.current;
             ae.update();
             const vu = ae.getLevelsFast(0.08); // channel RMS (video, music, mic)
-            const shouldUpdateUi = (now - lastUiUpdateRef.current) > 33;
+            const shouldUpdateUi = (now - lastUiUpdateRef.current) > 30;
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;
@@ -332,14 +332,16 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                const boosted = (Math.pow(sourceLevel, 0.38) * gainMult * 26.0) + (config.routing === 'off' ? 0 : 0.6);
-                return Math.min(26.0, boosted);
+                // simple, strong mapping; no extra offset when off
+                const boosted = Math.pow(sourceLevel, 0.35) * gainMult * 28.0;
+                return Math.min(28.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
+                // VU odpowiada bezpośrednio poziomowi pasma (po progu/gain)
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(3.0, Math.pow(sourceLevel, 0.25) * gainMult * 3.0);
+                return Math.min(3.0, sourceLevel * gainMult * 2.5);
             };
 
             const lvls = {
@@ -365,12 +367,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const prevVu = fxVuLevelsRef.current;
                 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
                 const smoothedVu = {
-                    main: lerp(prevVu.main, vuPacket.main, 0.15),
-                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.15),
-                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.15),
-                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.15),
-                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.15),
-                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.15),
+                    main: lerp(prevVu.main, vuPacket.main, 0.25),
+                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.25),
+                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.25),
+                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.25),
+                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.25),
+                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.25),
                 };
 
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
