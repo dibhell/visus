@@ -123,9 +123,10 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (routing === 'off') return 1.0;
         if (routing === 'bpm') return (phase < 0.15) ? 1.0 : 0.0;
         const ae = audioRef.current;
-        if (routing === 'sync1') return ae.bands.sync1;
-        if (routing === 'sync2') return ae.bands.sync2;
-        if (routing === 'sync3') return ae.bands.sync3;
+        const bandsGain = syncParamsRef.current;
+        if (routing === 'sync1') return ae.bands.sync1 * (bandsGain[0]?.gain ?? 1);
+        if (routing === 'sync2') return ae.bands.sync2 * (bandsGain[1]?.gain ?? 1);
+        if (routing === 'sync3') return ae.bands.sync3 * (bandsGain[2]?.gain ?? 1);
         return 0;
     };
 
