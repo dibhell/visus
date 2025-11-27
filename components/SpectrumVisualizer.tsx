@@ -8,11 +8,11 @@ interface Props {
     audioServiceRef: React.MutableRefObject<AudioEngine>;
     syncParams: SyncParam[];
     onParamChange: (index: number, changes: Partial<SyncParam>) => void;
-    gainDb?: number;
     enabled?: boolean;
+    threshold?: number;
 }
 
-const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onParamChange, gainDb = 0, enabled = true }) => {
+const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onParamChange, enabled = true, threshold = 0 }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const frameRef = useRef<number>(0);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -97,8 +97,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
             }
 
-            const gainLinear = Math.pow(10, gainDb / 20);
-
             if (enabled && fftData && fftData.length > 0) {
                 ctx.beginPath();
                 
@@ -107,7 +105,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const freq = getFreqFromX(x, W);
                     const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
                     const binIndex = Math.min(fftData.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData.length)));
-                    const val = Math.min(255, (fftData[binIndex] || 0) * gainLinear);
+                    const val = Math.min(255, (fftData[binIndex] || 0));
                     
                     const barHeight = (val / 255) * (H * 0.9);
                     const y = H - barHeight;
@@ -130,6 +128,17 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.lineWidth = 1.5;
                 ctx.strokeStyle = '#2dd4bf';
                 ctx.stroke();
+
+                // Threshold line (normalized 0..1 of bar height)
+                const thY = H - Math.min(1, Math.max(0, threshold)) * (H * 0.9);
+                ctx.strokeStyle = 'rgba(248,113,113,0.55)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 2]);
+                ctx.beginPath();
+                ctx.moveTo(0, thY);
+                ctx.lineTo(W, thY);
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
 
             // 4. Interactive Points

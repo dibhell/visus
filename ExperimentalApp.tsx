@@ -65,7 +65,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(1);
-    const [spectrumGainDb, setSpectrumGainDb] = useState(0);
+    const [bandThreshold, setBandThreshold] = useState(0.2);
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -286,7 +286,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const currentFxState = fxStateRef.current;
             const currentTransform = transformRef.current;
             const currentMixer = mixerRef.current;
-            const spectrumGainLinear = Math.pow(10, spectrumGainDb / 20);
 
             const bpm = currentSyncParams[0].bpm;
             const offset = currentSyncParams[0].offset;
@@ -300,12 +299,18 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 currentMixer.music.active ? vu[1] : 0,
                 currentMixer.mic.active ? vu[2] : 0,
             ];
-            const fallbackRms = Math.max(...activeVu, 0) * spectrumGainLinear;
+
+            const applyThreshold = (raw: number, gain: number) => {
+                const lvl = raw * gain;
+                const gated = Math.max(0, lvl - bandThreshold);
+                const norm = (1 - bandThreshold) > 0 ? gated / (1 - bandThreshold) : 0;
+                return Math.min(1.0, norm);
+            };
 
             const bandLevels = {
-                sync1: (ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * spectrumGainLinear) + fallbackRms * 0.02,
-                sync2: (ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * spectrumGainLinear) + fallbackRms * 0.02,
-                sync3: (ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * spectrumGainLinear) + fallbackRms * 0.02,
+                sync1: applyThreshold(ae.bands.sync1, currentSyncParams[0]?.gain ?? 1),
+                sync2: applyThreshold(ae.bands.sync2, currentSyncParams[1]?.gain ?? 1),
+                sync3: applyThreshold(ae.bands.sync3, currentSyncParams[2]?.gain ?? 1),
             };
 
             const getLevel = (routing: string, forVu = false) => {
@@ -1002,28 +1007,26 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     </section>
 
                     <section>
-                        <div className="flex items-center gap-3">
-                            <div className="flex-1">
-                                <SpectrumVisualizer
-                                    audioServiceRef={audioRef}
-                                    syncParams={syncParams}
-                                    onParamChange={updateSyncParams}
-                                    gainDb={spectrumGainDb}
-                                    enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
-                                />
-                            </div>
-                            <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-4 w-16">
-                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">SPECTRUM<br/>GAIN</div>
+                        <SpectrumVisualizer
+                            audioServiceRef={audioRef}
+                            syncParams={syncParams}
+                            onParamChange={updateSyncParams}
+                            enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
+                            threshold={bandThreshold}
+                        />
+                        <div className="flex items-center justify-end mt-2 pr-1">
+                            <div className="flex items-center gap-3 bg-black/30 border border-white/10 rounded-xl px-3 py-2">
+                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">THRESH</div>
                                 <input
                                     type="range"
-                                    min={-24}
-                                    max={12}
-                                    step={0.5}
-                                    value={spectrumGainDb}
-                                    onChange={(e) => setSpectrumGainDb(parseFloat(e.target.value))}
-                                    className="w-36 h-3 rotate-270 origin-center accent-accent"
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                    value={bandThreshold}
+                                    onChange={(e) => setBandThreshold(parseFloat(e.target.value))}
+                                    className="w-32 h-2 accent-accent"
                                 />
-                                <div className="text-[10px] text-slate-300 font-mono">{spectrumGainDb} dB</div>
+                                <div className="text-[10px] text-slate-300 font-mono">{(bandThreshold * 100).toFixed(0)}%</div>
                             </div>
                         </div>
                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />
