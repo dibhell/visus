@@ -20,6 +20,7 @@ export class AudioEngine {
     videoNode: MediaElementAudioSourceNode | null = null;
     videoGain: GainNode | null = null;
     videoAnalyser: AnalyserNode | null = null;
+    videoTapAnalyser: AnalyserNode | null = null;
     // Keep track of the element to avoid re-creation errors
     boundVideoElement: HTMLMediaElement | null = null;
 
@@ -27,11 +28,13 @@ export class AudioEngine {
     musicNode: MediaElementAudioSourceNode | null = null;
     musicGain: GainNode | null = null;
     musicAnalyser: AnalyserNode | null = null;
+    musicTapAnalyser: AnalyserNode | null = null;
 
     // Channel 3: Mic
     micNode: MediaStreamAudioSourceNode | null = null;
     micGain: GainNode | null = null;
     micAnalyser: AnalyserNode | null = null;
+    micTapAnalyser: AnalyserNode | null = null;
 
     // Data for Visuals
     bands: BandsData = { sync1: 0, sync2: 0, sync3: 0 };
@@ -114,6 +117,10 @@ export class AudioEngine {
             analyser.fftSize = 32; // Small for VU meter
             analyser.smoothingTimeConstant = 0.3;
 
+            const tap = this.ctx!.createAnalyser();
+            tap.fftSize = 512;
+            tap.smoothingTimeConstant = 0.55;
+
             let vuNode: AudioWorkletNode | null = null;
             if (this.vuWorkletReady) {
                 try {
@@ -127,38 +134,44 @@ export class AudioEngine {
             if (vuNode) {
                 gain.connect(vuNode);
                 vuNode.connect(analyser);
+                vuNode.connect(tap);
                 vuNode.connect(this.masterMix!); // to mix/recording
                 vuNode.connect(this.ctx!.destination); // to speakers
             } else {
                 gain.connect(analyser);
+                gain.connect(tap);
                 gain.connect(this.masterMix!);
                 gain.connect(this.ctx!.destination);
             }
 
-            // Keep analyser branch active even if its output is unused
+            // Keep analyser branches active even if their output is unused
             if (this.analysisSink) {
                 analyser.connect(this.analysisSink);
+                tap.connect(this.analysisSink);
             }
 
-            return { gain, analyser, vuNode };
+            return { gain, analyser, tap, vuNode };
         };
 
         // Video
         const v = createChannel();
         this.videoGain = v.gain;
         this.videoAnalyser = v.analyser;
+        this.videoTapAnalyser = v.tap;
         if (v.vuNode) v.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.video = ev.data.rms * 5; };
 
         // Music
         const m = createChannel();
         this.musicGain = m.gain;
         this.musicAnalyser = m.analyser;
+        this.musicTapAnalyser = m.tap;
         if (m.vuNode) m.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.music = ev.data.rms * 5; };
 
         // Mic
         const mic = createChannel();
         this.micGain = mic.gain;
         this.micAnalyser = mic.analyser;
+        this.micTapAnalyser = mic.tap;
         if (mic.vuNode) mic.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.mic = ev.data.rms * 5; };
     }
 

@@ -27,9 +27,14 @@ export class ExperimentalAudioEngine extends AudioEngine {
             this.vuScratch[idx] = smoothed;
         };
 
-        calc(this.videoAnalyser, 0);
-        calc(this.musicAnalyser, 1);
-        calc(this.micAnalyser, 2);
+        // Prefer dedicated taps (post-gain) for VU accuracy
+        const videoTap = (this as any).videoTapAnalyser as AnalyserNode | null;
+        const musicTap = (this as any).musicTapAnalyser as AnalyserNode | null;
+        const micTap = (this as any).micTapAnalyser as AnalyserNode | null;
+
+        calc(videoTap || this.videoAnalyser, 0);
+        calc(musicTap || this.musicAnalyser, 1);
+        calc(micTap || this.micAnalyser, 2);
 
         // Fallback: if all channels are near-zero but audio is likely playing, use main analyser energy.
         if (this.vuScratch[0] < 0.01 && this.vuScratch[1] < 0.01 && this.vuScratch[2] < 0.01 && this.vizAnalyser) {
