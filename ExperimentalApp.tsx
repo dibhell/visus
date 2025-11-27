@@ -746,8 +746,10 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const tracks: MediaStreamTrack[] = [];
         canvasStream.getVideoTracks().forEach(track => tracks.push(track));
 
+        let audioTracksCount = 0;
         if (audioStream) {
             const audioTracks = audioStream.getAudioTracks();
+            audioTracksCount = audioTracks.length;
             if (audioTracks.length === 0) {
                 console.warn('No audio tracks available for recording fallback (audio stream has 0 tracks).');
             }
@@ -757,6 +759,10 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             });
         } else {
             console.warn('audioStream is null after re-init, recording will be video-only.');
+        }
+
+        if (audioTracksCount === 0) {
+            alert('Brak ścieżki audio w nagraniu (audio stream ma 0 tracków). Upewnij się, że źródło audio jest ON i dostępne.');
         }
 
         const combinedStream = new MediaStream(tracks);
