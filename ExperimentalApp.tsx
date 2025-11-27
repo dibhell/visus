@@ -52,7 +52,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
     const lastDebugRef = useRef<number>(0);
-    const lastDebugRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -79,7 +78,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
-    const [debugBandText, setDebugBandText] = useState('');
     const [debugBandText, setDebugBandText] = useState('');
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
