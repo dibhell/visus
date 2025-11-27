@@ -305,19 +305,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 currentMixer.mic.active ? vu[2] : 0,
             ];
 
-            const applyThreshold = (raw: number, gain: number) => {
-                const th = bandThresholdRef.current;
-                const gainBoost = spectrumGainRef.current;
-                const lvl = raw * gain * gainBoost;
-                const gated = Math.max(0, lvl - th);
-                const norm = (1 - th) > 0 ? gated / (1 - th) : 0;
-                return Math.min(1.0, norm);
-            };
-
+            // Take fresh band values per frame without gating staleness
+            const th = bandThresholdRef.current;
+            const gainBoost = spectrumGainRef.current;
             const bandLevels = {
-                sync1: applyThreshold(ae.bands.sync1, currentSyncParams[0]?.gain ?? 1),
-                sync2: applyThreshold(ae.bands.sync2, currentSyncParams[1]?.gain ?? 1),
-                sync3: applyThreshold(ae.bands.sync3, currentSyncParams[2]?.gain ?? 1),
+                sync1: Math.max(0, (ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1) * gainBoost) - th),
+                sync2: Math.max(0, (ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1) * gainBoost) - th),
+                sync3: Math.max(0, (ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1) * gainBoost) - th),
             };
 
             const getLevel = (routing: string, forVu = false) => {
