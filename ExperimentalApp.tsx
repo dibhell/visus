@@ -1012,16 +1012,16 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                     enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
                                 />
                             </div>
-                            <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-2 py-3 w-16">
+                            <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-4 w-16">
                                 <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center">GAIN</div>
                                 <input
                                     type="range"
                                     min={-24}
                                     max={12}
-                                    step={1}
+                                    step={0.5}
                                     value={spectrumGainDb}
                                     onChange={(e) => setSpectrumGainDb(parseFloat(e.target.value))}
-                                    className="w-40 h-2 rotate-270 origin-center accent-accent"
+                                    className="w-36 h-3 rotate-270 origin-center accent-accent"
                                 />
                                 <div className="text-[10px] text-slate-300 font-mono">{spectrumGainDb} dB</div>
                             </div>

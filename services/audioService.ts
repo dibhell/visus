@@ -345,23 +345,24 @@ export class AudioEngine {
             pickActive(this.micTapAnalyser, this.channelActive.mic) ||
             null;
 
-        if (!analyser) return null;
+        const anyActive = this.channelActive.music || this.channelActive.video || this.channelActive.mic;
+        if (!analyser || !anyActive) return null;
 
         if (this.vizData.length !== analyser.frequencyBinCount) {
             this.vizData = new Uint8Array(analyser.frequencyBinCount);
         }
         analyser.getByteFrequencyData(this.vizData as Uint8Array<ArrayBuffer>);
 
-        // If the analyser is starved (all zeros), try a quick fallback from other analysers.
+        // If the analyser is starved (all zeros), try a quick fallback from other ACTIVE analysers only.
         let hasEnergy = false;
         for (let i = 0; i < this.vizData.length; i++) {
             if (this.vizData[i] > 0) { hasEnergy = true; break; }
         }
 
-        if (!hasEnergy) {
+        if (!hasEnergy && anyActive) {
             const scratch = new Uint8Array(512);
-            const mixInto = (src: AnalyserNode | null) => {
-                if (!src) return;
+            const mixInto = (src: AnalyserNode | null, active: boolean) => {
+                if (!src || !active) return;
                 if (src.fftSize < 1024) src.fftSize = 1024;
                 src.smoothingTimeConstant = 0.5;
                 src.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
@@ -369,10 +370,9 @@ export class AudioEngine {
                     this.vizData[i] = Math.max(this.vizData[i], scratch[i]);
                 }
             };
-            mixInto(this.videoTapAnalyser || this.videoAnalyser);
-            mixInto(this.musicTapAnalyser || this.musicAnalyser);
-            mixInto(this.micTapAnalyser || this.micAnalyser);
-            mixInto(this.vizAnalyser || this.mainAnalyser);
+            mixInto(this.videoTapAnalyser || this.videoAnalyser, this.channelActive.video);
+            mixInto(this.musicTapAnalyser || this.musicAnalyser, this.channelActive.music);
+            mixInto(this.micTapAnalyser || this.micAnalyser, this.channelActive.mic);
 
             // Last resort: use time-domain energy to synthesize a floor so the UI shows activity.
             if (this.vizData.every(v => v === 0)) {
