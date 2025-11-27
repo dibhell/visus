@@ -230,8 +230,9 @@ const App: React.FC = () => {
 
             const computeFxVal = (config: any) => {
                 const sourceLevel = getActivationLevel(config.routing, phase);
-                const gainMult = config.gain / 100;
-                return sourceLevel * gainMult; 
+                const gainMult = (config.gain ?? 100) / 100;
+                const boosted = sourceLevel * gainMult * 2.2;
+                return Math.min(3.0, boosted);
             };
 
             const lvls = {
