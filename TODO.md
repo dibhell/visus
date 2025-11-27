@@ -1,15 +1,14 @@
 # TODO — VISUS Experimental
 
-1) FX audio-reactive & VU (pilne)
-   - Naprawić zamrożone VU w FX Chain: zweryfikować przepływ bandLevels → setFxVuLevels → FxSlot; dodać logging/overlay debug w pętli renderowej (wartości band/VU na ekranie).
-   - Upewnić się, że bandLevels (Bass/Mid/High) są aktualne co klatkę i trafiają do computeFxVu/computeFxVal bez dodatkowych offsetów.
-   - Dostroić mapowanie (pow/multiplier/clamp) i smoothing tak, by VU/Depth realnie pulsowały w rytm pasma; Depth jako max, pasmo jako bieżące sterowanie.
-   - Test: tryb Experimental, FX na Bass/Mid/High, wyraźne widmo — paski VU i efekty muszą reagować.
+1) Strojenie FX audio-reactive
+   - Skala/klamra: zmniejszyć multiplier/clamp po potwierdzeniu działania (obecnie mocne *60/*12); ewentualnie przywrócić lekkie smoothing VU.
+   - Usunąć debug overlay/log po walidacji.
+   - Test: tryb Experimental, FX na Bass/Mid/High — VU/Depth mają reagować w rytm pasma.
 
-2) Diagnostyka
-   - Dodać tymczasowy overlay/console log dla bandLevels i fxVuLevels w pętli renderowej.
-   - Sprawdzić, czy setFxVuLevels jest wywoływane po zmianie bandLevels (brak throttlingu, brak podmiany przez stare wartości).
+2) AudioEngine / FFT
+   - Zweryfikować, czy filtry bandpass (sync1/2/3) dają sygnał i czy FFT fallback jest OK przy różnych ustawieniach freq/width.
+   - Dobrać smoothing/fftSize dla band analyserów, żeby bandLevels były stabilne, ale responsywne.
 
 3) Dokumentacja/porządek
-   - Zaktualizować instrukcje po naprawie VU/FX i usunięciu UI gain/threshold (w tej chwili wyłączone).
-   - Po fixie: `npm run build`.
+   - Zaktualizować instrukcje po finalnym strojeniu; usunąć debug overlay.
+   - Build: `npm run build` przed release.

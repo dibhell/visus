@@ -8,16 +8,15 @@
 - Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker.
 
 ## Obecne problemy
-- VU w FX Chain nadal potrafi być zamrożone; bandLevels nie zawsze dochodzą do slotów.
-- Modulacja Depth per pasmo jest niewiarygodna/stała mimo ruchu widma.
-- UI gain/threshold dla spectrum zostało wyłączone; czułość pasm trzeba stroić w kodzie.
+- Czułość FX/VU jest mocno podbita (mapowanie liniowe *60/*12); trzeba dostroić multiplier/clamp i ewentualnie smoothing.
+- Debug overlay/log włączony; trzeba go usunąć po walidacji działania.
+- BandLevels zależą od FFT fallbacku – sprawdzić filtry bandpass i docelowe parametry freq/width/smoothing.
 
 ## Plan naprawy FX (kolejność)
-1) Debug przepływu: bandLevels (Bass/Mid/High) → setFxVuLevels → FxSlot (vuLevel) i computeFxVal.
-2) Dodać tymczasowy overlay/logi bandLevels i fxVuLevels w pętli renderowej, z częstym odświeżaniem (~30 ms).
-3) Dostrajać mapowanie: pow < 1, multiplier i clamp tak, by VU/Depth realnie pulsowały; Depth jako max, pasmo jako bieżące sterowanie.
-4) Zweryfikować, że `getActivationLevel` zwraca bieżące bandLevels (bez offsetów) oraz że setFxVuLevels jest wywoływane po każdej zmianie.
-5) Test manualny: muzyka z wyraźnym Bass/Mid/High, routing slotów Bass/Mid/High, obserwacja VU i efektów.
+1) Strojenie mapowania: zmniejszyć multiplier/clamp, ewentualnie dodać lekkie smoothing VU po potwierdzeniu reakcji.
+2) Usunąć debug overlay/log po walidacji bandLevels/FxVu.
+3) Zweryfikować filtry bandpass vs. FFT fallback (freq/width/smoothing) i ustalić docelowe parametry.
+4) Test manualny: muzyka z wyraźnym Bass/Mid/High, routing slotów Bass/Mid/High, obserwacja VU i efektów.
 
 ## Zadania do patcha (skrót)
 - Instrumentacja bandLevels/fxVuLevels (overlay/log).

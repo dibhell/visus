@@ -1,20 +1,16 @@
-# Instructions — naprawa FX/VU (stan bieżący)
+# Instructions — strojenie FX/VU (stan 0.1.0)
 
-Cel: odblokować audio-reactive FX w trybie Experimental (VU w slotach i modulacja Depth muszą reagować na Bass/Mid/High).
+Cel: utrwalić działanie audio-reactive FX; zlikwidować debug overlay/log i wyważyć czułość.
 
-1) Debug przepływu
-- Dodaj tymczasowy overlay/log w pętli renderowej z bieżącymi `bandLevels` i `fxVuLevels` (Bass/Mid/High), odświeżany ~30 ms.
-- Zweryfikuj, że `bandLevels` pochodzą z filtrów sync1/2/3 (bez offsetów) i trafiają do `setFxVuLevels` oraz `computeFxVal`.
+1) Czułość/mapowanie
+- Obecnie mocne mapowanie (FX *60 clamp 60, VU *12 clamp 12). Dostosuj multiplier/clamp (i ewentualnie lekkie smoothing) po testach live.
 
-2) Naprawa VU
-- Upewnij się, że `setFxVuLevels` jest wywoływane po każdej zmianie bandLevels (brak zamrożenia refs/state).
-- W `FxSlot` pasek używa `vuLevel` — sprawdź, że props dochodzi (main, fx1..fx5).
-- Zmniejsz/wyłącz smoothing jeśli VU stoi; ewentualnie podbij multiplier/clamp dla VU.
+2) Overlay/log
+- Aktualny overlay/log bandLevels/VU jest tymczasowy; usuń go po potwierdzeniu, że pasma i VU reagują.
 
-3) Modulacja FX
-- Depth traktuj jako max; bandLevels sterują bieżącą wartością. Dostrajać pow/multiplier/clamp, gdy VU ruszy.
-- Test manualny: muzyka z wyraźnym Bass/Mid/High, routing slotów Bass/Mid/High, obserwacja VU i efektów.
+3) Filtry/FFT
+- BandLevels biorą max z filtrów bandpass i FFT fallbacku (freq/width). Ustal docelowe parametry filtra (fftSize/smoothing) i sprawdź, czy fallback jest jeszcze potrzebny.
 
-4) Porządek
-- UI gain/threshold dla spectrum jest wyłączone; strojenie czułości rób w kodzie (bandLevels → computeFxVal/VU).
-- Po fixie: `npm run build`.
+4) Test i build
+- Test manualny: muzyka z wyraźnym Bass/Mid/High, routing slotów Bass/Mid/High, obserwacja VU/efektów.
+- Przed releasem: `npm run build`.
