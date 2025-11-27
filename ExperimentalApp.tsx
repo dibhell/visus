@@ -51,6 +51,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastFrameRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
+    const lastDebugRef = useRef<number>(0);
+    const lastDebugRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -77,6 +79,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
+    const [debugBandText, setDebugBandText] = useState('');
+    const [debugBandText, setDebugBandText] = useState('');
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
         { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
@@ -292,13 +296,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const adjustedTime = now - offset;
             const phase = (adjustedTime % beatMs) / beatMs;
 
-            // Respect source toggles: only feed bands from active channels
-            const activeVu = [
-                currentMixer.video.active ? vu[0] : 0,
-                currentMixer.music.active ? vu[1] : 0,
-                currentMixer.mic.active ? vu[2] : 0,
-            ];
-
             // Fresh band values per frame (no extra gating)
             const bandLevels = {
                 sync1: Math.max(0, ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1)),
@@ -318,16 +315,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                // simple, strong mapping; no extra offset when off
-                const boosted = Math.pow(sourceLevel, 0.35) * gainMult * 28.0;
-                return Math.min(28.0, boosted);
+                const boosted = Math.pow(sourceLevel, 0.3) * gainMult * 32.0;
+                return Math.min(32.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
-                // VU odpowiada bezpośrednio poziomowi pasma (po progu/gain)
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(3.0, sourceLevel * gainMult * 3.0);
+                return Math.min(4.0, sourceLevel * gainMult * 4.0);
             };
 
             const lvls = {
@@ -352,6 +347,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             setVisualLevels(lvls);
             setFxVuLevels(vuPacket);
             fxVuLevelsRef.current = vuPacket;
+
+            // Debug overlay co ~120 ms
+            if (now - lastDebugRef.current > 120) {
+                setDebugBandText(`B:${bandLevels.sync1.toFixed(3)} M:${bandLevels.sync2.toFixed(3)} H:${bandLevels.sync3.toFixed(3)} | VU main:${vuPacket.main.toFixed(2)}`);
+                lastDebugRef.current = now;
+            }
 
             if (shouldUpdateUi) {
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
@@ -1036,6 +1037,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 <button onClick={() => setPanelVisible(true)} className="fixed bottom-8 left-8 z-50 bg-slate-900/80 border border-white/10 hover:border-accent hover:text-accent text-white w-14 h-14 flex items-center justify-center rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur transition-all hover:scale-110 group">
                     <span className="text-white group-hover:text-accent group-hover:rotate-90 transition-all duration-500">{ICONS.Settings}</span>
                 </button>
+            )}
+            {debugBandText && (
+                <div className="fixed bottom-3 left-3 z-[200] bg-black/70 text-white text-[10px] font-mono px-3 py-2 rounded-lg border border-white/10 shadow-lg">
+                    {debugBandText}
+                </div>
             )}
             <Credits />
         </div>
