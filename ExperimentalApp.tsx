@@ -65,7 +65,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(1);
-    const [bandThreshold, setBandThreshold] = useState(0.2);
+    const [bandThreshold, setBandThreshold] = useState(0.05);
+    const [spectrumGain, setSpectrumGain] = useState(1.0);
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -109,6 +110,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const fxVuLevelsRef = useRef(fxVuLevels);
     const mixerRef = useRef(mixer);
     const bandThresholdRef = useRef(bandThreshold);
+    const spectrumGainRef = useRef(spectrumGain);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -119,6 +121,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { bandThresholdRef.current = bandThreshold; }, [bandThreshold]);
+    useEffect(() => { spectrumGainRef.current = spectrumGain; }, [spectrumGain]);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -281,7 +284,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             const ae = audioRef.current;
             ae.update();
-            const vu = ae.getLevelsFast(0.1); // channel RMS (video, music, mic)
+            const vu = ae.getLevelsFast(0.08); // channel RMS (video, music, mic)
             const shouldUpdateUi = (now - lastUiUpdateRef.current) > 33;
 
             const currentSyncParams = syncParamsRef.current;
@@ -304,7 +307,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             const applyThreshold = (raw: number, gain: number) => {
                 const th = bandThresholdRef.current;
-                const lvl = raw * gain;
+                const gainBoost = spectrumGainRef.current;
+                const lvl = raw * gain * gainBoost;
                 const gated = Math.max(0, lvl - th);
                 const norm = (1 - th) > 0 ? gated / (1 - th) : 0;
                 return Math.min(1.0, norm);
@@ -328,14 +332,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any) => {
                 const sourceLevel = getLevel(config.routing);
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 24.0) + (config.routing === 'off' ? 0 : 0.5);
-                return Math.min(24.0, boosted);
+                const boosted = (Math.pow(sourceLevel, 0.38) * gainMult * 26.0) + (config.routing === 'off' ? 0 : 0.6);
+                return Math.min(26.0, boosted);
             };
 
             const computeFxVu = (config: any) => {
                 const sourceLevel = getLevel(config.routing, true);
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(3.0, Math.pow(sourceLevel, 0.3) * gainMult * 2.5);
+                return Math.min(3.0, Math.pow(sourceLevel, 0.25) * gainMult * 3.0);
             };
 
             const lvls = {
@@ -361,12 +365,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const prevVu = fxVuLevelsRef.current;
                 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
                 const smoothedVu = {
-                    main: lerp(prevVu.main, vuPacket.main, 0.08),
-                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.08),
-                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.08),
-                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.08),
-                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.08),
-                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.08),
+                    main: lerp(prevVu.main, vuPacket.main, 0.15),
+                    fx1: lerp(prevVu.fx1, vuPacket.fx1, 0.15),
+                    fx2: lerp(prevVu.fx2, vuPacket.fx2, 0.15),
+                    fx3: lerp(prevVu.fx3, vuPacket.fx3, 0.15),
+                    fx4: lerp(prevVu.fx4, vuPacket.fx4, 0.15),
+                    fx5: lerp(prevVu.fx5, vuPacket.fx5, 0.15),
                 };
 
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
@@ -1010,15 +1014,17 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     </section>
 
                     <section>
-                        <SpectrumVisualizer
-                            audioServiceRef={audioRef}
-                            syncParams={syncParams}
-                            onParamChange={updateSyncParams}
-                            enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
-                            threshold={bandThreshold}
-                        />
-                        <div className="flex items-center justify-end mt-2 pr-1">
-                            <div className="flex items-center gap-3 bg-black/30 border border-white/10 rounded-xl px-3 py-2">
+                        <div className="flex items-start gap-3">
+                            <div className="flex-1">
+                                <SpectrumVisualizer
+                                    audioServiceRef={audioRef}
+                                    syncParams={syncParams}
+                                    onParamChange={updateSyncParams}
+                                    enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
+                                    threshold={bandThreshold}
+                                />
+                            </div>
+                            <div className="flex flex-col items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-4 w-16">
                                 <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">THRESH</div>
                                 <input
                                     type="range"
@@ -1027,9 +1033,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                                     step={0.01}
                                     value={bandThreshold}
                                     onChange={(e) => setBandThreshold(parseFloat(e.target.value))}
-                                    className="w-32 h-2 accent-accent"
+                                    className="w-36 h-3 rotate-270 origin-center accent-accent"
                                 />
                                 <div className="text-[10px] text-slate-300 font-mono">{(bandThreshold * 100).toFixed(0)}%</div>
+                                <div className="text-[9px] text-slate-500 font-bold tracking-widest text-center leading-tight">GAIN</div>
+                                <input
+                                    type="range"
+                                    min={0.25}
+                                    max={4}
+                                    step={0.05}
+                                    value={spectrumGain}
+                                    onChange={(e) => setSpectrumGain(parseFloat(e.target.value))}
+                                    className="w-36 h-3 rotate-270 origin-center accent-accent"
+                                />
+                                <div className="text-[10px] text-slate-300 font-mono">{spectrumGain.toFixed(2)}x</div>
                             </div>
                         </div>
                         <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />
