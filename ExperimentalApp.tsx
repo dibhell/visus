@@ -739,13 +739,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const tracks: MediaStreamTrack[] = [];
         canvasStream.getVideoTracks().forEach(track => tracks.push(track));
         if (audioStream) {
-            audioStream.getAudioTracks().forEach(track => {
+            const audioTracks = audioStream.getAudioTracks();
+            if (audioTracks.length === 0) {
+                console.warn('No audio tracks available for recording fallback.');
+            }
+            audioTracks.forEach(track => {
                 if (track.enabled) tracks.push(track);
             });
+        } else {
+            console.warn('audioStream is null, recording will be video-only.');
         }
         const combinedStream = new MediaStream(tracks);
         try {
-            let mimeType = 'video/webm;codecs=vp9,opus';
+            let mimeType = 'video/webm;codecs=vp8,opus';
+            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp9,opus';
             if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
             const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate });
             recordedChunksRef.current = [];
