@@ -8,6 +8,7 @@ export class AudioEngine {
     // Main Mix Bus (For Analysis & Recording)
     masterMix: GainNode | null = null;
     mainAnalyser: AnalyserNode | null = null;
+    vizAnalyser: AnalyserNode | null = null;
     recDest: MediaStreamAudioDestinationNode | null = null;
 
     // Channel Nodes [Source -> Gain -> VU Analyser -> MasterMix]
@@ -38,6 +39,7 @@ export class AudioEngine {
     
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: Uint8Array = new Uint8Array(1024);
+    vizData: Uint8Array = new Uint8Array(1024);
     
     // Scratch buffers for VU meters
     vuData: any = new Uint8Array(16); 
@@ -56,9 +58,15 @@ export class AudioEngine {
             this.mainAnalyser.smoothingTimeConstant = 0.6;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
+            this.vizAnalyser = this.ctx.createAnalyser();
+            this.vizAnalyser.fftSize = 2048;
+            this.vizAnalyser.smoothingTimeConstant = 0.55;
+            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
+
             this.masterMix = this.ctx.createGain();
             this.masterMix.gain.value = 1.0;
             this.masterMix.connect(this.mainAnalyser);
+            this.masterMix.connect(this.vizAnalyser);
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
@@ -267,12 +275,38 @@ export class AudioEngine {
     }
 
     getFFTData(): Uint8Array | null {
-        if (!this.mainAnalyser) return null;
-        if (this.fftData.length !== this.mainAnalyser.frequencyBinCount) {
-            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+        // Prefer the dedicated viz analyser if present, fall back to main analyser.
+        const analyser = this.vizAnalyser || this.mainAnalyser;
+        if (!analyser) return null;
+
+        if (this.vizData.length !== analyser.frequencyBinCount) {
+            this.vizData = new Uint8Array(analyser.frequencyBinCount);
         }
-        this.mainAnalyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
-        return new Uint8Array(this.fftData);
+        analyser.getByteFrequencyData(this.vizData as Uint8Array<ArrayBuffer>);
+
+        // If the analyser is starved (all zeros), try a quick fallback from channel analysers.
+        let hasEnergy = false;
+        for (let i = 0; i < this.vizData.length; i++) {
+            if (this.vizData[i] > 0) { hasEnergy = true; break; }
+        }
+
+        if (!hasEnergy) {
+            const scratch = new Uint8Array(256);
+            const mixInto = (src: AnalyserNode | null) => {
+                if (!src) return;
+                if (src.fftSize < 512) src.fftSize = 512;
+                src.smoothingTimeConstant = 0.6;
+                src.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
+                for (let i = 0; i < scratch.length && i < this.vizData.length; i++) {
+                    this.vizData[i] = Math.max(this.vizData[i], scratch[i]);
+                }
+            };
+            mixInto(this.videoAnalyser);
+            mixInto(this.musicAnalyser);
+            mixInto(this.micAnalyser);
+        }
+
+        return new Uint8Array(this.vizData);
     }
 
     setupFilters(syncParams: SyncParam[]) {
@@ -326,10 +360,13 @@ export class AudioEngine {
         if (!this.mainAnalyser || !this.ctx || this.ctx.state === 'suspended') return;
 
         // 1. RAW FFT Data (Visualizer)
-        if (this.fftData.length !== this.mainAnalyser.frequencyBinCount) {
-            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+        const analyser = this.vizAnalyser || this.mainAnalyser;
+        if (analyser) {
+            if (this.fftData.length !== analyser.frequencyBinCount) {
+                this.fftData = new Uint8Array(analyser.frequencyBinCount);
+            }
+            analyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
         }
-        this.mainAnalyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
 
         // 2. Filtered Bands Data (Logic)
         this.filters.forEach((f, index) => {
