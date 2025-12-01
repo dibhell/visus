@@ -1032,6 +1032,72 @@ export const GLSL_HEADER = `
              return mix(bg, vec4(col, 1.0), amt);
         }
 
+        else if (id == 133) { // NEURAL_BLOOM
+             float lum = dot(bg.rgb, vec3(0.299, 0.587, 0.114));
+             float glow = smoothstep(0.4, 1.0, lum) * amt;
+             vec3 col = bg.rgb + vec3(glow * 0.8, glow * 0.5, glow);
+             return mix(bg, vec4(col, 1.0), amt);
+        }
+
+        else if (id == 134) { // DATA_STREAM
+             float colIdx = floor(uv.x * 60.0);
+             float speed = 2.5 + amt * 4.0;
+             float flow = fract(uv.y * 40.0 - iTime * speed + colIdx * 0.13);
+             float mask = step(flow, 0.15);
+             vec3 tint = mix(bg.rgb, vec3(0.1, 0.8, 0.5), mask * amt);
+             tint.r += rand(vec2(colIdx, iTime)) * 0.1 * amt;
+             return vec4(tint, 1.0);
+        }
+
+        else if (id == 135) { // SLIT_SCAN
+             float offset = (uv.y - 0.5) * 0.3 * amt;
+             vec2 sampleUV = vec2(uv.x + offset, uv.y);
+             sampleUV.x = fract(sampleUV.x);
+             return mix(bg, getVideo(sampleUV), amt);
+        }
+
+        else if (id == 136) { // ANAGLYPH_DRIFT
+             float drift = sin(iTime * 1.5 + uv.y * 15.0) * 0.02 * amt;
+             vec2 rUV = uv + vec2(drift, 0.0);
+             vec2 bUV = uv - vec2(drift, 0.0);
+             vec3 col;
+             col.r = getVideo(rUV).r;
+             col.g = bg.g;
+             col.b = getVideo(bUV).b;
+             return mix(bg, vec4(col, 1.0), amt);
+        }
+
+        else if (id == 137) { // ASCII_PLASMA
+             float pix = 90.0 - amt * 60.0;
+             vec2 block = floor(uv * pix) / pix;
+             float plasma = sin(block.x * 10.0 + iTime) + sin(block.y * 10.0 + iTime * 1.3);
+             plasma = 0.5 + 0.5 * plasma;
+             float gray = dot(getVideo(block).rgb, vec3(0.333));
+             float charMask = step(0.6, gray + plasma * 0.3);
+             vec3 c = mix(vec3(0.1, 0.2, 0.4), vec3(0.8, 0.9, 1.0), plasma);
+             return mix(bg, vec4(c * charMask, 1.0), amt);
+        }
+
+        else if (id == 138) { // FRACTAL_FLAMES (simple turbulence tint)
+             vec2 p = uv * 3.0;
+             float t = iTime * 0.6;
+             float n = sin(p.x + t) + sin(p.y * 1.3 - t) + sin((p.x + p.y) * 0.7 + t * 1.5);
+             n = 0.5 + 0.5 * n;
+             vec3 flame = mix(vec3(0.2, 0.0, 0.4), vec3(1.0, 0.5, 0.1), n);
+             return mix(bg, vec4(flame, 1.0), amt);
+        }
+
+        else if (id == 139) { // POLAR_GLITCH
+             vec2 p = uv * 2.0 - 1.0;
+             float r = length(p);
+             float a = atan(p.y, p.x);
+             a += (rand(vec2(floor(a * 10.0), iTime)) - 0.5) * 0.3 * amt;
+             r += (rand(vec2(floor(r * 40.0), iTime * 0.5)) - 0.5) * 0.1 * amt;
+             vec2 pol = vec2(r * cos(a), r * sin(a));
+             vec2 wuv = pol * 0.5 + 0.5;
+             return mix(bg, getVideo(wuv), amt);
+        }
+
 
 
         return bg;
@@ -1197,6 +1263,13 @@ export const SHADER_LIST: ShaderList = {
     '130_GEL_TRAIL': { id: 130, src: BASE_SHADER_BODY },
     '131_VISC_RIPPLE': { id: 131, src: BASE_SHADER_BODY },
     '132_CHROMA_WASH': { id: 132, src: BASE_SHADER_BODY },
+    '133_NEURAL_BLOOM': { id: 133, src: BASE_SHADER_BODY },
+    '134_DATA_STREAM': { id: 134, src: BASE_SHADER_BODY },
+    '135_SLIT_SCAN': { id: 135, src: BASE_SHADER_BODY },
+    '136_ANAGLYPH_DRIFT': { id: 136, src: BASE_SHADER_BODY },
+    '137_ASCII_PLASMA': { id: 137, src: BASE_SHADER_BODY },
+    '138_FRACTAL_FLAMES': { id: 138, src: BASE_SHADER_BODY },
+    '139_POLAR_GLITCH': { id: 139, src: BASE_SHADER_BODY },
 
 };
 
