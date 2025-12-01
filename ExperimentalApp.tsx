@@ -51,7 +51,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastFrameRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
-    const lastDebugRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -78,7 +77,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
-    const [debugBandText, setDebugBandText] = useState('');
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
         { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
@@ -108,6 +106,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const isMirroredRef = useRef(isMirrored);
     const renderScaleRef = useRef(renderScale);
     const fxVuLevelsRef = useRef(fxVuLevels);
+    const visualLevelsRef = useRef(visualLevels);
     const mixerRef = useRef(mixer);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
@@ -118,6 +117,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
+    useEffect(() => { visualLevelsRef.current = visualLevels; }, [visualLevels]);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -317,7 +317,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     }
                     const avg = count > 0 ? sum / count : 0;
                     const norm = Math.min(1, avg / 255);
-                    return norm * gain;
+                    return Math.min(1, norm * gain);
                 };
 
                 const fftBands = {
@@ -347,49 +347,51 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 return 0;
             };
 
-            const computeFxVal = (config: any) => {
-                const sourceLevel = getLevel(config.routing);
+            const lerp = (prev: number, next: number, alpha: number) => (prev * (1 - alpha)) + (next * alpha);
+            const fxCeiling = 24.0;
+            const vuCeiling = 10.0;
+            const fxAlpha = 0.35;
+            const vuAlpha = 0.45;
+
+            const computeFxVal = (config: any, prev: number) => {
+                const sourceLevel = Math.max(0, getLevel(config.routing));
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                // Mocne, liniowe mapowanie +-eby uwidoczni¦ç modulacj¦Ö
-                const boosted = sourceLevel * gainMult * 60.0;
-                return Math.min(60.0, boosted);
+                const shaped = Math.pow(sourceLevel, 0.7);
+                const target = Math.min(fxCeiling, shaped * gainMult * fxCeiling);
+                return lerp(prev, target, fxAlpha);
             };
 
-            const computeFxVu = (config: any) => {
-                const sourceLevel = getLevel(config.routing, true);
+            const computeFxVu = (config: any, prev: number) => {
+                const sourceLevel = Math.max(0, getLevel(config.routing, true));
                 const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(12.0, sourceLevel * gainMult * 12.0);
+                const shaped = Math.pow(sourceLevel, 0.8);
+                const target = Math.min(vuCeiling, shaped * gainMult * vuCeiling);
+                return lerp(prev, target, vuAlpha);
             };
 
             const lvls = {
-                main: computeFxVal(currentFxState.main),
-                fx1: computeFxVal(currentFxState.fx1),
-                fx2: computeFxVal(currentFxState.fx2),
-                fx3: computeFxVal(currentFxState.fx3),
-                fx4: computeFxVal(currentFxState.fx4),
-                fx5: computeFxVal(currentFxState.fx5),
+                main: computeFxVal(currentFxState.main, visualLevelsRef.current.main),
+                fx1: computeFxVal(currentFxState.fx1, visualLevelsRef.current.fx1),
+                fx2: computeFxVal(currentFxState.fx2, visualLevelsRef.current.fx2),
+                fx3: computeFxVal(currentFxState.fx3, visualLevelsRef.current.fx3),
+                fx4: computeFxVal(currentFxState.fx4, visualLevelsRef.current.fx4),
+                fx5: computeFxVal(currentFxState.fx5, visualLevelsRef.current.fx5),
             };
 
             const vuPacket = {
-                main: computeFxVu(currentFxState.main),
-                fx1: computeFxVu(currentFxState.fx1),
-                fx2: computeFxVu(currentFxState.fx2),
-                fx3: computeFxVu(currentFxState.fx3),
-                fx4: computeFxVu(currentFxState.fx4),
-                fx5: computeFxVu(currentFxState.fx5),
+                main: computeFxVu(currentFxState.main, fxVuLevelsRef.current.main),
+                fx1: computeFxVu(currentFxState.fx1, fxVuLevelsRef.current.fx1),
+                fx2: computeFxVu(currentFxState.fx2, fxVuLevelsRef.current.fx2),
+                fx3: computeFxVu(currentFxState.fx3, fxVuLevelsRef.current.fx3),
+                fx4: computeFxVu(currentFxState.fx4, fxVuLevelsRef.current.fx4),
+                fx5: computeFxVu(currentFxState.fx5, fxVuLevelsRef.current.fx5),
             };
 
-            // Aktualizuj FX VU / visualLevels na ka+-dej klatce (bez throttlingu)
+            // Aktualizuj FX VU / visualLevels na ka?dej klatce z lekkim smoothingiem
             setVisualLevels(lvls);
             setFxVuLevels(vuPacket);
+            visualLevelsRef.current = lvls;
             fxVuLevelsRef.current = vuPacket;
-
-            // Debug overlay co ~120 ms + log
-            if (now - lastDebugRef.current > 120) {
-                setDebugBandText(`B:${bandLevels.sync1.toFixed(3)} M:${bandLevels.sync2.toFixed(3)} H:${bandLevels.sync3.toFixed(3)} | VU main:${vuPacket.main.toFixed(2)} fx1:${vuPacket.fx1.toFixed(2)}`);
-                console.debug('Bands', bandLevels, 'VU', vuPacket);
-                lastDebugRef.current = now;
-            }
 
             if (shouldUpdateUi) {
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
@@ -652,116 +654,32 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         document.body.removeChild(a);
     };
 
-    const startWebCodecsRecording = async () => {
+    const startWebCodecsRecording = async (): Promise<boolean> => {
         if (!canvasRef.current) {
             alert('Canvas not ready yet.');
             return false;
         }
         const canvasStream = canvasRef.current.captureStream(recordFps);
-        const track = canvasStream.getVideoTracks()[0];
-        if (!track) {
-            alert('No video track from canvas.');
-            return false;
-        }
-        const processor = new (window as any).MediaStreamTrackProcessor({ track });
-        const reader = processor.readable.getReader();
-        readerRef.current = reader;
-        videoTrackRef.current = track;
-        encodedChunksRef.current = [];
-
-        const config: VideoEncoderConfig = {
-            codec: 'vp09.00.10.08',
-            width: canvasRef.current.width,
-            height: canvasRef.current.height,
-            framerate: recordFps,
-            bitrate: recordBitrate,
-            hardwareAcceleration: 'prefer-hardware'
-        };
-
-        const supported = await (window as any).VideoEncoder.isConfigSupported(config).catch(() => ({ supported: false }));
-        if (!supported.supported) {
-            alert('VideoEncoder config not supported, falling back to MediaRecorder.');
-            return false;
-        }
-
-        const encoder = new (window as any).VideoEncoder({
-            output: (chunk: EncodedVideoChunk) => {
-                const buf = new Uint8Array(chunk.byteLength);
-                chunk.copyTo(buf);
-                encodedChunksRef.current.push(buf);
-            },
-            error: (e: any) => console.error('Encoder error', e)
-        });
-        encoder.configure(config);
-        encoderRef.current = encoder;
-
-        let frameCount = 0;
-        const pump = async () => {
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                const frame = value as VideoFrame;
-                encoder.encode(frame, { keyFrame: frameCount % 60 === 0 });
-                frame.close();
-                frameCount++;
-            }
-        };
-        pump().catch((e) => console.error('Processor pump error', e));
-        return true;
-    };
-
-    const toggleRecording = async () => {
-        if (isRecording) {
-            if (useWebCodecsRecord && encoderRef.current) {
-                await stopWebCodecsRecording();
-            } else {
-                mediaRecorderRef.current?.stop();
-            }
-            setIsRecording(false);
-            return;
-        }
-
-        if (!canvasRef.current) {
-            alert('Canvas not ready yet.');
-            return;
-        }
-
-        if (useWebCodecsRecord && webCodecsSupported) {
-            const started = await startWebCodecsRecording();
-            if (started) {
-                setIsRecording(true);
-                return;
-            }
-        }
-
-        const canvasStream = canvasRef.current.captureStream(recordFps);
-        let audioStream = audioRef.current.getAudioStream();
-        if (!audioStream) {
-            console.warn('audioStream is null, trying to re-init audio context for recording.');
-            await audioRef.current.initContext();
-            audioRef.current.setupFilters(syncParamsRef.current);
-            audioStream = audioRef.current.getAudioStream();
-        }
-
+        const recDestStream = audioRef.current.getAudioStream();
         const tracks: MediaStreamTrack[] = [];
         canvasStream.getVideoTracks().forEach(track => tracks.push(track));
 
         let audioTracksCount = 0;
-        if (audioStream) {
-            const audioTracks = audioStream.getAudioTracks();
+        if (recDestStream) {
+            const audioTracks = recDestStream.getAudioTracks();
             audioTracksCount = audioTracks.length;
             if (audioTracks.length === 0) {
-                console.warn('No audio tracks available from recDest (0 tracks).');
+                console.warn('recDest stream has 0 audio tracks.');
             }
             audioTracks.forEach(track => {
                 track.enabled = true;
                 tracks.push(track);
             });
         } else {
-            console.warn('audioStream is null after re-init, will try element capture.');
+            console.warn('recDest stream is null, recording will be video-only unless fallback works.');
         }
 
-        // Fallback: spróbuj przechwycić audio bezpośrednio z elementu muzyki
+        // Fallback: try captureStream on audio element
         if (tracks.filter(t => t.kind === 'audio').length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
             try {
                 const elemStream = (audioElRef.current as any).captureStream();
@@ -778,8 +696,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
         }
 
-        if (audioTracksCount === 0) {
-            alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest ON, a przeglądarka wspiera captureStream/MediaStreamDestination.');
+        const audioTrackTotal = tracks.filter(t => t.kind === 'audio').length;
+        if (audioTrackTotal === 0) {
+            alert('Brak ?cie?ki audio w nagraniu (0 track?w). Upewnij si?, ?e ?r?d?o audio jest ON i dost?pne.');
+        } else {
+            console.debug('Recording tracks', { videoTracks: tracks.filter(t => t.kind === 'video').length, audioTracks: audioTrackTotal });
         }
 
         const combinedStream = new MediaStream(tracks);
@@ -804,9 +725,33 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             recorder.start(500);
             mediaRecorderRef.current = recorder;
             setIsRecording(true);
+            return true;
         } catch (e) {
             alert('Recording failed: ' + e);
+            return false;
         }
+    };
+
+    const toggleRecording = async () => {
+        if (isRecording) {
+            if (useWebCodecsRecord && encoderRef.current) {
+                await stopWebCodecsRecording();
+            }
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+            }
+            setIsRecording(false);
+            return;
+        }
+
+        if (useWebCodecsRecord && webCodecsSupported) {
+            encodedChunksRef.current = [];
+            const ok = await startWebCodecsRecording();
+            if (!ok) return;
+            return;
+        }
+
+        await startWebCodecsRecording();
     };
 
     const updateSyncParams = (index: number, changes: Partial<SyncParam>) => {
@@ -1114,11 +1059,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 <button onClick={() => setPanelVisible(true)} className="fixed bottom-8 left-8 z-50 bg-slate-900/80 border border-white/10 hover:border-accent hover:text-accent text-white w-14 h-14 flex items-center justify-center rounded-full shadow-[0_0_30px_rgba(0,0,0,0.5)] backdrop-blur transition-all hover:scale-110 group">
                     <span className="text-white group-hover:text-accent group-hover:rotate-90 transition-all duration-500">{ICONS.Settings}</span>
                 </button>
-            )}
-            {debugBandText && (
-                <div className="fixed bottom-3 left-3 z-[200] bg-black/70 text-white text-[10px] font-mono px-3 py-2 rounded-lg border border-white/10 shadow-lg">
-                    {debugBandText}
-                </div>
             )}
             <Credits />
         </div>

@@ -411,8 +411,8 @@ export class AudioEngine {
             bandpass.Q.value = p ? (1 + p.width * 0.1) : 1;
 
             const analyser = this.ctx.createAnalyser();
-            analyser.fftSize = 64; 
-            analyser.smoothingTimeConstant = 0.3;
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.55;
 
             this.masterMix.connect(bandpass);
             bandpass.connect(analyser);
@@ -473,9 +473,11 @@ export class AudioEngine {
             for (let i = 0; i < f.data.length; i++) {
                 if (f.data[i] > peak) peak = f.data[i];
             }
-            // Use peak with soft power curve for more responsive band activation
-            const norm = Math.pow(peak / 255, 0.65) * 1.4;
-            this.bands[f.name] = Math.min(1.0, norm);
+            // Use peak with soft power curve and smoothing to keep bands stable but reactive
+            const shaped = Math.pow(peak / 255, 0.75) * 1.2;
+            const target = Math.min(1.0, shaped);
+            const prev = this.bands[f.name] ?? 0;
+            this.bands[f.name] = (prev * 0.65) + (target * 0.35);
         });
     }
 }

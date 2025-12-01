@@ -1,14 +1,13 @@
-# TODO — VISUS Experimental
+# TODO - VISUS Experimental
 
 1) Strojenie FX audio-reactive
-   - Skala/klamra: zmniejszyć multiplier/clamp po potwierdzeniu działania (obecnie mocne *60/*12); ewentualnie przywrócić lekkie smoothing VU.
-   - Usunąć debug overlay/log po walidacji.
-   - Test: tryb Experimental, FX na Bass/Mid/High — VU/Depth mają reagować w rytm pasma.
+   - Nowe mapowanie: pow(0.7) + smoothing 35% z sufitem FX 24; VU pow(0.8) + smoothing 45% z sufitem 10. Zweryfikowa? na Bass/Mid/High czy czu?o?? jest wystarczaj?ca; w razie potrzeby skorygowa? mno?nik/limit.
+   - Sprawdzi?, czy smoothing VU nie spowalnia UI wzgl?dem pasma.
 
 2) AudioEngine / FFT
-   - Zweryfikować, czy filtry bandpass (sync1/2/3) dają sygnał i czy FFT fallback jest OK przy różnych ustawieniach freq/width.
-   - Dobrać smoothing/fftSize dla band analyserów, żeby bandLevels były stabilne, ale responsywne.
+   - Filtry bandpass (sync1/2/3): analyser 256, smoothing 0.55 + wyg?adzanie band?w (35%). Przetestowa? na r??nych freq/width vs FFT fallback (?rednia z okna, clamp 1) i potwierdzi? stabilne bandLevels.
+   - Ewentualnie doprecyzowa? fftSize/smoothing po testach live.
 
-3) Dokumentacja/porządek
-   - Zaktualizować instrukcje po finalnym strojeniu; usunąć debug overlay.
-   - Build: `npm run build` przed release.
+3) Dokumentacja/porz?dek
+   - README/Instructions zaktualizowane do nowego strojenia; debug overlay/log wy??czony.
+   - Przed releasem: `npm run build` + kr?tki smoke (nagrywanie/FX na pasmach).

@@ -1,25 +1,23 @@
-# VISUS Experimental — Status i kierunki prac
+# VISUS Experimental - Status i kierunki prac
 
-## Co zostało zrobione
+## Co zosta?o zrobione
 - Render przeniesiony do workera z OffscreenCanvas (`RenderWorker` + `FastGLService`) z fallbackiem.
-- Adaptacyjne LOD (renderScale) zależne od FPS.
+- Adaptacyjne LOD (renderScale) zale?ne od FPS.
 - Nagrywanie WebCodecs (prefer HW) + fallback MediaRecorder (WebM).
-- Audio: osobny `vizAnalyser`, tap-y prefader, filtry pasmowe sync1/2/3, szybkie VU (`getLevelsFast`).
-- Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker.
+- Audio: osobny `vizAnalyser`, tap-y prefader, filtry pasmowe sync1/2/3 z analyserem 256 i smoothingiem 0.55 + wyg?adzanie bandLevels (35%), FFT fallback clamp 1, szybkie VU (`getLevelsFast`).
+- Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker; debug overlay/log wy??czony.
 
 ## Obecne problemy
-- Czułość FX/VU jest mocno podbita (mapowanie liniowe *60/*12); trzeba dostroić multiplier/clamp i ewentualnie smoothing.
-- Debug overlay/log włączony; trzeba go usunąć po walidacji działania.
-- BandLevels zależą od FFT fallbacku – sprawdzić filtry bandpass i docelowe parametry freq/width/smoothing.
+- Do potwierdzenia live: czu?o?? audio-reactive (FX sufit 24, VU 10, smoothing 35/45%) na Bass/Mid/High; mo?liwe drobne korekty mno?nik?w/alpha/clamp.
+- Sprawdzi?, czy smoothing band?w/fftSize 256 jest optymalny przy r??nych freq/width i ?r?d?ach; ewentualnie doprecyzowa?.
+- Potwierdzi? nagrywanie i wydajno?? po zmianach mapowania/smoothingu.
 
-## Plan naprawy FX (kolejność)
-1) Strojenie mapowania: zmniejszyć multiplier/clamp, ewentualnie dodać lekkie smoothing VU po potwierdzeniu reakcji.
-2) Usunąć debug overlay/log po walidacji bandLevels/FxVu.
-3) Zweryfikować filtry bandpass vs. FFT fallback (freq/width/smoothing) i ustalić docelowe parametry.
-4) Test manualny: muzyka z wyraźnym Bass/Mid/High, routing slotów Bass/Mid/High, obserwacja VU i efektów.
+## Plan naprawy FX (kolejno??)
+1) Test manualny: muzyka z wyra?nym Bass/Mid/High, routing slot?w Bass/Mid/High, obserwacja VU i efekt?w.
+2) Ewentualne korekty mapowania (multiplier/alpha/clamp) i band analyser?w po testach.
+3) Build + smoke nagrywania.
 
-## Zadania do patcha (skrót)
-- Instrumentacja bandLevels/fxVuLevels (overlay/log).
-- Naprawa zamrożonego VU: upewnić się, że state/ref się aktualizują, brak zbędnego throttlingu.
-- Strojenie mapowania FX (pow/multiplier/clamp) po odblokowaniu VU.
-- `npm run build` po fixie.
+## Zadania do patcha (skr?t)
+- Zestroi? czu?o?? po testach live (FX/VU smoothing, clamp 24/10).
+- Zweryfikowa? bandpass vs. FFT fallback na r??nych freq/width.
+- `npm run build` po finalnym strojeniu.
