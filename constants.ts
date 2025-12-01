@@ -848,6 +848,77 @@ export const GLSL_HEADER = `
 
         }
 
+        else if (id == 118) { // CHROMA FRACTURE
+             vec2 grid = floor(uv * (8.0 + amt * 24.0));
+             float rnd = rand(grid + iTime);
+             float shift = (rnd - 0.5) * 0.08 * amt;
+             float shear = sin(iTime * 2.0 + grid.y) * 0.02 * amt;
+             vec2 rUV = uv + vec2(shift + shear, 0.0);
+             vec2 gUV = uv + vec2(-shift, shift * 0.5);
+             vec2 bUV = uv + vec2(shift * 0.5, -shift);
+             vec3 col;
+             col.r = getVideo(rUV).r;
+             col.g = getVideo(gUV).g;
+             col.b = getVideo(bUV).b;
+             return mix(bg, vec4(col, 1.0), amt);
+        }
+
+        else if (id == 119) { // LIQUID VHS
+             float yOff = (sin(iTime * 2.0 + uv.y * 30.0) * 0.01 + rand(uv + iTime) * 0.01) * amt;
+             float xDrift = sin(iTime * 6.0 + uv.y * 80.0) * 0.02 * amt;
+             vec2 wobble = vec2(xDrift, yOff);
+             vec4 vhs = getVideo(uv + wobble);
+             float line = step(0.94, fract(uv.y * (40.0 + amt * 80.0) + iTime * 4.0));
+             vhs.rgb += line * 0.2 * amt;
+             return mix(bg, vhs, amt);
+        }
+
+        else if (id == 120) { // VORONOI MELT (noisy warp)
+             float n = sin(uv.x * 30.0 + iTime * 1.3) + cos(uv.y * 25.0 - iTime * 1.7);
+             vec2 warp = vec2(n, sin(n + iTime * 0.7)) * 0.02 * amt;
+             vec2 wobble = uv + warp;
+             vec4 col = getVideo(wobble);
+             col.rgb = mix(col.rgb, vec3(length(col.rgb)), 0.2 * amt);
+             return mix(bg, col, amt);
+        }
+
+        else if (id == 121) { // FEEDBACK ECHO (multi zoom taps)
+             vec2 pivot = vec2(0.5);
+             vec2 p = uv - pivot;
+             vec4 acc = vec4(0.0);
+             float total = 0.0;
+             for (int i = 0; i < 4; i++) {
+                 float s = 1.0 - float(i) * 0.1 * amt;
+                 vec2 tuv = pivot + p * s;
+                 float w = 1.0 - float(i) * 0.2;
+                 acc += getVideo(tuv) * w;
+                 total += w;
+             }
+             acc /= max(0.001, total);
+             return mix(bg, acc, amt);
+        }
+
+        else if (id == 122) { // HEX GLASS
+             vec2 q = uv;
+             q.x += q.y * 0.57735;
+             float scale = mix(12.0, 60.0, amt);
+             vec2 cell = floor(q * scale);
+             vec2 f = fract(q * scale) - 0.5;
+             vec2 nearest = cell;
+             float minD = 10.0;
+             for (int j = -1; j <= 1; j++) {
+                 for (int i = -1; i <= 1; i++) {
+                     vec2 c = cell + vec2(float(i), float(j));
+                     vec2 r = f - vec2(float(i), float(j));
+                     float d = dot(r, r);
+                     if (d < minD) { minD = d; nearest = c; }
+                 }
+             }
+             vec2 hexUV = (nearest + 0.5) / scale;
+             vec4 refr = getVideo(hexUV + (uv - hexUV) * (0.2 * amt));
+             return mix(bg, refr, amt);
+        }
+
 
 
         return bg;
@@ -997,6 +1068,12 @@ export const SHADER_LIST: ShaderList = {
     '116_AUDIO_SHAKE': { id: 116, src: BASE_SHADER_BODY },
 
     '117_BARANORAMA': { id: 117, src: BASE_SHADER_BODY },
+
+    '118_CHROMA_FRACTURE': { id: 118, src: BASE_SHADER_BODY },
+    '119_LIQUID_VHS': { id: 119, src: BASE_SHADER_BODY },
+    '120_VORONOI_MELT': { id: 120, src: BASE_SHADER_BODY },
+    '121_FEEDBACK_ECHO': { id: 121, src: BASE_SHADER_BODY },
+    '122_HEX_GLASS': { id: 122, src: BASE_SHADER_BODY },
 
 };
 
