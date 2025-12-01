@@ -660,40 +660,58 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             alert('Canvas not ready yet.');
             return false;
         }
+        // Ensure audio graph is alive
+        try {
+            await audioRef.current.initContext();
+            if (audioRef.current.ctx?.state === 'suspended') {
+                await audioRef.current.ctx.resume();
+            }
+        } catch (e) {
+            console.warn('Audio context resume failed before recording', e);
+        }
+
         const canvasStream = canvasRef.current.captureStream(recordFps);
         const recDestStream = audioRef.current.getAudioStream();
         const tracks: MediaStreamTrack[] = [];
         canvasStream.getVideoTracks().forEach(track => tracks.push(track));
 
         let audioTracksCount = 0;
-        if (recDestStream) {
-            const audioTracks = recDestStream.getAudioTracks();
-            audioTracksCount = audioTracks.length;
+        const addAudioTracks = (stream: MediaStream | null, label: string) => {
+            if (!stream) return;
+            const audioTracks = stream.getAudioTracks().filter(t => t.readyState === 'live');
+            audioTracksCount += audioTracks.length;
             if (audioTracks.length === 0) {
-                console.warn('recDest stream has 0 audio tracks.');
+                console.warn(`${label} has 0 audio tracks.`);
             }
             audioTracks.forEach(track => {
                 track.enabled = true;
                 tracks.push(track);
             });
-        } else {
-            console.warn('recDest stream is null, recording will be video-only unless fallback works.');
-        }
+        };
+
+        addAudioTracks(recDestStream, 'recDest stream');
 
         // Fallback: try captureStream on audio element
-        if (tracks.filter(t => t.kind === 'audio').length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
-            try {
-                const elemStream = (audioElRef.current as any).captureStream();
-                const elemTracks = elemStream.getAudioTracks();
-                if (elemTracks.length > 0) {
-                    elemTracks.forEach((t: MediaStreamTrack) => tracks.push(t));
-                    audioTracksCount = elemTracks.length;
-                    console.warn('Using audio element captureStream for recording fallback.');
-                } else {
-                    console.warn('captureStream on audio element returned 0 audio tracks.');
+        if (tracks.filter(t => t.kind === 'audio').length === 0) {
+            if (audioElRef.current && (audioElRef.current as any).captureStream) {
+                try {
+                    const elemStream = (audioElRef.current as any).captureStream();
+                    addAudioTracks(elemStream, 'audio element captureStream');
+                    if (elemStream && elemStream.getAudioTracks().length > 0) {
+                        console.warn('Using audio element captureStream for recording fallback.');
+                    }
+                } catch (e) {
+                    console.warn('captureStream on audio element failed:', e);
                 }
-            } catch (e) {
-                console.warn('captureStream on audio element failed:', e);
+            }
+            // If the video element has audio, try capturing its stream too
+            if (videoRef.current && (videoRef.current as any).captureStream) {
+                try {
+                    const videoAudioStream = (videoRef.current as any).captureStream();
+                    addAudioTracks(videoAudioStream, 'video element captureStream');
+                } catch (e) {
+                    console.warn('captureStream on video element failed:', e);
+                }
             }
         }
 
