@@ -70,7 +70,7 @@ const MixerChannel: React.FC<Props> = ({
                         min="0" max="1.2" step="0.01"
                         value={volume}
                         onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                        className="absolute w-28 h-8 rotate-270 origin-center bg-transparent cursor-pointer appearance-none z-10"
+                        className="absolute w-28 h-8 rotate-270 origin-center cursor-pointer appearance-none z-10 opacity-0"
                         style={{
                             WebkitAppearance: 'none',
                         }}
