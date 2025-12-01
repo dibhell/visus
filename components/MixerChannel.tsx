@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface Props {
     label: string;
@@ -19,6 +19,44 @@ interface Props {
 const MixerChannel: React.FC<Props> = ({ 
     label, icon, isActive, volume, vuLevel, isPlaying, onToggle, onVolumeChange, onPlayPause, onStop, children, color = "#a78bfa"
 }) => {
+    const sliderRef = useRef<HTMLDivElement | null>(null);
+    const isDraggingRef = useRef(false);
+
+    const clampVolume = (val: number) => Math.max(0, Math.min(1.2, val));
+
+    const updateFromPointer = (clientY: number) => {
+        const el = sliderRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const ratio = 1 - (clientY - rect.top) / rect.height;
+        const mapped = clampVolume(ratio * 1.2);
+        onVolumeChange(parseFloat(mapped.toFixed(2)));
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+        if (!isDraggingRef.current) return;
+        updateFromPointer(e.clientY);
+    };
+
+    const endDrag = () => {
+        isDraggingRef.current = false;
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', endDrag);
+    };
+
+    const startDrag = (e: React.PointerEvent) => {
+        isDraggingRef.current = true;
+        updateFromPointer(e.clientY);
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', endDrag);
+    };
+
+    useEffect(() => {
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', endDrag);
+        };
+    }, []);
     
     // Create VU meter segments
     const segments = 12;
@@ -63,19 +101,12 @@ const MixerChannel: React.FC<Props> = ({
                     ))}
                 </div>
 
-                {/* Vertical Slider Wrapper */}
-                <div className="h-full w-8 relative flex items-center justify-center group">
-                    <input 
-                        type="range" 
-                        min="0" max="1.2" step="0.01"
-                        value={volume}
-                        onChange={(e) => onVolumeChange(parseFloat(e.target.value))}
-                        className="absolute w-28 h-8 rotate-270 origin-center cursor-pointer appearance-none z-10 opacity-0"
-                        style={{
-                            WebkitAppearance: 'none',
-                        }}
-                    />
-                    
+                {/* Vertical Slider Wrapper (custom drag) */}
+                <div
+                    ref={sliderRef}
+                    onPointerDown={startDrag}
+                    className="h-full w-8 relative flex items-center justify-center group cursor-pointer select-none"
+                >
                     {/* Custom Track Visual */}
                     <div className="pointer-events-none absolute w-1.5 h-full bg-slate-800/80 rounded-full overflow-hidden">
                         <div 
