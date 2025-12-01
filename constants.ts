@@ -919,6 +919,54 @@ export const GLSL_HEADER = `
              return mix(bg, refr, amt);
         }
 
+        else if (id == 123) { // VISC_GLITCH
+             float n = sin(uv.y * 40.0 + iTime * 6.0) + cos(uv.x * 35.0 - iTime * 4.0);
+             vec2 warp = vec2(n, sin(n + iTime * 1.5)) * 0.012 * amt;
+             vec4 smeared = getVideo(uv + warp);
+             float stripes = step(0.85, fract(uv.y * (25.0 + amt * 40.0) + iTime * 3.0));
+             smeared.rgb = mix(smeared.rgb, smeared.rgb.bgr, stripes * 0.6 * amt);
+             return mix(bg, smeared, amt);
+        }
+
+        else if (id == 124) { // MELT_SHIFT
+             float melt = (sin(uv.x * 18.0 + iTime * 2.5) + rand(uv + iTime)) * 0.08 * amt;
+             vec2 mUV = uv + vec2(0.0, melt);
+             vec4 c = getVideo(mUV);
+             float drip = step(0.92, fract(uv.x * 30.0 + iTime * 5.0));
+             c.rgb -= drip * 0.2 * amt;
+             return mix(bg, c, amt);
+        }
+
+        else if (id == 125) { // DRIP_CHROMA
+             float drip = (fract(uv.x * 20.0 + iTime * 0.8) - 0.5) * 0.3 * amt;
+             vec2 rUV = uv + vec2(0.0, drip);
+             vec2 gUV = uv + vec2(0.0, -drip * 0.6);
+             vec2 bUV = uv + vec2(0.0, drip * 0.3);
+             vec3 col;
+             col.r = getVideo(rUV).r;
+             col.g = getVideo(gUV).g;
+             col.b = getVideo(bUV).b;
+             return mix(bg, vec4(col, 1.0), amt);
+        }
+
+        else if (id == 126) { // FLUID_PIXEL_SMEAR
+             float pixels = 180.0 - amt * 140.0;
+             vec2 grid = floor(uv * pixels) / pixels;
+             vec2 dir = vec2(sin(iTime + grid.y * 10.0), cos(iTime * 0.7 + grid.x * 9.0)) * 0.01 * amt;
+             vec4 smear = getVideo(grid + dir);
+             smear.rgb = mix(smear.rgb, vec3(dot(smear.rgb, vec3(0.333))), 0.2 * amt);
+             return mix(bg, smear, amt);
+        }
+
+        else if (id == 127) { // WAVE_SLICE
+             float amp = 0.06 * amt;
+             float freq = 30.0 + amt * 40.0;
+             vec2 wUV = uv;
+             wUV.x += sin(uv.y * freq + iTime * 8.0) * amp;
+             vec4 warped = getVideo(wUV);
+             return mix(bg, warped, amt);
+        }
+
 
 
         return bg;
@@ -1074,6 +1122,11 @@ export const SHADER_LIST: ShaderList = {
     '120_VORONOI_MELT': { id: 120, src: BASE_SHADER_BODY },
     '121_FEEDBACK_ECHO': { id: 121, src: BASE_SHADER_BODY },
     '122_HEX_GLASS': { id: 122, src: BASE_SHADER_BODY },
+    '123_VISC_GLITCH': { id: 123, src: BASE_SHADER_BODY },
+    '124_MELT_SHIFT': { id: 124, src: BASE_SHADER_BODY },
+    '125_DRIP_CHROMA': { id: 125, src: BASE_SHADER_BODY },
+    '126_FLUID_PIXEL_SMEAR': { id: 126, src: BASE_SHADER_BODY },
+    '127_WAVE_SLICE': { id: 127, src: BASE_SHADER_BODY },
 
 };
 
