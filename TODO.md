@@ -5,7 +5,7 @@
    - Sprawdzi?, czy smoothing VU nie spowalnia UI wzgl?dem pasma.
 
 2) AudioEngine / FFT
-   - Filtry bandpass (sync1/2/3): analyser 256, smoothing 0.55 + wyg?adzanie band?w (35%). Przetestowa? na r??nych freq/width vs FFT fallback (?rednia z okna, clamp 1) i potwierdzi? stabilne bandLevels.
+   - Filtry bandpass (sync1/2/3): analyser 256, smoothing 0.45 + wyg?adzanie band?w (~50%). Przetestowa? na r??nych freq/width vs FFT fallback (?rednia z okna, clamp 1) i potwierdzi? stabilne bandLevels.
    - Ewentualnie doprecyzowa? fftSize/smoothing po testach live.
 
 3) Dokumentacja/porz?dek

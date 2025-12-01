@@ -412,7 +412,7 @@ export class AudioEngine {
 
             const analyser = this.ctx.createAnalyser();
             analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.55;
+            analyser.smoothingTimeConstant = 0.45;
 
             this.masterMix.connect(bandpass);
             bandpass.connect(analyser);
@@ -477,7 +477,7 @@ export class AudioEngine {
             const shaped = Math.pow(peak / 255, 0.75) * 1.2;
             const target = Math.min(1.0, shaped);
             const prev = this.bands[f.name] ?? 0;
-            this.bands[f.name] = (prev * 0.65) + (target * 0.35);
+            this.bands[f.name] = (prev * 0.5) + (target * 0.5);
         });
     }
 }

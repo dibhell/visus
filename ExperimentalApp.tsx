@@ -353,8 +353,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const lerp = (prev: number, next: number, alpha: number) => (prev * (1 - alpha)) + (next * alpha);
             const fxCeiling = 24.0;
             const vuCeiling = 10.0;
-            const fxAlpha = 0.35;
-            const vuAlpha = 0.45;
+            const fxAlpha = 0.30; // slightly snappier to avoid UI lag
+            const vuAlpha = 0.35; // keep VU responsive without jitter
 
             const computeFxVal = (config: any, prev: number) => {
                 const sourceLevel = Math.max(0, getLevel(config.routing));
