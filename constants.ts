@@ -967,6 +967,71 @@ export const GLSL_HEADER = `
              return mix(bg, warped, amt);
         }
 
+        else if (id == 128) { // LIQUID_ECHO
+             vec2 pivot = vec2(0.5);
+             vec2 p = uv - pivot;
+             vec4 acc = vec4(0.0);
+             float total = 0.0;
+             for (int i = 0; i < 5; i++) {
+                 float s = 1.0 - float(i) * 0.08 * amt;
+                 float rot = sin(iTime * 0.8 + float(i)) * 0.05 * amt;
+                 vec2 q = p;
+                 float cs = cos(rot), sn = sin(rot);
+                 q = mat2(cs, -sn, sn, cs) * q;
+                 vec2 tuv = pivot + q * s;
+                 float w = 1.0 - float(i) * 0.18;
+                 acc += getVideo(tuv) * w;
+                 total += w;
+             }
+             acc /= max(0.001, total);
+             return mix(bg, acc, amt);
+        }
+
+        else if (id == 129) { // FLUID_FEEDBACK
+             vec2 flow = vec2(
+                 sin(iTime * 0.9 + uv.y * 20.0),
+                 cos(iTime * 1.2 + uv.x * 18.0)
+             ) * 0.02 * amt;
+             vec4 a = getVideo(uv + flow);
+             vec4 b = getVideo(uv - flow * 0.6);
+             vec4 mixd = mix(a, b, 0.5);
+             mixd.rgb += (rand(uv + iTime) - 0.5) * 0.1 * amt;
+             return mix(bg, mixd, amt);
+        }
+
+        else if (id == 130) { // GEL_TRAIL
+             float trail = 0.015 * amt;
+             vec4 acc = vec4(0.0);
+             float total = 0.0;
+             for (int i = 0; i < 6; i++) {
+                 float t = float(i) / 5.0;
+                 vec2 shift = vec2(t * trail, t * trail * sin(iTime + uv.y * 10.0));
+                 float w = 1.0 - t * 0.8;
+                 acc += getVideo(uv - shift) * w;
+                 total += w;
+             }
+             acc /= max(0.001, total);
+             return mix(bg, acc, amt);
+        }
+
+        else if (id == 131) { // VISC_RIPPLE
+             vec2 p = uv * 2.0 - 1.0;
+             float r = length(p);
+             float ripple = sin(r * 25.0 - iTime * 8.0) * 0.03 * amt;
+             vec2 d = (p / max(0.001, r)) * ripple;
+             vec4 c = getVideo(uv + d);
+             return mix(bg, c, amt);
+        }
+
+        else if (id == 132) { // CHROMA_WASH
+             float flow = sin(iTime * 0.7 + uv.y * 12.0) * 0.03 * amt;
+             vec3 col;
+             col.r = getVideo(uv + vec2(flow, 0.0)).r;
+             col.g = getVideo(uv + vec2(-flow * 0.6, flow * 0.4)).g;
+             col.b = getVideo(uv + vec2(flow * 0.3, -flow * 0.8)).b;
+             return mix(bg, vec4(col, 1.0), amt);
+        }
+
 
 
         return bg;
@@ -1127,6 +1192,11 @@ export const SHADER_LIST: ShaderList = {
     '125_DRIP_CHROMA': { id: 125, src: BASE_SHADER_BODY },
     '126_FLUID_PIXEL_SMEAR': { id: 126, src: BASE_SHADER_BODY },
     '127_WAVE_SLICE': { id: 127, src: BASE_SHADER_BODY },
+    '128_LIQUID_ECHO': { id: 128, src: BASE_SHADER_BODY },
+    '129_FLUID_FEEDBACK': { id: 129, src: BASE_SHADER_BODY },
+    '130_GEL_TRAIL': { id: 130, src: BASE_SHADER_BODY },
+    '131_VISC_RIPPLE': { id: 131, src: BASE_SHADER_BODY },
+    '132_CHROMA_WASH': { id: 132, src: BASE_SHADER_BODY },
 
 };
 
