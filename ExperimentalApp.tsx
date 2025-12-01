@@ -60,6 +60,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const recordedChunksRef = useRef<Blob[]>([]);
 
     const [panelVisible, setPanelVisible] = useState(true);
+    const [isBooting, setIsBooting] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
     const [fps, setFps] = useState(0);
     const [frameCap, setFrameCap] = useState(60);
@@ -246,6 +247,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         audioRef.current.initContext().then(() => {
             audioRef.current.setupFilters(syncParamsRef.current);
+            setIsBooting(false);
         });
         handleResize();
 
@@ -793,6 +795,15 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
             <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{ boxShadow: '0 0 80px rgba(0,0,0,0.5)' }} />
             <video ref={videoRef} className="hidden" crossOrigin="anonymous" loop muted={false} playsInline />
+
+            {isBooting && (
+                <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur flex items-center justify-center">
+                    <div className="px-6 py-4 bg-black/80 border border-white/10 rounded-2xl text-center text-slate-200 shadow-2xl">
+                        <div className="text-sm font-semibold mb-2">Loading shaders & audio...</div>
+                        <div className="text-[11px] text-slate-400">Initializing renderer and FX list</div>
+                    </div>
+                </div>
+            )}
 
             <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-3 bg-black/60 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
