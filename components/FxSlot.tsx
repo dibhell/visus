@@ -33,12 +33,13 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
 
     // Memoize and Sort options
     const shaderOptions = useMemo(() => {
-        return Object.keys(SHADER_LIST)
-            .map(key => ({
-                value: key,
-                label: key.replace(/^\d+_/, '').replace(/_/g, ' ')
-            }))
-            .sort((a, b) => a.label.localeCompare(b.label));
+        const items = Object.keys(SHADER_LIST).map(key => ({
+            value: key,
+            label: key.replace(/^\d+_/, '').replace(/_/g, ' ')
+        }));
+        const none = items.find(i => i.value === '00_NONE');
+        const rest = items.filter(i => i.value !== '00_NONE').sort((a, b) => a.label.localeCompare(b.label));
+        return none ? [none, ...rest] : rest;
     }, []);
 
     // Modern Colors
