@@ -39,7 +39,11 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
         }));
         const none = items.find(i => i.value === '00_NONE');
         const rest = items.filter(i => i.value !== '00_NONE').sort((a, b) => a.label.localeCompare(b.label));
-        return none ? [none, ...rest] : rest;
+        const ordered = none ? [none, ...rest] : rest;
+        return ordered.map((opt, idx) => ({
+            ...opt,
+            label: `${idx + 1}. ${opt.label}`
+        }));
     }, []);
 
     // Modern Colors

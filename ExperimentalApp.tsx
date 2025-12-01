@@ -217,39 +217,51 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         if (!canvasRef.current) return;
 
-        const tryWorker = () => {
-            if (!(canvasRef.current as any).transferControlToOffscreen) return false;
-            try {
-                const worker = new (RenderWorker as any)();
-                workerRef.current = worker;
-                const offscreen = (canvasRef.current as any).transferControlToOffscreen();
+        const initWork = () => {
+            const tryWorker = () => {
+                if (!(canvasRef.current as any).transferControlToOffscreen) return false;
+                try {
+                    const worker = new (RenderWorker as any)();
+                    workerRef.current = worker;
+                    const offscreen = (canvasRef.current as any).transferControlToOffscreen();
+                    const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                    worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
+                    worker.onmessage = (ev: MessageEvent) => {
+                        if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
+                    };
+                    workerReadyRef.current = true;
+                    useWorkerRenderRef.current = true;
+                    return true;
+                } catch (err) {
+                    workerReadyRef.current = false;
+                    useWorkerRenderRef.current = false;
+                    return false;
+                }
+            };
+
+            const workerUsed = tryWorker();
+            if (!workerUsed) {
+                rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
                 const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
-                worker.onmessage = (ev: MessageEvent) => {
-                    if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
-                };
-                workerReadyRef.current = true;
-                useWorkerRenderRef.current = true;
-                return true;
-            } catch (err) {
-                workerReadyRef.current = false;
-                useWorkerRenderRef.current = false;
-                return false;
+                rendererRef.current.loadShader(shaderDef.src);
+            }
+
+            audioRef.current.initContext().then(() => {
+                audioRef.current.setupFilters(syncParamsRef.current);
+                setIsBooting(false);
+            });
+            handleResize();
+        };
+
+        const schedule = (cb: () => void) => {
+            if (typeof (window as any).requestIdleCallback === 'function') {
+                (window as any).requestIdleCallback(cb);
+            } else {
+                setTimeout(cb, 0);
             }
         };
 
-        const workerUsed = tryWorker();
-        if (!workerUsed) {
-            rendererRef.current.init(canvasRef.current);
-            const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-            rendererRef.current.loadShader(shaderDef.src);
-        }
-
-        audioRef.current.initContext().then(() => {
-            audioRef.current.setupFilters(syncParamsRef.current);
-            setIsBooting(false);
-        });
-        handleResize();
+        schedule(initWork);
 
         return () => {
             if (workerRef.current) {
