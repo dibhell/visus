@@ -11,3 +11,6 @@
 3) Dokumentacja/porz?dek
    - README/Instructions zaktualizowane do nowego strojenia; debug overlay/log wy??czony.
    - Przed releasem: `npm run build` + kr?tki smoke (nagrywanie/FX na pasmach).
+
+4) Nagrywanie WebM
+   - Brak ?cie?ki audio w nagraniach `REC VIDEO` dla niekt?rych ?r?de?. Sprawdzi? strumienie audio (recDest/captureStream fallback) i potwierdzi? obecno?? audio track?w w output.

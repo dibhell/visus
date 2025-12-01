@@ -8,9 +8,9 @@
 - Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker; debug overlay/log wy??czony.
 
 ## Obecne problemy
-- Do potwierdzenia live: czu?o?? audio-reactive (FX sufit 24, VU 10, smoothing 35/45%) na Bass/Mid/High; mo?liwe drobne korekty mno?nik?w/alpha/clamp.
-- Sprawdzi?, czy smoothing band?w/fftSize 256 jest optymalny przy r??nych freq/width i ?r?d?ach; ewentualnie doprecyzowa?.
-- Potwierdzi? nagrywanie i wydajno?? po zmianach mapowania/smoothingu.
+- Do potwierdzenia live: czułość audio-reactive (FX sufit 24, VU 10, smoothing 35/45%) na Bass/Mid/High; możliwe drobne korekty mnożników/alpha/clamp.
+- Sprawdzić, czy smoothing bandów/fftSize 256 jest optymalny przy różnych freq/width i źródłach; ewentualnie doprecyzować.
+- Potwierdzić nagrywanie (audio w WebM) i wydajność po zmianach mapowania/smoothingu.
 
 ## Plan naprawy FX (kolejno??)
 1) Test manualny: muzyka z wyra?nym Bass/Mid/High, routing slot?w Bass/Mid/High, obserwacja VU i efekt?w.

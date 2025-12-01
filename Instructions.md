@@ -10,4 +10,4 @@ Cel: potwierdzi? nowe strojenie audio-reactive; overlay/log wy??czony.
 
 3) Testy
 - Manual: tryb Experimental, routing FX na Bass/Mid/High, obserwacja VU/Depth; upewnij si?, ?e smoothing nie laguje UI.
-- Przed releasem: `npm run build` + kr?tki smoke nagrywania (MediaRecorder/WebCodecs).
+- Przed releasem: `npm run build` + kr?tki smoke nagrywania (MediaRecorder/WebCodecs) z weryfikacj? ?cie?ki audio w WebM.

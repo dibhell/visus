@@ -16,7 +16,7 @@ VISUS to przegl?darkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (plik
 ## Wersjonowanie (bie??cy stan)
 - **Branch:** `main`
 - **Wersja:** 0.1.0 (patrz `CHANGELOG.md`)
-- **Ostatnie zmiany:** strojenie audio-reactive (pow+smoothing, sufit FX 24 / VU 10), stabilniejsze band analysers (fftSize 256, smoothing 0.55 + wyg?adzanie), FFT fallback clamp 1, wy??czony debug overlay/log.
+- **Ostatnie zmiany:** strojenie audio-reactive (pow+smoothing, sufit FX 24 / VU 10), stabilniejsze band analysers (fftSize 256, smoothing 0.55 + wyg?adzanie), FFT fallback clamp 1, wy??czony debug overlay/log; trwa weryfikacja audio w nagraniach WebM.
 - **Znane problemy:** wymaga testu live czu?o?ci Bass/Mid/High (ew. korekta mno?nik?w/smoothing), potwierdzenia nagrywania i wydajno?ci po zmianach.
 
 ## Uruchomienie lokalne

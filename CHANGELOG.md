@@ -1,8 +1,9 @@
 # Changelog
 
 ## [Unreleased]
+- Track WebM audio validation for recordings; ensure MediaRecorder/WebCodecs capture audio tracks.
 - Tuned audio-reactive mapping (pow+smoothing, FX clamp 24 / VU clamp 10) and smoothed band analysers (fftSize 256, smoothing 0.55).
-- Removed debug overlay/log after validation of bandLevels/VU.
+- Removed debug overlay/log after validation of bandLevels/VU; ongoing validation of audio presence in WebM recordings.
 
 ## [0.1.0] - 2025-11-27
 - Added FFT fallback for bandLevels (Bass/Mid/High) so FX routing works even when filter bands are silent.
