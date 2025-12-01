@@ -672,62 +672,57 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const canvasStream = canvasRef.current.captureStream(recordFps);
         const recDestStream = audioRef.current.getAudioStream();
-        const tracks: MediaStreamTrack[] = [];
-        canvasStream.getVideoTracks().forEach(track => tracks.push(track));
+        const videoTracks = canvasStream.getVideoTracks();
+        const audioTracks: MediaStreamTrack[] = [];
 
-        let audioTracksCount = 0;
         const addAudioTracks = (stream: MediaStream | null, label: string) => {
             if (!stream) return;
-            const audioTracks = stream.getAudioTracks().filter(t => t.readyState === 'live');
-            audioTracksCount += audioTracks.length;
-            if (audioTracks.length === 0) {
-                console.warn(`${label} has 0 audio tracks.`);
+            const live = stream.getAudioTracks().filter(t => t.readyState === 'live');
+            if (live.length === 0) {
+                console.warn(`${label} has 0 live audio tracks.`);
             }
-            audioTracks.forEach(track => {
-                track.enabled = true;
-                tracks.push(track);
+            live.forEach(t => {
+                t.enabled = true;
+                audioTracks.push(t);
             });
         };
 
         addAudioTracks(recDestStream, 'recDest stream');
 
-        // Fallback: try captureStream on audio element
-        if (tracks.filter(t => t.kind === 'audio').length === 0) {
-            if (audioElRef.current && (audioElRef.current as any).captureStream) {
-                try {
-                    const elemStream = (audioElRef.current as any).captureStream();
-                    addAudioTracks(elemStream, 'audio element captureStream');
-                    if (elemStream && elemStream.getAudioTracks().length > 0) {
-                        console.warn('Using audio element captureStream for recording fallback.');
-                    }
-                } catch (e) {
-                    console.warn('captureStream on audio element failed:', e);
+        // Fallbacks if recDest is empty
+        if (audioTracks.length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
+            try {
+                const elemStream = (audioElRef.current as any).captureStream();
+                addAudioTracks(elemStream, 'audio element captureStream');
+                if (elemStream && elemStream.getAudioTracks().length > 0) {
+                    console.warn('Using audio element captureStream for recording fallback.');
                 }
+            } catch (e) {
+                console.warn('captureStream on audio element failed:', e);
             }
-            // If the video element has audio, try capturing its stream too
-            if (videoRef.current && (videoRef.current as any).captureStream) {
-                try {
-                    const videoAudioStream = (videoRef.current as any).captureStream();
-                    addAudioTracks(videoAudioStream, 'video element captureStream');
-                } catch (e) {
-                    console.warn('captureStream on video element failed:', e);
-                }
+        }
+        if (audioTracks.length === 0 && videoRef.current && (videoRef.current as any).captureStream) {
+            try {
+                const videoAudioStream = (videoRef.current as any).captureStream();
+                addAudioTracks(videoAudioStream, 'video element captureStream');
+            } catch (e) {
+                console.warn('captureStream on video element failed:', e);
             }
         }
 
-        const audioTrackTotal = tracks.filter(t => t.kind === 'audio').length;
+        const audioTrackTotal = audioTracks.length;
         if (audioTrackTotal === 0) {
-            alert('Brak ?cie?ki audio w nagraniu (0 track?w). Upewnij si?, ?e ?r?d?o audio jest ON i dost?pne.');
+            alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
         } else {
-            console.debug('Recording tracks', { videoTracks: tracks.filter(t => t.kind === 'video').length, audioTracks: audioTrackTotal });
+            console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: audioTrackTotal, labels: audioTracks.map(t => t.label) });
         }
 
-        const combinedStream = new MediaStream(tracks);
+        const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
         try {
             let mimeType = 'video/webm;codecs=vp8,opus';
             if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp9,opus';
             if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
-            const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate });
+            const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate, audioBitsPerSecond: 192000 });
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
             recorder.onstop = () => {
