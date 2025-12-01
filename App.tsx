@@ -23,13 +23,6 @@ const ICONS = {
     Settings: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 };
 
-const Credits: React.FC = () => (
-    <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-400 bg-black/50 border border-white/10 px-3 py-1 rounded-full backdrop-blur pointer-events-none">
-        Studio Popłoch C © 2025 • Pan Grzyb -
-        <a className="underline ml-1 pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
-    </div>
-);
-
 const App: React.FC = () => {
     // --- REFS ---
     const glService = useRef<GLService>(new GLService());
@@ -46,7 +39,6 @@ const App: React.FC = () => {
 
     // --- STATE ---
     const [isSystemActive, setIsSystemActive] = useState(false);
-    const [launchMode, setLaunchMode] = useState<'legacy' | 'experimental'>('legacy');
     const [fps, setFps] = useState(0);
     const [panelVisible, setPanelVisible] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
@@ -546,8 +538,8 @@ const App: React.FC = () => {
         setTransform(prev => ({ ...prev, [key]: value }));
     };
 
-    if (launchMode === 'experimental') {
-        return <ExperimentalApp onExit={() => { setLaunchMode('legacy'); setIsSystemActive(false); }} />;
+    if (isSystemActive) {
+        return <ExperimentalApp onExit={() => setIsSystemActive(false)} />;
     }
 
     // --- LANDING SCREEN ---
@@ -563,15 +555,11 @@ const App: React.FC = () => {
                     </div>
                     <h1 className="text-6xl md:text-8xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-400 tracking-tighter">VISUS</h1>
                     <div className="flex gap-3 flex-col sm:flex-row">
-                        <button className="group relative px-16 py-5 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.15)]" onClick={() => { setLaunchMode('legacy'); setIsSystemActive(true); }}>
+                        <button className="group relative px-16 py-5 bg-white text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(255,255,255,0.15)]" onClick={() => { setIsSystemActive(true); }}>
                             <span className="relative z-10">INITIALIZE</span>
-                        </button>
-                        <button className="group relative px-16 py-5 bg-gradient-to-r from-amber-200 to-orange-400 text-black font-bold rounded-full hover:scale-105 transition-all duration-300 tracking-widest text-sm overflow-hidden shadow-[0_0_40px_rgba(251,191,36,0.35)]" onClick={() => { setLaunchMode('experimental'); setIsSystemActive(false); }}>
-                            <span className="relative z-10">EXPERIMENTAL</span>
                         </button>
                     </div>
                 </div>
-                <Credits />
             </div>
         );
     }
@@ -787,7 +775,6 @@ const App: React.FC = () => {
                     <span className="text-white group-hover:text-accent group-hover:rotate-90 transition-all duration-500">{ICONS.Settings}</span>
                 </button>
             )}
-            <Credits />
         </div>
     );
 };

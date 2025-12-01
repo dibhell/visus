@@ -28,9 +28,10 @@ interface ExperimentalProps {
 }
 
 const Credits: React.FC = () => (
-    <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-400 bg-black/50 border border-white/10 px-3 py-1 rounded-full backdrop-blur pointer-events-none">
-        Studio Poploch C (c) 2025 - Pan Grzyb -
+    <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-200 bg-black/60 border border-white/10 px-3 py-1 rounded-full backdrop-blur pointer-events-none">
+        <span className="opacity-80">Studio Popłoch © 2025 • Pan Grzyb • </span>
         <a className="underline ml-1 pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
+        <span className="ml-2 opacity-80">• v0.1.0</span>
     </div>
 );
 
