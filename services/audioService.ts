@@ -11,7 +11,7 @@ export class AudioEngine {
     vizAnalyser: AnalyserNode | null = null;
     analysisSink: GainNode | null = null;
     recDest: MediaStreamAudioDestinationNode | null = null;
-    recordTaps: MediaStreamAudioDestinationNode[] = [];
+    recordTaps: { dest: MediaStreamAudioDestinationNode, keepAlive: GainNode }[] = [];
     vizOut: GainNode | null = null;
 
     // Channel Nodes [Source -> Gain -> VU Analyser -> MasterMix]
@@ -368,15 +368,25 @@ export class AudioEngine {
         tap.channelCount = 2;
         tap.channelCountMode = 'explicit';
         tap.channelInterpretation = 'speakers';
+        const keepAlive = this.ctx.createGain();
+        keepAlive.gain.value = 0;
+        // feed the tap into a silent sink to keep the track alive even before MediaRecorder starts pulling
+        tap.connect(keepAlive);
+        keepAlive.connect(this.ctx.destination);
         this.masterMix.connect(tap);
-        this.recordTaps.push(tap);
+        this.recordTaps.push({ dest: tap, keepAlive });
         return tap;
     }
 
     releaseRecordingTap(tap: MediaStreamAudioDestinationNode | null) {
         if (!tap || !this.masterMix) return;
+        const entry = this.recordTaps.find(t => t.dest === tap);
         try { this.masterMix.disconnect(tap); } catch {}
-        this.recordTaps = this.recordTaps.filter(t => t !== tap);
+        if (entry) {
+            try { tap.disconnect(entry.keepAlive); } catch {}
+            try { entry.keepAlive.disconnect(); } catch {}
+        }
+        this.recordTaps = this.recordTaps.filter(t => t.dest !== tap);
     }
 
     getFFTData(): Uint8Array | null {
