@@ -191,117 +191,121 @@ const App: React.FC = () => {
     useEffect(() => {
         if (!isSystemActive) return;
 
-        if (canvasRef.current) {
-            const success = glService.current.init(canvasRef.current);
-            if (success) {
-                const currentShaderKey = fxStateRef.current.main.shader;
-                const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
-                glService.current.loadShader(shaderDef.src);
-            }
-        }
+        const schedule = (fn: () => void) => {
+            const ric = (window as any).requestIdleCallback;
+            if (typeof ric === 'function') ric(fn);
+            else setTimeout(fn, 0);
+        };
 
-        // Init Audio Context early to allow setup
-        audioService.current.initContext().then(() => {
-             // Initial Filter Setup
-             audioService.current.setupFilters(syncParamsRef.current);
-        });
-
-        handleResize();
-        window.addEventListener('resize', handleResize);
-        const v = videoRef.current;
-        if (v) v.addEventListener('loadedmetadata', handleResize);
-
-        const loop = (t: number) => {
-            if (!isSystemActiveRef.current) return;
-
-            const ae = audioService.current;
-            ae.update(); 
-            
-            // Read VU Meters (throttle to ~20-30 Hz to spare React/paint)
-            if ((t - lastVuUpdateRef.current) > 40) {
-                const levels = ae.getLevels();
-                setVuLevels(levels);
-                lastVuUpdateRef.current = t;
+        schedule(() => {
+            if (canvasRef.current) {
+                const success = glService.current.init(canvasRef.current);
+                if (success) {
+                    const currentShaderKey = fxStateRef.current.main.shader;
+                    const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
+                    glService.current.loadShader(shaderDef.src);
+                }
             }
 
-            const currentSyncParams = syncParamsRef.current;
-            const currentFxState = fxStateRef.current;
-            const currentTransform = transformRef.current;
+            audioService.current.initContext().then(() => {
+                 audioService.current.setupFilters(syncParamsRef.current);
+            });
 
-            const bpm = currentSyncParams[0].bpm;
-            const offset = currentSyncParams[0].offset;
-            const beatMs = 60000 / bpm;
-            const adjustedTime = t - offset;
-            const phase = (adjustedTime % beatMs) / beatMs;
+            handleResize();
+            window.addEventListener('resize', handleResize);
+            const v = videoRef.current;
+            if (v) v.addEventListener('loadedmetadata', handleResize);
 
-            const computeFxVal = (config: any) => {
-                const sourceLevel = getActivationLevel(config.routing, phase);
-                const gainMult = (config.gain ?? 100) / 100;
-                const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
-                return Math.min(18.0, boosted);
+            const loop = (t: number) => {
+                if (!isSystemActiveRef.current) return;
+
+                const ae = audioService.current;
+                ae.update(); 
+                
+                if ((t - lastVuUpdateRef.current) > 40) {
+                    const levels = ae.getLevels();
+                    setVuLevels(levels);
+                    lastVuUpdateRef.current = t;
+                }
+
+                const currentSyncParams = syncParamsRef.current;
+                const currentFxState = fxStateRef.current;
+                const currentTransform = transformRef.current;
+
+                const bpm = currentSyncParams[0].bpm;
+                const offset = currentSyncParams[0].offset;
+                const beatMs = 60000 / bpm;
+                const adjustedTime = t - offset;
+                const phase = (adjustedTime % beatMs) / beatMs;
+
+                const computeFxVal = (config: any) => {
+                    const sourceLevel = getActivationLevel(config.routing, phase);
+                    const gainMult = (config.gain ?? 100) / 100;
+                    const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
+                    return Math.min(18.0, boosted);
+                };
+
+                const computeFxVu = (config: any) => {
+                    const sourceLevel = getActivationLevel(config.routing, phase);
+                    const gainMult = (config.gain ?? 100) / 100;
+                    return Math.min(1.5, Math.pow(sourceLevel, 0.5) * gainMult);
+                };
+
+                const lvls = {
+                    main: computeFxVal(currentFxState.main),
+                    fx1: computeFxVal(currentFxState.fx1),
+                    fx2: computeFxVal(currentFxState.fx2),
+                    fx3: computeFxVal(currentFxState.fx3),
+                    fx4: computeFxVal(currentFxState.fx4),
+                    fx5: computeFxVal(currentFxState.fx5),
+                };
+
+                const computedFx = {
+                    mainFXGain: lvls.main, 
+                    main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
+                    mainMix: (currentFxState.main.mix ?? 100) / 100,
+                    mix: currentFxState.main.mix,
+                    additiveMasterGain: additiveGainRef.current / 100,
+                    transform: currentTransform,
+                    isMirrored: isMirroredRef.current,
+                    fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5,
+                    fx1Mix: (currentFxState.fx1.mix ?? 100) / 100,
+                    fx2Mix: (currentFxState.fx2.mix ?? 100) / 100,
+                    fx3Mix: (currentFxState.fx3.mix ?? 100) / 100,
+                    fx4Mix: (currentFxState.fx4.mix ?? 100) / 100,
+                    fx5Mix: (currentFxState.fx5.mix ?? 100) / 100,
+                    fx1_id: SHADER_LIST[currentFxState.fx1.shader]?.id || 0,
+                    fx2_id: SHADER_LIST[currentFxState.fx2.shader]?.id || 0,
+                    fx3_id: SHADER_LIST[currentFxState.fx3.shader]?.id || 0,
+                    fx4_id: SHADER_LIST[currentFxState.fx4.shader]?.id || 0,
+                    fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
+                };
+
+                if (videoRef.current) {
+                    glService.current.updateTexture(videoRef.current);
+                    glService.current.draw(t, videoRef.current, computedFx);
+                }
+
+                if (t - lastTimeRef.current > 100) {
+                    const dt = t - lastTimeRef.current;
+                    const instFps = dt > 0 ? 1000 / dt : 0;
+                    const smooth = (fps * 0.7) + (instFps * 0.3);
+                    setFps(Math.round(smooth));
+                    setVisualLevels(lvls);
+                    lastTimeRef.current = t;
+                }
+
+                animationFrameRef.current = requestAnimationFrame(loop);
             };
-
-            const computeFxVu = (config: any) => {
-                const sourceLevel = getActivationLevel(config.routing, phase);
-                const gainMult = (config.gain ?? 100) / 100;
-                return Math.min(1.5, Math.pow(sourceLevel, 0.5) * gainMult);
-            };
-
-            const lvls = {
-                main: computeFxVal(currentFxState.main),
-                fx1: computeFxVal(currentFxState.fx1),
-                fx2: computeFxVal(currentFxState.fx2),
-                fx3: computeFxVal(currentFxState.fx3),
-                fx4: computeFxVal(currentFxState.fx4),
-                fx5: computeFxVal(currentFxState.fx5),
-            };
-
-            const computedFx = {
-                mainFXGain: lvls.main, 
-                main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
-                mainMix: (currentFxState.main.mix ?? 100) / 100,
-                mix: currentFxState.main.mix,
-                additiveMasterGain: additiveGainRef.current / 100,
-                transform: currentTransform,
-                isMirrored: isMirroredRef.current,
-                fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5,
-                fx1Mix: (currentFxState.fx1.mix ?? 100) / 100,
-                fx2Mix: (currentFxState.fx2.mix ?? 100) / 100,
-                fx3Mix: (currentFxState.fx3.mix ?? 100) / 100,
-                fx4Mix: (currentFxState.fx4.mix ?? 100) / 100,
-                fx5Mix: (currentFxState.fx5.mix ?? 100) / 100,
-                fx1_id: SHADER_LIST[currentFxState.fx1.shader]?.id || 0,
-                fx2_id: SHADER_LIST[currentFxState.fx2.shader]?.id || 0,
-                fx3_id: SHADER_LIST[currentFxState.fx3.shader]?.id || 0,
-                fx4_id: SHADER_LIST[currentFxState.fx4.shader]?.id || 0,
-                fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
-            };
-
-            if (videoRef.current) {
-                glService.current.updateTexture(videoRef.current);
-                glService.current.draw(t, videoRef.current, computedFx);
-
-            }
-
-            if (t - lastTimeRef.current > 100) {
-                const dt = t - lastTimeRef.current;
-                const instFps = dt > 0 ? 1000 / dt : 0;
-                const smooth = (fps * 0.7) + (instFps * 0.3);
-                setFps(Math.round(smooth));
-                setVisualLevels(lvls);
-                lastTimeRef.current = t;
-            }
 
             animationFrameRef.current = requestAnimationFrame(loop);
-        };
 
-        animationFrameRef.current = requestAnimationFrame(loop);
-
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            if (v) v.removeEventListener('loadedmetadata', handleResize);
-            cancelAnimationFrame(animationFrameRef.current);
-        };
+            return () => {
+                window.removeEventListener('resize', handleResize);
+                if (v) v.removeEventListener('loadedmetadata', handleResize);
+                cancelAnimationFrame(animationFrameRef.current);
+            };
+        });
     }, [isSystemActive, handleResize]);
 
     // --- HANDLERS ---
