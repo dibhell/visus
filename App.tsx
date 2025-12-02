@@ -493,20 +493,38 @@ const App: React.FC = () => {
             if (!canvas) return;
             const videoStream = (canvas as any).captureStream(60);
             const audioStream = audioService.current.getAudioStream();
-            
+
             const combinedTracks = [...videoStream.getVideoTracks()];
             if (audioStream) {
-                audioStream.getAudioTracks().forEach(track => { 
-                    if (track.enabled) combinedTracks.push(track); 
-                });
+                const live = audioStream.getAudioTracks().filter(t => t.readyState === 'live' && !t.muted);
+                live.forEach(track => { track.enabled = true; combinedTracks.push(track); });
             }
-            
+
+            if (combinedTracks.filter(t => t.kind === 'audio').length === 0) {
+                alert('Brak ścieżki audio w nagraniu. Upewnij się, że źródło audio jest włączone.');
+                return;
+            }
+
             const combinedStream = new MediaStream(combinedTracks);
             try {
-                let mimeType = 'video/webm;codecs=vp9,opus';
-                if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+                const pickMimeType = () => {
+                    const candidates = [
+                        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                        'video/mp4',
+                        'video/webm;codecs=vp9,opus',
+                        'video/webm;codecs=vp8,opus',
+                        'video/webm'
+                    ];
+                    return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
+                };
+                const mimeType = pickMimeType();
+                if (!mimeType) {
+                    alert('MediaRecorder: brak obsługiwanego formatu (mp4/webm).');
+                    return;
+                }
+                const fileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
                 
-                const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000 });
+                const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 12000000, audioBitsPerSecond: 192000 });
                 recordedChunksRef.current = [];
                 recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
                 recorder.onstop = () => {
@@ -515,7 +533,7 @@ const App: React.FC = () => {
                     const a = document.createElement('a');
                     a.href = url;
                     const now = new Date();
-                    a.download = `VISUS_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.webm`;
+                    a.download = `VISUS_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.${fileExt}`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);

@@ -328,7 +328,29 @@ export class AudioEngine {
     // --- ANALYSIS ENGINE ---
 
     getAudioStream(): MediaStream | null {
-        return this.recDest ? this.recDest.stream : null;
+        if (!this.ctx || !this.masterMix) return null;
+
+        // Lazily create destination if missing
+        if (!this.recDest) {
+            this.recDest = this.ctx.createMediaStreamDestination();
+            this.masterMix.connect(this.recDest);
+        }
+
+        const tracks = this.recDest.stream.getAudioTracks();
+        const hasLive = tracks.some(t => t.readyState === 'live');
+        const allMuted = tracks.length > 0 && tracks.every(t => t.muted);
+
+        // If the node stopped producing audio (muted/ended), rebuild destination to restore a live track.
+        if (!hasLive || allMuted) {
+            try { this.masterMix.disconnect(this.recDest); } catch {}
+            this.recDest = this.ctx.createMediaStreamDestination();
+            this.masterMix.connect(this.recDest);
+        } else {
+            // Ensure the track is enabled before handing it to MediaRecorder.
+            tracks.forEach(t => { t.enabled = true; });
+        }
+
+        return this.recDest.stream;
     }
 
     getFFTData(): Uint8Array | null {

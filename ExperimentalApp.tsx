@@ -687,15 +687,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
 
         const canvasStream = canvasRef.current.captureStream(recordFps);
-        const recDestStream = audioRef.current.getAudioStream();
         const videoTracks = canvasStream.getVideoTracks();
         const audioTracks: MediaStreamTrack[] = [];
 
         const addAudioTracks = (stream: MediaStream | null, label: string) => {
             if (!stream) return;
-            const live = stream.getAudioTracks().filter(t => t.readyState === 'live');
+            const live = stream.getAudioTracks().filter(t => t.readyState === 'live' && !t.muted);
             if (live.length === 0) {
-                console.warn(`${label} has 0 live audio tracks.`);
+                console.warn(`${label} has 0 live/unmuted audio tracks.`);
             }
             live.forEach(t => {
                 t.enabled = true;
@@ -703,9 +702,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             });
         };
 
-        addAudioTracks(recDestStream, 'recDest stream');
+        addAudioTracks(audioRef.current.getAudioStream(), 'mix destination');
 
-        // Fallbacks if recDest is empty
+        // Fallbacks if mix is empty or muted
         if (audioTracks.length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
             try {
                 const elemStream = (audioElRef.current as any).captureStream();
@@ -729,15 +728,29 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const audioTrackTotal = audioTracks.length;
         if (audioTrackTotal === 0) {
             alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
-        } else {
-            console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: audioTrackTotal, labels: audioTracks.map(t => t.label) });
+            return false;
         }
+
+        console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: audioTrackTotal, labels: audioTracks.map(t => t.label) });
 
         const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
         try {
-            let mimeType = 'video/webm;codecs=vp8,opus';
-            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp9,opus';
-            if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+            const pickMimeType = () => {
+                const candidates = [
+                    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                    'video/mp4',
+                    'video/webm;codecs=vp9,opus',
+                    'video/webm;codecs=vp8,opus',
+                    'video/webm'
+                ];
+                return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
+            };
+            const mimeType = pickMimeType();
+            if (!mimeType) {
+                alert('MediaRecorder: brak obsługiwanego formatu (mp4/webm).');
+                return false;
+            }
+            const fileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
             const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate, audioBitsPerSecond: 192000 });
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
@@ -747,7 +760,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 const a = document.createElement('a');
                 a.href = url;
                 const now = new Date();
-                a.download = `VISUS_EXPERIMENTAL_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.webm`;
+                a.download = `VISUS_EXPERIMENTAL_${now.toISOString().replace(/[:.]/g, '-').slice(0, -5)}.${fileExt}`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
