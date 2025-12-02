@@ -131,12 +131,20 @@ const App: React.FC = () => {
         setIsMobile(isMobileNow);
         const panelWidth = (panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0;
         const sideGap = panelVisible ? 16 : 0;
-        const availableW = Math.max(0, wWindow - panelWidth - sideGap);
+        let availableW = Math.max(0, wWindow - panelWidth - sideGap);
         let availableH = hWindow;
         let topOffset = 0;
 
-        if (isMobileNow && panelVisible) {
-            availableH = hWindow * 0.45;
+        if (isMobileNow) {
+            availableW = wWindow;
+            if (panelVisible) {
+                availableH = hWindow * 0.45;
+                topOffset = 8;
+            }
+        } else {
+            if (panelVisible) {
+                availableH = hWindow;
+            }
         }
         
         let finalW = wWindow;
