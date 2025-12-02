@@ -160,16 +160,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         setIsMobile(isMobileNow);
         const panelWidth = (panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0;
         const sideGap = panelVisible ? 16 : 0;
-        let availableW = Math.max(0, wWindow - panelWidth - sideGap);
+        const availableW = isMobileNow ? wWindow : Math.max(0, wWindow - panelWidth - sideGap);
         let availableH = hWindow;
         let topOffset = 0;
 
-        if (isMobileNow) {
-            availableW = wWindow;
-            if (panelVisible) {
-                availableH = hWindow * 0.45;
-                topOffset = 8;
-            }
+        if (isMobileNow && panelVisible) {
+            availableH = hWindow * 0.45;
+            topOffset = 8;
         }
 
         let finalW = wWindow;
@@ -204,7 +201,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         canvas.style.width = `${displayW}px`;
         canvas.style.height = `${displayH}px`;
-        canvas.style.left = `${panelWidth + sideGap + (availableW - displayW) / 2}px`;
+        canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
         if (useWorkerRenderRef.current && workerRef.current) {
