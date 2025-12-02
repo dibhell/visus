@@ -482,30 +482,67 @@ const App: React.FC = () => {
         }
     };
 
-    const toggleRecording = () => {
+    const toggleRecording = async () => {
         if (isRecording) {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
                 setIsRecording(false);
             }
         } else {
+            // Ensure audio context is running before we try to capture its destination
+            await audioService.current.initContext();
+            if (audioService.current.ctx?.state === 'suspended') {
+                try { await audioService.current.ctx.resume(); } catch {}
+            }
+
             const canvas = canvasRef.current;
             if (!canvas) return;
             const videoStream = (canvas as any).captureStream(60);
-            const audioStream = audioService.current.getAudioStream();
+            const videoTracks = videoStream.getVideoTracks();
+            const audioTracks: MediaStreamTrack[] = [];
 
-            const combinedTracks = [...videoStream.getVideoTracks()];
-            if (audioStream) {
-                const live = audioStream.getAudioTracks().filter(t => t.readyState === 'live' && !t.muted);
-                live.forEach(track => { track.enabled = true; combinedTracks.push(track); });
+            const addAudioTracks = (stream: MediaStream | null, label: string) => {
+                if (!stream) return;
+                const live = stream.getAudioTracks().filter(t => t.readyState === 'live');
+                if (live.length === 0) {
+                    console.warn(`${label} has 0 live audio tracks.`);
+                }
+                live.forEach(t => {
+                    t.enabled = true;
+                    audioTracks.push(t);
+                });
+            };
+
+            // Primary: mixed destination from AudioEngine
+            addAudioTracks(audioService.current.getAudioStream(), 'mix destination');
+
+            // Fallbacks if mix is empty
+            if (audioTracks.length === 0 && currentAudioElRef.current && (currentAudioElRef.current as any).captureStream) {
+                try {
+                    const elemStream = (currentAudioElRef.current as any).captureStream();
+                    addAudioTracks(elemStream, 'audio element captureStream');
+                    if (elemStream && elemStream.getAudioTracks().length > 0) {
+                        console.warn('Using audio element captureStream for recording fallback.');
+                    }
+                } catch (e) {
+                    console.warn('captureStream on audio element failed:', e);
+                }
+            }
+            if (audioTracks.length === 0 && videoRef.current && (videoRef.current as any).captureStream) {
+                try {
+                    const videoAudioStream = (videoRef.current as any).captureStream();
+                    addAudioTracks(videoAudioStream, 'video element captureStream');
+                } catch (e) {
+                    console.warn('captureStream on video element failed:', e);
+                }
             }
 
-            if (combinedTracks.filter(t => t.kind === 'audio').length === 0) {
-                alert('Brak ścieżki audio w nagraniu. Upewnij się, że źródło audio jest włączone.');
+            if (audioTracks.length === 0) {
+                alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
                 return;
             }
 
-            const combinedStream = new MediaStream(combinedTracks);
+            const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
             try {
                 const pickMimeType = () => {
                     const candidates = [
