@@ -688,59 +688,37 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const canvasStream = canvasRef.current.captureStream(recordFps);
         const videoTracks = canvasStream.getVideoTracks();
-        const audioTracks: MediaStreamTrack[] = [];
         const recordingAudio = (audioRef.current as any).createRecordingStream ? (audioRef.current as any).createRecordingStream() : { stream: audioRef.current.getAudioStream(), cleanup: () => {} };
 
-        const addAudioTracks = (stream: MediaStream | null, label: string) => {
-            if (!stream) return;
-            const tracks = stream.getAudioTracks();
-            if (tracks.length === 0) {
-                console.warn(`${label} has 0 audio tracks.`);
+        const pickFirstLiveTrack = (streams: Array<{ stream: MediaStream | null, label: string }>) => {
+            for (const entry of streams) {
+                if (!entry.stream) continue;
+                const t = entry.stream.getAudioTracks().find(track => track.readyState === 'live');
+                if (t) {
+                    t.enabled = true;
+                    console.debug('Using audio track from', entry.label, t.label);
+                    return t;
+                }
             }
-            tracks.forEach(t => {
-                t.enabled = true;
-                audioTracks.push(t);
-            });
+            return null;
         };
 
-        addAudioTracks(recordingAudio.stream, 'mix destination');
+        const candidateStreams = [
+            { stream: audioElRef.current && (audioElRef.current as any).captureStream ? (audioElRef.current as any).captureStream() : null, label: 'audio element captureStream' },
+            { stream: recordingAudio.stream, label: 'recording stream' },
+            { stream: videoRef.current && (videoRef.current as any).captureStream ? (videoRef.current as any).captureStream() : null, label: 'video element captureStream' },
+        ];
 
-        // Always also add direct element capture to maximize compatibility
-        if (audioElRef.current && (audioElRef.current as any).captureStream) {
-            try {
-                const elemStream = (audioElRef.current as any).captureStream();
-                addAudioTracks(elemStream, 'audio element captureStream');
-            } catch (e) {
-                console.warn('captureStream on audio element failed:', e);
-            }
-        }
+        const audioTrack = pickFirstLiveTrack(candidateStreams);
 
-        // Fallbacks if still empty
-        if (audioTracks.length === 0 && videoRef.current && (videoRef.current as any).captureStream) {
-            try {
-                const videoAudioStream = (videoRef.current as any).captureStream();
-                addAudioTracks(videoAudioStream, 'video element captureStream');
-            } catch (e) {
-                console.warn('captureStream on video element failed:', e);
-            }
-        }
-
-        if (audioTracks.length === 0) {
-            // As a last resort, force a fresh destination track to embed an audio stream (even if silent)
-            const fallbackStream = recordingAudio.stream || audioRef.current.getAudioStream();
-            if (fallbackStream) {
-                fallbackStream.getAudioTracks().forEach((track: MediaStreamTrack) => { track.enabled = true; audioTracks.push(track); });
-            }
-        }
-
-        if (audioTracks.length === 0) {
+        if (!audioTrack) {
             alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
             return false;
         }
 
-        console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: audioTracks.length, labels: audioTracks.map(t => t.label) });
+        console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: 1, labels: [audioTrack.label] });
 
-        const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+        const combinedStream = new MediaStream([...videoTracks, audioTrack]);
         try {
             const pickMimeType = () => {
                 // Prefer WebM/Opus (best supported for Web Audio mix); mp4 only as Safari fallback

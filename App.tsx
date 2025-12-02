@@ -499,52 +499,35 @@ const App: React.FC = () => {
             if (!canvas) return;
             const videoStream = (canvas as any).captureStream(60);
             const videoTracks = videoStream.getVideoTracks();
-            const audioTracks: MediaStreamTrack[] = [];
             const recordingAudio = audioService.current.createRecordingStream();
 
-            const addAudioTracks = (stream: MediaStream | null, label: string) => {
-                if (!stream) return;
-                const tracks = stream.getAudioTracks();
-                if (tracks.length === 0) {
-                    console.warn(`${label} has 0 audio tracks.`);
-                }
-                tracks.forEach(t => {
-                    if (t.readyState === 'live') {
+            const pickFirstLiveTrack = (streams: Array<{ stream: MediaStream | null, label: string }>) => {
+                for (const entry of streams) {
+                    if (!entry.stream) continue;
+                    const t = entry.stream.getAudioTracks().find(track => track.readyState === 'live');
+                    if (t) {
                         t.enabled = true;
-                        audioTracks.push(t);
+                        console.debug('Using audio track from', entry.label, t.label);
+                        return t;
                     }
-                });
+                }
+                return null;
             };
 
-            // Primary: fresh recording stream from master mix
-            addAudioTracks(recordingAudio.stream, 'recording stream');
+            const candidateStreams = [
+                { stream: currentAudioElRef.current && (currentAudioElRef.current as any).captureStream ? (currentAudioElRef.current as any).captureStream() : null, label: 'audio element captureStream' },
+                { stream: recordingAudio.stream, label: 'recording stream' },
+                { stream: videoRef.current && (videoRef.current as any).captureStream ? (videoRef.current as any).captureStream() : null, label: 'video element captureStream' },
+            ];
 
-            // Always also add direct element capture to maximize compatibility
-            if (currentAudioElRef.current && (currentAudioElRef.current as any).captureStream) {
-                try {
-                    const elemStream = (currentAudioElRef.current as any).captureStream();
-                    addAudioTracks(elemStream, 'audio element captureStream');
-                } catch (e) {
-                    console.warn('captureStream on audio element failed:', e);
-                }
-            }
+            const audioTrack = pickFirstLiveTrack(candidateStreams);
 
-            // Fallback if still empty
-            if (audioTracks.length === 0 && videoRef.current && (videoRef.current as any).captureStream) {
-                try {
-                    const videoAudioStream = (videoRef.current as any).captureStream();
-                    addAudioTracks(videoAudioStream, 'video element captureStream');
-                } catch (e) {
-                    console.warn('captureStream on video element failed:', e);
-                }
-            }
-
-            if (audioTracks.length === 0) {
+            if (!audioTrack) {
                 alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
                 return;
             }
 
-            const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+            const combinedStream = new MediaStream([...videoTracks, audioTrack]);
             try {
                 const pickMimeType = () => {
                     // Prefer WebM/Opus (best supported for mixed Web Audio); mp4 only as Safari fallback
