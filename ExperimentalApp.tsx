@@ -464,9 +464,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
 
             if (now - lastFpsTickRef.current > 400 && dt > 0) {
-                const calcFps = Math.round(1000 / dt);
-                fpsSmoothRef.current = fpsSmoothRef.current * 0.7 + calcFps * 0.3;
-                setFps(calcFps);
+                const instFps = 1000 / dt;
+                fpsSmoothRef.current = fpsSmoothRef.current * 0.7 + instFps * 0.3;
+                setFps(Math.round(fpsSmoothRef.current));
 
                 if (autoScale) {
                     const targets = [1, 0.85, 0.7, 0.55];

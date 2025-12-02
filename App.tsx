@@ -282,9 +282,12 @@ const App: React.FC = () => {
             }
 
             if (t - lastTimeRef.current > 100) {
-                 setFps(Math.round(1000 / ((t - lastTimeRef.current) / ((t - lastTimeRef.current) > 200 ? 1 : 1))));
-                 setVisualLevels(lvls);
-                 lastTimeRef.current = t;
+                const dt = t - lastTimeRef.current;
+                const instFps = dt > 0 ? 1000 / dt : 0;
+                const smooth = (fps * 0.7) + (instFps * 0.3);
+                setFps(Math.round(smooth));
+                setVisualLevels(lvls);
+                lastTimeRef.current = t;
             }
 
             animationFrameRef.current = requestAnimationFrame(loop);
