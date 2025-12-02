@@ -54,6 +54,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastFrameRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
+    const lastPreviewRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -83,6 +84,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
+    const [previewSrc, setPreviewSrc] = useState('');
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
         { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
@@ -161,7 +163,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         let availableH = hWindow;
         let topOffset = 0;
 
-        if (isMobile && panelVisible) {
+        if (isMobileNow && panelVisible) {
             availableH = hWindow * 0.40;
         }
 
@@ -461,6 +463,15 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             } else if (videoRef.current && rendererRef.current.isReady()) {
                 rendererRef.current.updateTexture(videoRef.current);
                 rendererRef.current.draw(now, videoRef.current, computedFx);
+
+                // Mobile preview snapshot (FX applied)
+                if (isMobile && panelVisible && canvasRef.current && (now - lastPreviewRef.current) > 200) {
+                    try {
+                        const url = canvasRef.current.toDataURL('image/jpeg', 0.5);
+                        setPreviewSrc(url);
+                        lastPreviewRef.current = now;
+                    } catch {}
+                }
             }
 
             if (now - lastFpsTickRef.current > 400 && dt > 0) {
@@ -814,13 +825,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{ boxShadow: '0 0 80px rgba(0,0,0,0.5)' }} />
             <video
                 ref={videoRef}
-                className={`${isMobile && mixer.video.hasSource && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
+                className="hidden"
                 crossOrigin="anonymous"
                 loop
                 muted={false}
                 playsInline
                 autoPlay
             />
+            {isMobile && panelVisible && previewSrc && (
+                <img
+                    src={previewSrc}
+                    alt="Preview"
+                    className="fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60"
+                />
+            )}
 
             {isBooting && (
                 <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur flex items-center justify-center">

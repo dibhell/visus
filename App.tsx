@@ -34,6 +34,7 @@ const App: React.FC = () => {
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const lastVuUpdateRef = useRef<number>(0);
+    const lastPreviewRef = useRef<number>(0);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -45,6 +46,7 @@ const App: React.FC = () => {
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [isRecording, setIsRecording] = useState(false);
     const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('environment');
+    const [previewSrc, setPreviewSrc] = useState('');
     
     // Modal States
     const [showCatalog, setShowCatalog] = useState(false);
@@ -279,6 +281,15 @@ const App: React.FC = () => {
             if (videoRef.current) {
                 glService.current.updateTexture(videoRef.current);
                 glService.current.draw(t, videoRef.current, computedFx);
+
+                // Mobile preview snapshot (FX applied)
+                if (isMobile && panelVisible && canvasRef.current && (t - lastPreviewRef.current) > 200) {
+                    try {
+                        const url = canvasRef.current.toDataURL('image/jpeg', 0.5);
+                        setPreviewSrc(url);
+                        lastPreviewRef.current = t;
+                    } catch {}
+                }
             }
 
             if (t - lastTimeRef.current > 100) {
@@ -623,13 +634,20 @@ const App: React.FC = () => {
             <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)'}} />
             <video
                 ref={videoRef}
-                className={`${isMobile && mixer.video.hasSource && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
+                className="hidden"
                 crossOrigin="anonymous"
                 loop
                 muted={false}
                 playsInline
                 autoPlay
             />
+            {isMobile && panelVisible && previewSrc && (
+                <img
+                    src={previewSrc}
+                    alt="Preview"
+                    className="fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60"
+                />
+            )}
 
             {/* Status Bar */}
             <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
