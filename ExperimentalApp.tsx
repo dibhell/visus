@@ -692,11 +692,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const addAudioTracks = (stream: MediaStream | null, label: string) => {
             if (!stream) return;
-            const live = stream.getAudioTracks().filter(t => t.readyState === 'live' && !t.muted);
-            if (live.length === 0) {
-                console.warn(`${label} has 0 live/unmuted audio tracks.`);
+            const tracks = stream.getAudioTracks();
+            if (tracks.length === 0) {
+                console.warn(`${label} has 0 audio tracks.`);
             }
-            live.forEach(t => {
+            tracks.forEach(t => {
                 t.enabled = true;
                 audioTracks.push(t);
             });
@@ -725,13 +725,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
         }
 
-        const audioTrackTotal = audioTracks.length;
-        if (audioTrackTotal === 0) {
+        if (audioTracks.length === 0) {
+            // As a last resort, force a fresh destination track to embed an audio stream (even if silent)
+            const fallbackStream = audioRef.current.getAudioStream();
+            if (fallbackStream) {
+                fallbackStream.getAudioTracks().forEach(t => { t.enabled = true; audioTracks.push(t); });
+            }
+        }
+
+        if (audioTracks.length === 0) {
             alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
             return false;
         }
 
-        console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: audioTrackTotal, labels: audioTracks.map(t => t.label) });
+        console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: audioTracks.length, labels: audioTracks.map(t => t.label) });
 
         const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
         try {
