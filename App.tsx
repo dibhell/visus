@@ -629,7 +629,11 @@ const App: React.FC = () => {
 
     return (
         <div className="w-full h-screen overflow-hidden bg-[#020617] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
-            <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)'}} />
+            <canvas
+                ref={canvasRef}
+                className={`absolute origin-center ${isMobile && panelVisible ? 'z-50 pointer-events-none' : 'z-10'}`}
+                style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)'}}
+            />
             <video
                 ref={videoRef}
                 className="hidden"
