@@ -273,6 +273,8 @@ export const GLSL_HEADER = `
         // Actually, rawAmt passed here is already specific to the slot.
 
         
+        
+        if (iVideoResolution.x < 1.0 || iVideoResolution.y < 1.0) return bg;
 
         float amt = rawAmt; 
 
