@@ -30,6 +30,7 @@ const App: React.FC = () => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const currentAudioElRef = useRef<HTMLAudioElement | null>(null); 
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
@@ -46,7 +47,6 @@ const App: React.FC = () => {
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [isRecording, setIsRecording] = useState(false);
     const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('environment');
-    const [previewSrc, setPreviewSrc] = useState('');
     
     // Modal States
     const [showCatalog, setShowCatalog] = useState(false);
@@ -283,10 +283,17 @@ const App: React.FC = () => {
                 glService.current.draw(t, videoRef.current, computedFx);
 
                 // Mobile preview snapshot (FX applied)
-                if (isMobile && panelVisible && canvasRef.current && (t - lastPreviewRef.current) > 200) {
+                if (isMobile && panelVisible && canvasRef.current && previewCanvasRef.current && (t - lastPreviewRef.current) > 150) {
                     try {
-                        const url = canvasRef.current.toDataURL('image/jpeg', 0.5);
-                        setPreviewSrc(url);
+                        const pc = previewCanvasRef.current;
+                        const w = 160, h = 240;
+                        if (pc.width !== w) pc.width = w;
+                        if (pc.height !== h) pc.height = h;
+                        const ctx = pc.getContext('2d');
+                        if (ctx) {
+                            ctx.clearRect(0, 0, w, h);
+                            ctx.drawImage(canvasRef.current, 0, 0, w, h);
+                        }
                         lastPreviewRef.current = t;
                     } catch {}
                 }
@@ -641,13 +648,10 @@ const App: React.FC = () => {
                 playsInline
                 autoPlay
             />
-            {isMobile && panelVisible && previewSrc && (
-                <img
-                    src={previewSrc}
-                    alt="Preview"
-                    className="fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60"
-                />
-            )}
+            <canvas
+                ref={previewCanvasRef}
+                className={`${isMobile && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
+            />
 
             {/* Status Bar */}
             <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">

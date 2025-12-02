@@ -46,6 +46,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const webCodecsSupported = typeof (window as any).VideoEncoder !== 'undefined' && typeof (window as any).MediaStreamTrackProcessor !== 'undefined';
     const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
+    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
@@ -465,10 +466,17 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 rendererRef.current.draw(now, videoRef.current, computedFx);
 
                 // Mobile preview snapshot (FX applied)
-                if (isMobile && panelVisible && canvasRef.current && (now - lastPreviewRef.current) > 200) {
+                if (isMobile && panelVisible && canvasRef.current && previewCanvasRef.current && (now - lastPreviewRef.current) > 150) {
                     try {
-                        const url = canvasRef.current.toDataURL('image/jpeg', 0.5);
-                        setPreviewSrc(url);
+                        const pc = previewCanvasRef.current;
+                        const w = 160, h = 240;
+                        if (pc.width !== w) pc.width = w;
+                        if (pc.height !== h) pc.height = h;
+                        const ctx = pc.getContext('2d');
+                        if (ctx) {
+                            ctx.clearRect(0, 0, w, h);
+                            ctx.drawImage(canvasRef.current, 0, 0, w, h);
+                        }
                         lastPreviewRef.current = now;
                     } catch {}
                 }
@@ -832,13 +840,10 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 playsInline
                 autoPlay
             />
-            {isMobile && panelVisible && previewSrc && (
-                <img
-                    src={previewSrc}
-                    alt="Preview"
-                    className="fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60"
-                />
-            )}
+            <canvas
+                ref={previewCanvasRef}
+                className={`${isMobile && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
+            />
 
             {isBooting && (
                 <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur flex items-center justify-center">
