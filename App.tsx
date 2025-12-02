@@ -506,7 +506,7 @@ const App: React.FC = () => {
 
             const canvas = canvasRef.current;
             if (!canvas) return;
-            const videoStream = (canvas as any).captureStream(60);
+            const videoStream = (canvas as any).captureStream(30);
             const videoTracks = videoStream.getVideoTracks();
             const recordingAudio = audioService.current.createRecordingStream();
 
@@ -625,6 +625,7 @@ const App: React.FC = () => {
                 loop
                 muted={false}
                 playsInline
+                autoPlay
             />
 
             {/* Status Bar */}

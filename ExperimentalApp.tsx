@@ -692,7 +692,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             console.warn('Audio context resume failed before recording', e);
         }
 
-        const canvasStream = canvasRef.current.captureStream(recordFps);
+        const canvasStream = canvasRef.current.captureStream(Math.min(recordFps, 30));
         const videoTracks = canvasStream.getVideoTracks();
         const recordingAudio = (audioRef.current as any).createRecordingStream ? (audioRef.current as any).createRecordingStream() : { stream: audioRef.current.getAudioStream(), cleanup: () => {} };
 
@@ -819,6 +819,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 loop
                 muted={false}
                 playsInline
+                autoPlay
             />
 
             {isBooting && (
