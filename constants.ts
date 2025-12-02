@@ -1097,6 +1097,51 @@ export const GLSL_HEADER = `
              vec2 wuv = pol * 0.5 + 0.5;
              return mix(bg, getVideo(wuv), amt);
         }
+        else if (id == 140) { // DATA MOSHER
+            vec2 block = floor(uv * vec2(48.0, 32.0));
+            float r = rand(block + floor(iTime * 2.0));
+            vec2 jitter = (vec2(rand(block * 2.3), rand(block * 3.7)) - 0.5) * vec2(0.12, 0.05) * amt;
+            vec2 moshedUV = uv + jitter;
+            float line = step(0.85, fract(block.y * 0.17 + iTime * 0.5));
+            moshedUV.x += line * 0.08 * amt;
+            vec4 frozen = getVideo(clamp(uv + vec2(0.05 * sin(iTime * 2.0) * amt, 0.0), 0.0, 1.0));
+            vec4 c = mix(getVideo(moshedUV), frozen, step(0.9, r) * 0.7);
+            return mix(bg, c, amt);
+        }
+        else if (id == 141) { // VOXELIZER 3D
+            float vox = mix(12.0, 64.0, amt);
+            vec2 q = floor(uv * vox) / vox;
+            vec4 c = getVideo(q);
+            float h = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+            float shade = 0.6 + 0.4 * clamp(h * 1.4, 0.0, 1.0);
+            vec2 lightDir = normalize(vec2(0.6, 0.8));
+            float rim = max(0.1, dot(normalize(vec2(h) + lightDir), lightDir));
+            vec3 col = c.rgb * shade * rim;
+            return mix(bg, vec4(col, c.a), amt);
+        }
+        else if (id == 142) { // TUNNEL SDF
+            vec2 p = uv * 2.0 - 1.0;
+            float r = length(p);
+            float a = atan(p.y, p.x);
+            float wave = sin(a * 6.0 + iTime * 2.0) * 0.05 * amt;
+            float rad = r + wave;
+            vec2 tuv = vec2(fract(rad * 1.2 - iTime * 0.5), fract(a / (2.0 * 3.14159)));
+            vec4 col = getVideo(tuv * 0.5 + 0.25);
+            float ao = smoothstep(1.0, 0.2, r);
+            return mix(bg, col * ao, amt);
+        }
+        else if (id == 143) { // NORMAL + SPECULAR
+            vec2 d = vec2(1.0 / max(iVideoResolution.x, 1.0), 1.0 / max(iVideoResolution.y, 1.0));
+            vec3 c = getVideo(uv).rgb;
+            vec3 cx = getVideo(uv + vec2(d.x, 0.0)).rgb - getVideo(uv - vec2(d.x, 0.0)).rgb;
+            vec3 cy = getVideo(uv + vec2(0.0, d.y)).rgb - getVideo(uv - vec2(0.0, d.y)).rgb;
+            vec3 n = normalize(vec3(cx.r + cx.g + cx.b, cy.r + cy.g + cy.b, 0.1));
+            vec3 lightDir = normalize(vec3(0.6 + sin(iTime)*0.2, 0.7, 0.5));
+            float diff = max(0.0, dot(n, lightDir));
+            float spec = pow(max(0.0, dot(reflect(-lightDir, n), vec3(0.0,0.0,1.0))), 16.0) * amt;
+            vec3 lit = c * (0.4 + 0.6 * diff) + vec3(spec);
+            return mix(bg, vec4(lit, 1.0), amt);
+        }
 
 
 
@@ -1270,6 +1315,10 @@ export const SHADER_LIST: ShaderList = {
     '137_ASCII_PLASMA': { id: 137, src: BASE_SHADER_BODY },
     '138_FRACTAL_FLAMES': { id: 138, src: BASE_SHADER_BODY },
     '139_POLAR_GLITCH': { id: 139, src: BASE_SHADER_BODY },
+    '140_DATA_MOSHER': { id: 140, src: BASE_SHADER_BODY },
+    '141_VOXELIZER_3D': { id: 141, src: BASE_SHADER_BODY },
+    '142_TUNNEL_SDF': { id: 142, src: BASE_SHADER_BODY },
+    '143_NORMAL_SPECULAR': { id: 143, src: BASE_SHADER_BODY },
 
 };
 
