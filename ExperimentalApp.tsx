@@ -705,18 +705,17 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         addAudioTracks(recordingAudio.stream, 'mix destination');
 
-        // Fallbacks if mix is empty or muted
-        if (audioTracks.length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
+        // Always also add direct element capture to maximize compatibility
+        if (audioElRef.current && (audioElRef.current as any).captureStream) {
             try {
                 const elemStream = (audioElRef.current as any).captureStream();
                 addAudioTracks(elemStream, 'audio element captureStream');
-                if (elemStream && elemStream.getAudioTracks().length > 0) {
-                    console.warn('Using audio element captureStream for recording fallback.');
-                }
             } catch (e) {
                 console.warn('captureStream on audio element failed:', e);
             }
         }
+
+        // Fallbacks if still empty
         if (audioTracks.length === 0 && videoRef.current && (videoRef.current as any).captureStream) {
             try {
                 const videoAudioStream = (videoRef.current as any).captureStream();

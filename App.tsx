@@ -504,31 +504,32 @@ const App: React.FC = () => {
 
             const addAudioTracks = (stream: MediaStream | null, label: string) => {
                 if (!stream) return;
-                const live = stream.getAudioTracks().filter(t => t.readyState === 'live');
-                if (live.length === 0) {
-                    console.warn(`${label} has 0 live audio tracks.`);
+                const tracks = stream.getAudioTracks();
+                if (tracks.length === 0) {
+                    console.warn(`${label} has 0 audio tracks.`);
                 }
-                live.forEach(t => {
-                    t.enabled = true;
-                    audioTracks.push(t);
+                tracks.forEach(t => {
+                    if (t.readyState === 'live') {
+                        t.enabled = true;
+                        audioTracks.push(t);
+                    }
                 });
             };
 
             // Primary: fresh recording stream from master mix
             addAudioTracks(recordingAudio.stream, 'recording stream');
 
-            // Fallbacks if mix is empty
-            if (audioTracks.length === 0 && currentAudioElRef.current && (currentAudioElRef.current as any).captureStream) {
+            // Always also add direct element capture to maximize compatibility
+            if (currentAudioElRef.current && (currentAudioElRef.current as any).captureStream) {
                 try {
                     const elemStream = (currentAudioElRef.current as any).captureStream();
                     addAudioTracks(elemStream, 'audio element captureStream');
-                    if (elemStream && elemStream.getAudioTracks().length > 0) {
-                        console.warn('Using audio element captureStream for recording fallback.');
-                    }
                 } catch (e) {
                     console.warn('captureStream on audio element failed:', e);
                 }
             }
+
+            // Fallback if still empty
             if (audioTracks.length === 0 && videoRef.current && (videoRef.current as any).captureStream) {
                 try {
                     const videoAudioStream = (videoRef.current as any).captureStream();
