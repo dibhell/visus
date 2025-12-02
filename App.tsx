@@ -282,8 +282,8 @@ const App: React.FC = () => {
                 glService.current.updateTexture(videoRef.current);
                 glService.current.draw(t, videoRef.current, computedFx);
 
-                // Mobile preview snapshot (FX applied)
-                if (isMobile && panelVisible && canvasRef.current && previewCanvasRef.current && (t - lastPreviewRef.current) > 150) {
+                // Mobile preview snapshot (FX applied if canvas available, else raw video)
+                if (isMobile && panelVisible && previewCanvasRef.current && (t - lastPreviewRef.current) > 150) {
                     try {
                         const pc = previewCanvasRef.current;
                         const w = 160, h = 240;
@@ -291,8 +291,14 @@ const App: React.FC = () => {
                         if (pc.height !== h) pc.height = h;
                         const ctx = pc.getContext('2d');
                         if (ctx) {
+                            const srcCanvas = (canvasRef.current && canvasRef.current.width > 0 && canvasRef.current.height > 0) ? canvasRef.current : null;
+                            const srcVideo = videoRef.current.readyState >= 2 ? videoRef.current : null;
                             ctx.clearRect(0, 0, w, h);
-                            ctx.drawImage(canvasRef.current, 0, 0, w, h);
+                            if (srcCanvas) {
+                                ctx.drawImage(srcCanvas, 0, 0, w, h);
+                            } else if (srcVideo) {
+                                ctx.drawImage(srcVideo, 0, 0, w, h);
+                            }
                         }
                         lastPreviewRef.current = t;
                     } catch {}
