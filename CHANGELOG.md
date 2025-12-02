@@ -1,7 +1,18 @@
 # Changelog
 
 ## [Unreleased]
-- Track WebM audio validation for recordings; ensure MediaRecorder/WebCodecs capture audio tracks.
+- Playlist UX/backlog: np. playlista z klipami video (do rozważenia).
+
+## [0.2.2] - 2025-12-02
+- Nagrywanie: wybór pojedynczego żywego toru audio (prior: captureStream audio -> miks -> captureStream video), WebM/Opus preferowane; brak pustych tracków.
+- UI: throttling VU do ~25 Hz, render canvas uwzględnia szerokość panelu bocznego przy skalowaniu.
+- WebGL: `powerPreference: high-performance`, antialias off dla mniejszego overheadu.
+- Audio: `AudioContext` z `latencyHint: 'playback'` (mniej CPU).
+- Build: Tailwind z lokalnego buildu (PostCSS), usunięto CDN.
+
+## [0.2.1] - 2025-12-01
+- Fallbacki nagrywania audio: miks + captureStream elementów, preferencja WebM/Opus, naprawione brak audio w plikach.
+- Credits zaktualizowane do v0.2.1.
 
 ## [0.2.0] - 2025-11-28
 - Added new shader effects (118-139): liquid/glitch/echo variants including chroma fracture, liquid VHS, voronoi melt, feedback echo, hex glass, visc glitch, melt shift, drip chroma, fluid smear, wave slice, liquid echo, fluid feedback, gel trail, visc ripple, chroma wash, neural bloom, data stream, slit scan, anaglyph drift, ascii plasma, fractal flames, polar glitch.
