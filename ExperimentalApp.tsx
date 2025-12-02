@@ -60,6 +60,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const recordedChunksRef = useRef<Blob[]>([]);
 
     const [panelVisible, setPanelVisible] = useState(true);
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [isBooting, setIsBooting] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
     const [fps, setFps] = useState(0);
@@ -152,7 +153,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const wWindow = window.innerWidth;
         const hWindow = window.innerHeight;
-        const isMobile = wWindow < 768;
+        const isMobileNow = wWindow < 768;
+        setIsMobile(isMobileNow);
         const panelWidth = (panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0;
         const sideGap = panelVisible ? 16 : 0;
         const availableW = Math.max(0, wWindow - panelWidth - sideGap);
@@ -810,7 +812,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     return (
         <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
             <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{ boxShadow: '0 0 80px rgba(0,0,0,0.5)' }} />
-            <video ref={videoRef} className="hidden" crossOrigin="anonymous" loop muted={false} playsInline />
+            <video
+                ref={videoRef}
+                className={`${isMobile && mixer.video.hasSource ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
+                crossOrigin="anonymous"
+                loop
+                muted={false}
+                playsInline
+            />
 
             {isBooting && (
                 <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur flex items-center justify-center">
