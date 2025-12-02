@@ -57,7 +57,7 @@ export class AudioEngine {
 
     async initContext() {
         if (!this.ctx) {
-            this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'playback' });
             
             // 1. Create Main Analysis Chain
             this.mainAnalyser = this.ctx.createAnalyser();

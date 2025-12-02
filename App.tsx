@@ -33,6 +33,7 @@ const App: React.FC = () => {
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
+    const lastVuUpdateRef = useRef<number>(0);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -209,10 +210,12 @@ const App: React.FC = () => {
             const ae = audioService.current;
             ae.update(); 
             
-            // Read VU Meters
-            const levels = ae.getLevels();
-            // throttle VU updates slightly to 30fps effectively if needed, but doing every frame is fine
-            setVuLevels(levels);
+            // Read VU Meters (throttle to ~20-30 Hz to spare React/paint)
+            if ((t - lastVuUpdateRef.current) > 40) {
+                const levels = ae.getLevels();
+                setVuLevels(levels);
+                lastVuUpdateRef.current = t;
+            }
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;

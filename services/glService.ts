@@ -8,7 +8,7 @@ export class GLService {
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
-        this.gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, alpha: false });
+        this.gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false });
         if (!this.gl) return false;
 
         const b = this.gl.createBuffer();

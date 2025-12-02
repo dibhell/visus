@@ -7,96 +7,9 @@
     <title>VISUS - Visual Engine</title>
     <!-- Embed Favicon directly to prevent 404s -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='bgGrad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23fbbf24'/%3E%3Cstop offset='40%25' stop-color='%23f472b6'/%3E%3Cstop offset='100%25' stop-color='%234f46e5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='256' cy='256' r='256' fill='url(%23bgGrad)'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' font-size='250' fill='white' font-family='sans-serif' font-weight='bold'%3EV%3C/text%3E%3C/svg%3E" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              accent: '#a78bfa', // Soft Violet
-              accent2: '#2dd4bf', // Teal
-              surface: '#18181b', // Zinc 900
-              panel: 'rgba(15, 23, 42, 0.85)', // Slate 900 glass
-              sync1: '#f472b6', // Pink 400
-              sync2: '#38bdf8', // Sky 400
-              sync3: '#fbbf24', // Amber 400
-            },
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            animation: {
-                'in': 'fade-in 0.3s ease-out',
-                'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-            }
-          },
-        },
-      }
-    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-    <style>
-      body { font-family: 'Inter', sans-serif; background: #020617; color: #e2e8f0; }
-      
-      /* Modern Slider Styling */
-      input[type=range] {
-        -webkit-appearance: none;
-        background: transparent;
-        height: 20px;
-        width: 100%;
-        cursor: pointer;
-      }
-      input[type=range]:focus {
-        outline: none;
-      }
-      
-      /* Track */
-      input[type=range]::-webkit-slider-runnable-track {
-        width: 100%;
-        height: 4px;
-        cursor: pointer;
-        background: rgba(255, 255, 255, 0.1);
-        border-radius: 2px;
-        transition: background 0.2s;
-      }
-      input[type=range]:hover::-webkit-slider-runnable-track {
-        background: rgba(255, 255, 255, 0.2);
-      }
-      
-      /* Thumb */
-      input[type=range]::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        height: 14px;
-        width: 14px;
-        border-radius: 50%;
-        background: #e2e8f0;
-        cursor: pointer;
-        margin-top: -5px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-        border: 2px solid rgba(0,0,0,0.2);
-        transition: transform 0.1s, background 0.1s;
-      }
-      
-      input[type=range]::-webkit-slider-thumb:hover {
-        transform: scale(1.2);
-        background: #a78bfa;
-        border-color: transparent;
-      }
-
-      /* Custom Scrollbar */
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-track { background: transparent; }
-      ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-      ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-      
-      .glass-panel {
-        background: rgba(15, 23, 42, 0.6);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-    </style>
 <script type="importmap">
 {
   "imports": {
