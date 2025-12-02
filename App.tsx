@@ -546,12 +546,13 @@ const App: React.FC = () => {
             const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
             try {
                 const pickMimeType = () => {
+                    // Prefer WebM/Opus (best supported for mixed Web Audio); mp4 only as Safari fallback
                     const candidates = [
-                        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-                        'video/mp4',
                         'video/webm;codecs=vp9,opus',
                         'video/webm;codecs=vp8,opus',
-                        'video/webm'
+                        'video/webm',
+                        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                        'video/mp4'
                     ];
                     return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
                 };
