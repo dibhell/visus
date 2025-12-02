@@ -379,6 +379,19 @@ export class AudioEngine {
         this.recordTaps = this.recordTaps.filter(t => t !== tap);
     }
 
+    createRecordingStream() {
+        if (!this.ctx || !this.masterMix) return { stream: null as MediaStream | null, cleanup: () => {} };
+        const dest = this.ctx.createMediaStreamDestination();
+        dest.channelCount = 2;
+        dest.channelCountMode = 'explicit';
+        dest.channelInterpretation = 'speakers';
+        this.masterMix.connect(dest);
+        const cleanup = () => {
+            try { this.masterMix?.disconnect(dest); } catch {}
+        };
+        return { stream: dest.stream, cleanup };
+    }
+
     getFFTData(): Uint8Array | null {
         // Keep context alive to ensure analysers flow
         if (this.ctx && this.ctx.state === 'suspended') {

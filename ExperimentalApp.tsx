@@ -689,7 +689,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const canvasStream = canvasRef.current.captureStream(recordFps);
         const videoTracks = canvasStream.getVideoTracks();
         const audioTracks: MediaStreamTrack[] = [];
-        const tap = audioRef.current.createRecordingTap();
+        const recordingAudio = (audioRef.current as any).createRecordingStream ? (audioRef.current as any).createRecordingStream() : { stream: audioRef.current.getAudioStream(), cleanup: () => {} };
 
         const addAudioTracks = (stream: MediaStream | null, label: string) => {
             if (!stream) return;
@@ -703,7 +703,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             });
         };
 
-        addAudioTracks(tap ? tap.stream : audioRef.current.getAudioStream(), 'mix destination');
+        addAudioTracks(recordingAudio.stream, 'mix destination');
 
         // Fallbacks if mix is empty or muted
         if (audioTracks.length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
@@ -728,9 +728,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         if (audioTracks.length === 0) {
             // As a last resort, force a fresh destination track to embed an audio stream (even if silent)
-            const fallbackStream = tap ? tap.stream : audioRef.current.getAudioStream();
+            const fallbackStream = recordingAudio.stream || audioRef.current.getAudioStream();
             if (fallbackStream) {
-                fallbackStream.getAudioTracks().forEach((track) => { track.enabled = true; audioTracks.push(track); });
+                fallbackStream.getAudioTracks().forEach((track: MediaStreamTrack) => { track.enabled = true; audioTracks.push(track); });
             }
         }
 
@@ -763,9 +763,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
             recorder.onstop = () => {
-                if (tap) {
-                    (audioRef.current as any).releaseRecordingTap(tap);
-                }
+                recordingAudio.cleanup?.();
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');

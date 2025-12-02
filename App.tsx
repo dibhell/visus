@@ -500,7 +500,7 @@ const App: React.FC = () => {
             const videoStream = (canvas as any).captureStream(60);
             const videoTracks = videoStream.getVideoTracks();
             const audioTracks: MediaStreamTrack[] = [];
-            const tap = audioService.current.createRecordingTap();
+            const recordingAudio = audioService.current.createRecordingStream();
 
             const addAudioTracks = (stream: MediaStream | null, label: string) => {
                 if (!stream) return;
@@ -514,8 +514,8 @@ const App: React.FC = () => {
                 });
             };
 
-            // Primary: fresh tap from master mix (isolated for recording)
-            addAudioTracks(tap ? tap.stream : audioService.current.getAudioStream(), 'recording tap');
+            // Primary: fresh recording stream from master mix
+            addAudioTracks(recordingAudio.stream, 'recording stream');
 
             // Fallbacks if mix is empty
             if (audioTracks.length === 0 && currentAudioElRef.current && (currentAudioElRef.current as any).captureStream) {
@@ -566,7 +566,7 @@ const App: React.FC = () => {
                 recordedChunksRef.current = [];
                 recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
                 recorder.onstop = () => {
-                    if (tap) audioService.current.releaseRecordingTap(tap);
+                    recordingAudio.cleanup();
                     const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
