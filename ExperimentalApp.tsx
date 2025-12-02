@@ -73,6 +73,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
     const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+    const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('environment');
 
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
     const [isMirrored, setIsMirrored] = useState(false);
@@ -618,11 +619,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;
         try {
-            const constraints: MediaStreamConstraints = {
-                video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1280 }, height: { ideal: 720 } },
-                audio: false
-            };
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const constraints: MediaStreamConstraints = {
+            video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: cameraFacing } },
+            audio: false
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoRef.current.srcObject = stream;
             videoRef.current.play();
             audioRef.current.connectVideo(videoRef.current);
@@ -837,6 +838,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
                             <h3 className="text-white font-black tracking-widest text-lg">SELECT CAMERA</h3>
                             <button onClick={() => setShowCameraSelector(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white">x</button>
+                        </div>
+                        <div className="px-4 py-2 flex gap-2">
+                            <button
+                                onClick={() => setCameraFacing('environment')}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold border ${cameraFacing === 'environment' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                            >
+                                Back
+                            </button>
+                            <button
+                                onClick={() => setCameraFacing('user')}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold border ${cameraFacing === 'user' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                            >
+                                Front
+                            </button>
                         </div>
                         <div className="p-4 space-y-2">
                             {availableCameras.map((cam, idx) => (

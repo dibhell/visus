@@ -43,6 +43,7 @@ const App: React.FC = () => {
     const [fps, setFps] = useState(0);
     const [panelVisible, setPanelVisible] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
+    const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('environment');
     
     // Modal States
     const [showCatalog, setShowCatalog] = useState(false);
@@ -463,7 +464,7 @@ const App: React.FC = () => {
         try {
             const constraints: MediaStreamConstraints = { 
                 video: { 
-                    deviceId: deviceId ? { exact: deviceId } : undefined, 
+                    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: cameraFacing } }),
                     width: { ideal: 1280 }, 
                     height: { ideal: 720 } 
                 } 
@@ -635,6 +636,20 @@ const App: React.FC = () => {
                         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
                             <h3 className="text-white font-black tracking-widest text-lg">SELECT CAMERA</h3>
                             <button onClick={() => setShowCameraSelector(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white">✕</button>
+                        </div>
+                        <div className="px-4 py-2 flex gap-2">
+                            <button
+                                onClick={() => setCameraFacing('environment')}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold border ${cameraFacing === 'environment' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                            >
+                                Back
+                            </button>
+                            <button
+                                onClick={() => setCameraFacing('user')}
+                                className={`flex-1 py-2 rounded-lg text-xs font-bold border ${cameraFacing === 'user' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                            >
+                                Front
+                            </button>
                         </div>
                         <div className="p-4 space-y-2">
                             {availableCameras.map((cam, idx) => (
