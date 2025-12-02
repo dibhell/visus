@@ -814,7 +814,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             <canvas ref={canvasRef} className="absolute z-10 origin-center" style={{ boxShadow: '0 0 80px rgba(0,0,0,0.5)' }} />
             <video
                 ref={videoRef}
-                className={`${isMobile && mixer.video.hasSource ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
+                className={`${isMobile && mixer.video.hasSource && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
                 crossOrigin="anonymous"
                 loop
                 muted={false}
