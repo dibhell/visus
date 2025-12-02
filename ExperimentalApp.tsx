@@ -46,7 +46,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const webCodecsSupported = typeof (window as any).VideoEncoder !== 'undefined' && typeof (window as any).MediaStreamTrackProcessor !== 'undefined';
     const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
-    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
@@ -55,7 +54,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastFrameRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
-    const lastPreviewRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -85,7 +83,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
-    const [previewSrc, setPreviewSrc] = useState('');
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
         { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
@@ -465,28 +462,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             } else if (videoRef.current && rendererRef.current.isReady()) {
                 rendererRef.current.updateTexture(videoRef.current);
                 rendererRef.current.draw(now, videoRef.current, computedFx);
-
-                // Mobile preview snapshot (FX applied if canvas available, else raw video)
-                if (isMobile && panelVisible && previewCanvasRef.current && (now - lastPreviewRef.current) > 150) {
-                    try {
-                        const pc = previewCanvasRef.current;
-                        const w = 160, h = 240;
-                        if (pc.width !== w) pc.width = w;
-                        if (pc.height !== h) pc.height = h;
-                        const ctx = pc.getContext('2d');
-                        if (ctx) {
-                            const srcCanvas = (canvasRef.current && canvasRef.current.width > 0 && canvasRef.current.height > 0) ? canvasRef.current : null;
-                            const srcVideo = videoRef.current.readyState >= 2 ? videoRef.current : null;
-                            ctx.clearRect(0, 0, w, h);
-                            if (srcCanvas) {
-                                ctx.drawImage(srcCanvas, 0, 0, w, h);
-                            } else if (srcVideo) {
-                                ctx.drawImage(srcVideo, 0, 0, w, h);
-                            }
-                        }
-                        lastPreviewRef.current = now;
-                    } catch {}
-                }
             }
 
             if (now - lastFpsTickRef.current > 400 && dt > 0) {
@@ -850,10 +825,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 muted={false}
                 playsInline
                 autoPlay
-            />
-            <canvas
-                ref={previewCanvasRef}
-                className={`${isMobile && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
             />
 
             {isBooting && (
