@@ -689,6 +689,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const canvasStream = canvasRef.current.captureStream(recordFps);
         const videoTracks = canvasStream.getVideoTracks();
         const audioTracks: MediaStreamTrack[] = [];
+        const tap = audioRef.current.createRecordingTap();
 
         const addAudioTracks = (stream: MediaStream | null, label: string) => {
             if (!stream) return;
@@ -702,7 +703,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             });
         };
 
-        addAudioTracks(audioRef.current.getAudioStream(), 'mix destination');
+        addAudioTracks(tap ? tap.stream : audioRef.current.getAudioStream(), 'mix destination');
 
         // Fallbacks if mix is empty or muted
         if (audioTracks.length === 0 && audioElRef.current && (audioElRef.current as any).captureStream) {
@@ -727,9 +728,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         if (audioTracks.length === 0) {
             // As a last resort, force a fresh destination track to embed an audio stream (even if silent)
-            const fallbackStream = audioRef.current.getAudioStream();
+            const fallbackStream = tap ? tap.stream : audioRef.current.getAudioStream();
             if (fallbackStream) {
-                fallbackStream.getAudioTracks().forEach(t => { t.enabled = true; audioTracks.push(t); });
+                fallbackStream.getAudioTracks().forEach((track) => { track.enabled = true; audioTracks.push(track); });
             }
         }
 
@@ -762,6 +763,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
             recorder.onstop = () => {
+                if (tap) {
+                    (audioRef.current as any).releaseRecordingTap(tap);
+                }
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');

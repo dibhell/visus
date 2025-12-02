@@ -11,6 +11,7 @@ export class AudioEngine {
     vizAnalyser: AnalyserNode | null = null;
     analysisSink: GainNode | null = null;
     recDest: MediaStreamAudioDestinationNode | null = null;
+    recordTaps: MediaStreamAudioDestinationNode[] = [];
     vizOut: GainNode | null = null;
 
     // Channel Nodes [Source -> Gain -> VU Analyser -> MasterMix]
@@ -89,6 +90,9 @@ export class AudioEngine {
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
+            this.recDest.channelCount = 2;
+            this.recDest.channelCountMode = 'explicit';
+            this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
 
             // 3. Try load VU Worklet (optional)
@@ -333,24 +337,46 @@ export class AudioEngine {
         // Lazily create destination if missing
         if (!this.recDest) {
             this.recDest = this.ctx.createMediaStreamDestination();
+            this.recDest.channelCount = 2;
+            this.recDest.channelCountMode = 'explicit';
+            this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
         }
 
         const tracks = this.recDest.stream.getAudioTracks();
         const hasLive = tracks.some(t => t.readyState === 'live');
-        const allMuted = tracks.length > 0 && tracks.every(t => t.muted);
 
-        // If the node stopped producing audio (muted/ended), rebuild destination to restore a live track.
-        if (!hasLive || allMuted) {
+        // Ensure the track is enabled before handing it to MediaRecorder.
+        tracks.forEach(t => { t.enabled = true; });
+
+        // If the node stopped producing audio (ended), rebuild destination to restore a live track.
+        if (!hasLive) {
             try { this.masterMix.disconnect(this.recDest); } catch {}
             this.recDest = this.ctx.createMediaStreamDestination();
+            this.recDest.channelCount = 2;
+            this.recDest.channelCountMode = 'explicit';
+            this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
-        } else {
-            // Ensure the track is enabled before handing it to MediaRecorder.
-            tracks.forEach(t => { t.enabled = true; });
         }
 
         return this.recDest.stream;
+    }
+
+    createRecordingTap(): MediaStreamAudioDestinationNode | null {
+        if (!this.ctx || !this.masterMix) return null;
+        const tap = this.ctx.createMediaStreamDestination();
+        tap.channelCount = 2;
+        tap.channelCountMode = 'explicit';
+        tap.channelInterpretation = 'speakers';
+        this.masterMix.connect(tap);
+        this.recordTaps.push(tap);
+        return tap;
+    }
+
+    releaseRecordingTap(tap: MediaStreamAudioDestinationNode | null) {
+        if (!tap || !this.masterMix) return;
+        try { this.masterMix.disconnect(tap); } catch {}
+        this.recordTaps = this.recordTaps.filter(t => t !== tap);
     }
 
     getFFTData(): Uint8Array | null {
