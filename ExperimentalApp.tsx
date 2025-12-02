@@ -31,7 +31,7 @@ const Credits: React.FC = () => (
     <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-200 bg-black/70 border border-white/10 px-4 py-2 rounded-full backdrop-blur pointer-events-none flex items-center gap-2">
         <span className="opacity-90">Studio Popłoch © 2025 • Pan Grzyb •</span>
         <a className="underline pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
-        <span className="opacity-90">• v0.2.2</span>
+        <span className="opacity-90">• v0.2.3</span>
     </div>
 );
 

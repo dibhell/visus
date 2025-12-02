@@ -3,6 +3,11 @@
 ## [Unreleased]
 - Playlist UX/backlog: np. playlista z klipami video (do rozważenia).
 
+## [0.2.3] - 2025-12-03
+- Mobile: canvas widoczny nad panelem (FX podczas strojenia), usunięty mini-podgląd.
+- UI/mobile: pełna szerokość canvasu, wysokość ~45% ekranu przy otwartym panelu.
+- Preview: usunięty dodatkowy overlay w Experimental, zostaje główny canvas.
+
 ## [0.2.2] - 2025-12-02
 - Nagrywanie: wybór pojedynczego żywego toru audio (prior: captureStream audio -> miks -> captureStream video), WebM/Opus preferowane; brak pustych tracków.
 - UI: throttling VU do ~25 Hz, render canvas uwzględnia szerokość panelu bocznego przy skalowaniu.

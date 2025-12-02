@@ -1,4 +1,4 @@
-# VISUS — Podręcznik Użytkownika (v0.2.2)
+﻿# VISUS — Podręcznik Użytkownika (v0.2.3)
 
 Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
@@ -9,7 +9,7 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 2. Interfejs
 - Panel boczny (L): źródła (video/music/mic), nagrywanie, FX, geometry.
-- Podgląd (P): canvas z efektem końcowym; na mobile podgląd kamery jako miniatura w prawym górnym rogu (gdy panel otwarty).
+- Podgląd (P): canvas z efektem końcowym; na mobile canvas jest widoczny nad panelem (FX live).
 - Pasek statusu (P↑): FPS (wygładzony), rozdzielczość canvasu, skala renderu.
 
 ## 3. Źródła
@@ -17,7 +17,7 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 - **Music**: plik lub katalog (ikona folderu/globu). Domyślnie loop + crossOrigin.
 - **Mic**: włącz kanał Mic i przyznaj uprawnienie; audio idzie do miksu, nie na głośniki (brak feedbacku).
 
-## 4. Miks i geometra
+## 4. Miks i geometria
 - Fadery: głośności kanałów (video/music/mic). Mute = przełącznik na górze.
 - Geometry: Scale / Pan X / Pan Y; Mirror — odbicie w poziomie.
 - Aspect: Native, 16:9, 9:16, 4:5, 1:1, Fit. Canvas skaluje się do wolnej przestrzeni (uwzględnia panel).
@@ -41,12 +41,12 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 8. Mobile
 - UI schowaj gestem (drag handle) by odsłonić pełny podgląd.
-- Miniatura kamery pojawia się tylko przy otwartym panelu; zamknij panel, aby widzieć pełny obraz.
+- Canvas jest nad panelem, więc efekty widać na żywo nawet podczas strojenia ustawień.
 - FacingMode: w selektorze kamery wybierz Front/Back.
 
 ## 9. Rozwiązywanie problemów
 - Brak audio w nagraniu: upewnij się, że kanał Music/Video/Mic jest aktywny; zobacz log `Recording tracks` w konsoli (audioTracks > 0). W Chrome używaj WebM/Opus.
-- Kamera na mobile: jeśli obraz pojawia się dopiero po zamknięciu menu, włącz podgląd (miniatura) i zamknij panel — główny obraz zostaje.
+- Kamera na mobile: jeśli obraz pojawia się dopiero po zamknięciu menu, sprawdź uprawnienia i tryb Facing (Front/Back).
 - Niskie FPS: obniż Render Scale, Frame Cap do 30, wyłącz zbędne FX.
 - Błąd uprawnień: sprawdź ustawienia kłódki (kamera/mic), odśwież stronę po przyznaniu.
 
@@ -62,7 +62,7 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 12. Kontakt
 - Autor: Studio Popłoch / Pan Grzyb — ptr@o2.pl
-- Wersja: 0.2.2
+- Wersja: 0.2.3
 
 ---
 
