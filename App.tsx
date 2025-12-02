@@ -30,12 +30,10 @@ const App: React.FC = () => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const currentAudioElRef = useRef<HTMLAudioElement | null>(null); 
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const previewCanvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const lastVuUpdateRef = useRef<number>(0);
-    const lastPreviewRef = useRef<number>(0);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -137,8 +135,8 @@ const App: React.FC = () => {
         let availableH = hWindow;
         let topOffset = 0;
 
-        if (isMobile && panelVisible) {
-            availableH = hWindow * 0.40;
+        if (isMobileNow && panelVisible) {
+            availableH = hWindow * 0.45;
         }
         
         let finalW = wWindow;
@@ -282,27 +280,6 @@ const App: React.FC = () => {
                 glService.current.updateTexture(videoRef.current);
                 glService.current.draw(t, videoRef.current, computedFx);
 
-                // Mobile preview snapshot (FX applied if canvas available, else raw video)
-                if (isMobile && panelVisible && previewCanvasRef.current && (t - lastPreviewRef.current) > 150) {
-                    try {
-                        const pc = previewCanvasRef.current;
-                        const w = 160, h = 240;
-                        if (pc.width !== w) pc.width = w;
-                        if (pc.height !== h) pc.height = h;
-                        const ctx = pc.getContext('2d');
-                        if (ctx) {
-                            const srcCanvas = (canvasRef.current && canvasRef.current.width > 0 && canvasRef.current.height > 0) ? canvasRef.current : null;
-                            const srcVideo = videoRef.current.readyState >= 2 ? videoRef.current : null;
-                            ctx.clearRect(0, 0, w, h);
-                            if (srcCanvas) {
-                                ctx.drawImage(srcCanvas, 0, 0, w, h);
-                            } else if (srcVideo) {
-                                ctx.drawImage(srcVideo, 0, 0, w, h);
-                            }
-                        }
-                        lastPreviewRef.current = t;
-                    } catch {}
-                }
             }
 
             if (t - lastTimeRef.current > 100) {
@@ -653,10 +630,6 @@ const App: React.FC = () => {
                 muted={false}
                 playsInline
                 autoPlay
-            />
-            <canvas
-                ref={previewCanvasRef}
-                className={`${isMobile && panelVisible ? 'fixed z-40 right-4 top-[90px] w-32 h-48 rounded-xl border border-white/10 shadow-2xl object-cover bg-black/60' : 'hidden'}`}
             />
 
             {/* Status Bar */}
