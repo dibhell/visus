@@ -111,6 +111,21 @@ const App: React.FC = () => {
         // Note: Mic connection logic moved to handler to satisfy browser policies
     }, [mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
 
+    // Auto-load sample video for diagnostics if nothing is loaded
+    useEffect(() => {
+        if (videoRef.current && !videoRef.current.src && !videoRef.current.srcObject) {
+            try {
+                videoRef.current.srcObject = null;
+                videoRef.current.src = '/sample.mp4';
+                videoRef.current.muted = true;
+                videoRef.current.loop = true;
+                videoRef.current.play().catch(() => {});
+                audioService.current.connectVideo(videoRef.current);
+                setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
+            } catch {}
+        }
+    }, []);
+
     const getActivationLevel = (routing: string, phase: number) => {
         if (routing === 'off') return 1.0;
         if (routing === 'bpm') return (phase < 0.15) ? 1.0 : 0.0;

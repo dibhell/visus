@@ -250,15 +250,28 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 initMainRenderer();
             };
 
-            const canvas = canvasRef.current as HTMLCanvasElement;
-            canvas.addEventListener('webglcontextlost', onLost, false);
-            canvas.addEventListener('webglcontextrestored', onRestored, false);
+        const canvas = canvasRef.current as HTMLCanvasElement;
+        canvas.addEventListener('webglcontextlost', onLost, false);
+        canvas.addEventListener('webglcontextrestored', onRestored, false);
 
-            audioRef.current.initContext().then(() => {
-                audioRef.current.setupFilters(syncParamsRef.current);
-                setIsBooting(false);
-            });
-            handleResize();
+        // If no video loaded yet, auto-load bundled sample for diagnostics
+        if (videoRef.current && !videoRef.current.src && !videoRef.current.srcObject) {
+            try {
+                videoRef.current.srcObject = null;
+                videoRef.current.src = '/sample.mp4';
+                videoRef.current.muted = true;
+                videoRef.current.loop = true;
+                videoRef.current.play().catch(() => {});
+                audioRef.current.connectVideo(videoRef.current);
+                setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
+            } catch {}
+        }
+
+        audioRef.current.initContext().then(() => {
+            audioRef.current.setupFilters(syncParamsRef.current);
+            setIsBooting(false);
+        });
+        handleResize();
 
             return () => {
                 canvas.removeEventListener('webglcontextlost', onLost);
