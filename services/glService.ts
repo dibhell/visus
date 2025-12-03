@@ -104,7 +104,7 @@ export class GLService {
     }
 
     updateTexture(video: HTMLVideoElement) {
-        if (!this.gl || !this.tex || !video || video.readyState < 1) return;
+        if (!this.gl || !this.tex || !video || video.readyState < 2) return;
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
@@ -116,7 +116,11 @@ export class GLService {
             const needResize = (this.canvas.width !== video.videoWidth || this.canvas.height !== video.videoHeight);
             if (needResize) this.resize(video.videoWidth, video.videoHeight);
         }
-        if (!video || video.readyState < 1 || video.videoWidth < 2 || video.videoHeight < 2) {
+        const vReady = video && video.readyState >= 2;
+        const vW = vReady ? (video?.videoWidth || 0) : 0;
+        const vH = vReady ? (video?.videoHeight || 0) : 0;
+
+        if (!vReady || vW < 2 || vH < 2) {
             this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT);
             return;
@@ -131,7 +135,7 @@ export class GLService {
 
         this.gl.uniform1f(u("iTime"), time / 1000);
         this.gl.uniform2f(u("iResolution"), this.canvas.width, this.canvas.height);
-        this.gl.uniform2f(u("iVideoResolution"), video?.videoWidth || 0, video?.videoHeight || 0);
+        this.gl.uniform2f(u("iVideoResolution"), vW, vH);
         const ch0 = u("iChannel0");
         if (ch0 !== null) this.gl.uniform1i(ch0, 0);
 

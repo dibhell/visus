@@ -315,6 +315,18 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [fxState.main.shader]);
 
     useEffect(() => {
+        const tick = () => {
+            const v = videoRef.current;
+            if (v) {
+                v.muted = true;
+                if (v.paused) { v.play().catch(() => {}); }
+            }
+        };
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    useEffect(() => {
         let mounted = true;
         const frameBudget = frameCap > 0 ? (1000 / frameCap) : 0;
 

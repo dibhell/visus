@@ -111,6 +111,18 @@ const App: React.FC = () => {
         // Note: Mic connection logic moved to handler to satisfy browser policies
     }, [mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
 
+    useEffect(() => {
+        const tick = () => {
+            const v = videoRef.current;
+            if (v) {
+                v.muted = true;
+                if (v.paused) { v.play().catch(() => {}); }
+            }
+        };
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, []);
+
     // Auto-load sample video for diagnostics if nothing is loaded
     useEffect(() => {
         if (videoRef.current && !videoRef.current.src && !videoRef.current.srcObject) {

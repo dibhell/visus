@@ -188,7 +188,7 @@ export class FastGLService {
     }
 
     updateTexture(video: HTMLVideoElement) {
-        if (!this.gl || !this.tex || !video || video.readyState < 1) return;
+        if (!this.gl || !this.tex || !video || video.readyState < 2) return;
         const gl = this.gl;
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
         const vw = video.videoWidth || 0;
@@ -225,9 +225,13 @@ export class FastGLService {
         const set2f = (name: string, v1: number, v2: number) => { const loc = u[name]; if (loc) gl.uniform2f(loc, v1, v2); };
         const set1i = (name: string, val: number) => { const loc = u[name]; if (loc) gl.uniform1i(loc, val); };
 
+        const vReady = video && video.readyState >= 2;
+        const vW = vReady ? (video?.videoWidth || 0) : 0;
+        const vH = vReady ? (video?.videoHeight || 0) : 0;
+
         set1f('iTime', time / 1000);
         set2f('iResolution', this.canvas.width, this.canvas.height);
-        set2f('iVideoResolution', video?.videoWidth || 0, video?.videoHeight || 0);
+        set2f('iVideoResolution', vW, vH);
         set1i('iChannel0', 0); // bind sampler to texture unit 0
 
         set1f('uMainFXGain', fx.mainFXGain);
