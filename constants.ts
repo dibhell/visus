@@ -247,6 +247,15 @@ export const GLSL_HEADER = `
 
 
     vec4 getVideo(vec2 uv) {
+        if(iVideoResolution.x < 2.0 || iVideoResolution.y < 2.0) {
+            // Visible fallback when video texture is not ready
+            vec2 p = uv * vec2(iResolution.x / max(iResolution.y, 1.0), 1.0);
+            float grid = step(0.9, abs(fract(p.x * 0.3) - 0.5)) + step(0.9, abs(fract(p.y * 0.3) - 0.5));
+            float blink = 0.5 + 0.5 * sin(iTime * 5.0);
+            vec3 baseCol = mix(vec3(0.02, 0.05, 0.1), vec3(0.8, 0.2, 0.8), blink);
+            vec3 gridCol = mix(vec3(0.1, 0.2, 0.35), vec3(0.9, 0.9, 0.2), grid);
+            return vec4(mix(baseCol, gridCol, 0.6), 1.0);
+        }
         vec2 p = vec2(clamp(uv.x, 0.0, 1.0), clamp(uv.y, 0.0, 1.0));
         p.y = 1.0 - p.y; // flip vertically to keep video upright
         return texture2D(iChannel0, p);
