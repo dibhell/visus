@@ -212,7 +212,7 @@ export class FastGLService {
 
         const u = this.uniformCache;
         const required = ['iTime', 'iResolution', 'iVideoResolution', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
-        if (required.some(name => !u[name])) return;
+        if (required.some(name => u[name] === null || u[name] === undefined)) return;
 
         gl.uniform1f(u['iTime']!, time / 1000);
         gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
