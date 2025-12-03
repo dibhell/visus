@@ -201,6 +201,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
         canvas.style.position = 'absolute';
+        canvas.style.zIndex = '10';
+        canvas.style.backgroundColor = 'rgba(128,0,128,0.3)';
         canvas.style.pointerEvents = 'none';
 
         if (useWorkerRenderRef.current && workerRef.current) {
