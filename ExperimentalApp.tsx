@@ -607,11 +607,24 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         videoRef.current.srcObject = null;
                         if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
                         videoRef.current.src = url;
-                        videoRef.current.muted = false;
+                        videoRef.current.muted = true; // allow autoplay
                         videoRef.current.loop = true;
-                        videoRef.current.play().catch(() => {});
+                        const tryPlay = async () => {
+                            try {
+                                await videoRef.current!.play();
+                            } catch {
+                                // retry once (autoplay)
+                                videoRef.current!.muted = true;
+                                try { await videoRef.current!.play(); } catch {}
+                            }
+                        };
+                        tryPlay();
                         audioRef.current.connectVideo(videoRef.current);
                         audioRef.current.setupFilters(syncParamsRef.current);
+                        videoRef.current.onloadedmetadata = () => {
+                            handleResize();
+                            setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: !videoRef.current?.paused } }));
+                        };
                         setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
                     } catch (err) {
                         console.error('Video load failed', err);
@@ -634,7 +647,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoRef.current.srcObject = stream;
-            videoRef.current.play();
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {});
             audioRef.current.connectVideo(videoRef.current);
             setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
             setShowCameraSelector(false);

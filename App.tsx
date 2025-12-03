@@ -420,14 +420,27 @@ const App: React.FC = () => {
                         if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
                         videoRef.current.src = url;
                         videoRef.current.volume = 1.0; 
+                        videoRef.current.muted = true; // allow autoplay
                         
                         // Safe connect
                         audioService.current.connectVideo(videoRef.current);
                         audioService.current.setupFilters(syncParamsRef.current);
 
-                        videoRef.current.play().then(() => {
-                            setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
-                        }).catch(e => console.log("Auto-play prevented", e));
+                        const tryPlay = async () => {
+                            try {
+                                await videoRef.current!.play();
+                            } catch (e) {
+                                videoRef.current!.muted = true;
+                                try { await videoRef.current!.play(); } catch {}
+                                console.log("Auto-play prevented", e);
+                            }
+                        };
+                        tryPlay();
+                        videoRef.current.onloadedmetadata = () => {
+                            setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: !videoRef.current?.paused } }));
+                            setTimeout(handleResize, 50);
+                        };
+                        setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, active: true, playing: true } }));
                         
                         setTimeout(handleResize, 500);
                     } catch(err) {
