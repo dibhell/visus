@@ -104,7 +104,7 @@ export class GLService {
     }
 
     updateTexture(video: HTMLVideoElement) {
-        if (!this.gl || !this.tex || !video || video.readyState < 2) return;
+        if (!this.gl || !this.tex || !video || video.readyState < 1) return;
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);

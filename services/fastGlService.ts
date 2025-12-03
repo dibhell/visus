@@ -188,7 +188,7 @@ export class FastGLService {
     }
 
     updateTexture(video: HTMLVideoElement) {
-        if (!this.gl || !this.tex || !video || video.readyState < 2) return;
+        if (!this.gl || !this.tex || !video || video.readyState < 1) return;
         const gl = this.gl;
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
         const vw = video.videoWidth || 0;
