@@ -210,6 +210,8 @@ const App: React.FC = () => {
         canvas.style.zIndex = '10';
         canvas.style.backgroundColor = 'transparent';
         canvas.style.pointerEvents = 'none';
+        canvas.style.border = '2px solid red'; // debug visibility
+        canvas.style.opacity = '1';
 
         if (glService.current && typeof glService.current.resize === 'function') {
             glService.current.resize(finalW, finalH);
@@ -682,7 +684,7 @@ const App: React.FC = () => {
             />
             <video
                 ref={videoRef}
-                className="hidden"
+                className="fixed top-2 right-2 w-48 h-32 z-[200] opacity-70 pointer-events-none border border-accent"
                 crossOrigin="anonymous"
                 loop
                 muted
