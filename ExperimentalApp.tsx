@@ -258,7 +258,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (videoRef.current && !videoRef.current.src && !videoRef.current.srcObject) {
             try {
                 videoRef.current.srcObject = null;
-                videoRef.current.src = '/sample.mp4';
+                const sampleUrl = (((import.meta as any).env?.BASE_URL) || '/') + 'sample.mp4';
+                videoRef.current.src = sampleUrl;
                 videoRef.current.muted = true;
                 videoRef.current.loop = true;
                 videoRef.current.play().catch(() => {});
