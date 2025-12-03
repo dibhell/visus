@@ -210,8 +210,6 @@ const App: React.FC = () => {
         canvas.style.zIndex = '10';
         canvas.style.backgroundColor = 'transparent';
         canvas.style.pointerEvents = 'none';
-        canvas.style.border = '2px solid red'; // debug visibility
-        canvas.style.opacity = '1';
 
         if (glService.current && typeof glService.current.resize === 'function') {
             glService.current.resize(finalW, finalH);
