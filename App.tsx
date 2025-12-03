@@ -192,6 +192,8 @@ const App: React.FC = () => {
         canvas.style.height = `${displayH}px`;
         canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
+        canvas.style.position = 'absolute';
+        canvas.style.pointerEvents = 'none';
 
         if (glService.current && typeof glService.current.resize === 'function') {
             glService.current.resize(finalW, finalH);
