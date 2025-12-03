@@ -205,7 +205,11 @@ export class FastGLService {
     draw(time: number, video: HTMLVideoElement, fx: ExperimentalFxPacket) {
         if (!this.program || !this.gl || !this.canvas || !this.tex) return;
         if (this.positionLoc === null || this.positionLoc < 0) return;
-        if (!video || video.readyState < 2 || video.videoWidth < 2 || video.videoHeight < 2) {
+        if (video && video.videoWidth > 1 && video.videoHeight > 1) {
+            const needsResize = (this.canvas.width !== video.videoWidth || this.canvas.height !== video.videoHeight);
+            if (needsResize) this.resize(video.videoWidth, video.videoHeight);
+        }
+        if (!video || video.readyState < 1 || video.videoWidth < 2 || video.videoHeight < 2) {
             this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT);
             return;
@@ -217,39 +221,40 @@ export class FastGLService {
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
 
         const u = this.uniformCache;
-        const required = ['iTime', 'iResolution', 'iVideoResolution', 'iChannel0'];
-        if (required.some(name => u[name] === null || u[name] === undefined)) return;
+        const set1f = (name: string, val: number) => { const loc = u[name]; if (loc) gl.uniform1f(loc, val); };
+        const set2f = (name: string, v1: number, v2: number) => { const loc = u[name]; if (loc) gl.uniform2f(loc, v1, v2); };
+        const set1i = (name: string, val: number) => { const loc = u[name]; if (loc) gl.uniform1i(loc, val); };
 
-        gl.uniform1f(u['iTime']!, time / 1000);
-        gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
-        gl.uniform2f(u['iVideoResolution']!, video?.videoWidth || 0, video?.videoHeight || 0);
-        gl.uniform1i(u['iChannel0']!, 0); // bind sampler to texture unit 0
+        set1f('iTime', time / 1000);
+        set2f('iResolution', this.canvas.width, this.canvas.height);
+        set2f('iVideoResolution', video?.videoWidth || 0, video?.videoHeight || 0);
+        set1i('iChannel0', 0); // bind sampler to texture unit 0
 
-        gl.uniform1f(u['uMainFXGain']!, fx.mainFXGain);
-        gl.uniform1i(u['uMainFX_ID']!, fx.main_id);
-        gl.uniform1f(u['uMainMix']!, fx.mainMix);
-        gl.uniform1f(u['uAdditiveMasterGain']!, fx.additiveMasterGain);
+        set1f('uMainFXGain', fx.mainFXGain);
+        set1i('uMainFX_ID', fx.main_id);
+        set1f('uMainMix', fx.mainMix);
+        set1f('uAdditiveMasterGain', fx.additiveMasterGain);
 
-        gl.uniform2f(u['uTranslate']!, fx.transform.x, fx.transform.y);
-        gl.uniform1f(u['uScale']!, fx.transform.scale);
-        gl.uniform1f(u['uMirror']!, fx.isMirrored ? 1.0 : 0.0);
+        set2f('uTranslate', fx.transform.x, fx.transform.y);
+        set1f('uScale', fx.transform.scale);
+        set1f('uMirror', fx.isMirrored ? 1.0 : 0.0);
 
-        gl.uniform1f(u['uFX1']!, fx.fx1);
-        gl.uniform1f(u['uFX2']!, fx.fx2);
-        gl.uniform1f(u['uFX3']!, fx.fx3);
-        gl.uniform1f(u['uFX4']!, fx.fx4);
-        gl.uniform1f(u['uFX5']!, fx.fx5);
-        gl.uniform1f(u['uFX1Mix']!, fx.fx1Mix);
-        gl.uniform1f(u['uFX2Mix']!, fx.fx2Mix);
-        gl.uniform1f(u['uFX3Mix']!, fx.fx3Mix);
-        gl.uniform1f(u['uFX4Mix']!, fx.fx4Mix);
-        gl.uniform1f(u['uFX5Mix']!, fx.fx5Mix);
+        set1f('uFX1', fx.fx1);
+        set1f('uFX2', fx.fx2);
+        set1f('uFX3', fx.fx3);
+        set1f('uFX4', fx.fx4);
+        set1f('uFX5', fx.fx5);
+        set1f('uFX1Mix', fx.fx1Mix);
+        set1f('uFX2Mix', fx.fx2Mix);
+        set1f('uFX3Mix', fx.fx3Mix);
+        set1f('uFX4Mix', fx.fx4Mix);
+        set1f('uFX5Mix', fx.fx5Mix);
 
-        gl.uniform1i(u['uFX1_ID']!, fx.fx1_id);
-        gl.uniform1i(u['uFX2_ID']!, fx.fx2_id);
-        gl.uniform1i(u['uFX3_ID']!, fx.fx3_id);
-        gl.uniform1i(u['uFX4_ID']!, fx.fx4_id);
-        gl.uniform1i(u['uFX5_ID']!, fx.fx5_id);
+        set1i('uFX1_ID', fx.fx1_id);
+        set1i('uFX2_ID', fx.fx2_id);
+        set1i('uFX3_ID', fx.fx3_id);
+        set1i('uFX4_ID', fx.fx4_id);
+        set1i('uFX5_ID', fx.fx5_id);
 
         gl.clearColor(0.0, 0.0, 0.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);

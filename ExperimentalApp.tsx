@@ -862,7 +862,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 className="hidden"
                 crossOrigin="anonymous"
                 loop
-                muted={false}
+                muted
                 playsInline
                 autoPlay
             />

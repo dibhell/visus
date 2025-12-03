@@ -673,7 +673,7 @@ const App: React.FC = () => {
                 className="hidden"
                 crossOrigin="anonymous"
                 loop
-                muted={false}
+                muted
                 playsInline
                 autoPlay
             />

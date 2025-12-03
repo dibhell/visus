@@ -20,7 +20,9 @@ export class GLService {
         
         this.tex = this.gl.createTexture();
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
+        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
@@ -110,7 +112,11 @@ export class GLService {
 
     draw(time: number, video: HTMLVideoElement, computedFx: any) {
         if (!this.program || !this.gl || !this.canvas) return;
-        if (!video || video.readyState < 2 || video.videoWidth < 2 || video.videoHeight < 2) {
+        if (video && video.videoWidth > 1 && video.videoHeight > 1) {
+            const needResize = (this.canvas.width !== video.videoWidth || this.canvas.height !== video.videoHeight);
+            if (needResize) this.resize(video.videoWidth, video.videoHeight);
+        }
+        if (!video || video.readyState < 1 || video.videoWidth < 2 || video.videoHeight < 2) {
             this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT);
             return;

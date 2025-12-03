@@ -247,6 +247,10 @@ export const GLSL_HEADER = `
 
 
     vec4 getVideo(vec2 uv) {
+        if(iVideoResolution.x < 2.0 || iVideoResolution.y < 2.0) {
+            // Lightweight visual fallback to confirm pipeline is drawing
+            return vec4(uv, 0.5 + 0.5 * sin(iTime * 2.0), 1.0);
+        }
         vec2 p = vec2(clamp(uv.x, 0.0, 1.0), clamp(uv.y, 0.0, 1.0));
         p.y = 1.0 - p.y; // flip vertically to keep video upright
         return texture2D(iChannel0, p);
