@@ -224,45 +224,46 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         if (!canvasRef.current) return;
 
+        const initMainRenderer = () => {
+            useWorkerRenderRef.current = false;
+            workerReadyRef.current = false;
+            rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
+            const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+            rendererRef.current.loadShader(shaderDef.src, fxStateRef.current.main.shader);
+            const fragments = Object.entries(SHADER_LIST).map(([k,v]) => ({ label: k, src: v.src }));
+            rendererRef.current.warmAllShadersAsync(fragments);
+        };
+
         const initWork = () => {
-            const tryWorker = () => {
-                if (!(canvasRef.current as any).transferControlToOffscreen) return false;
-                try {
-                    const worker = new (RenderWorker as any)();
-                    workerRef.current = worker;
-                    const offscreen = (canvasRef.current as any).transferControlToOffscreen();
-                    const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                    worker.postMessage({ type: "init", canvas: offscreen, fragSrc: shaderDef.src, label: fxStateRef.current.main.shader }, [offscreen]);
-                    worker.onmessage = (ev: MessageEvent) => {
-                        if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
-                    };
-                    workerReadyRef.current = true;
-                    useWorkerRenderRef.current = true;
-                    return true;
-                } catch (err) {
-                    workerReadyRef.current = false;
-                    useWorkerRenderRef.current = false;
-                    return false;
-                }
+            initMainRenderer();
+
+            const onLost = (ev: any) => {
+                ev.preventDefault();
+                setTimeout(() => {
+                    if (!canvasRef.current) return;
+                    initMainRenderer();
+                }, 50);
             };
 
-            const workerUsed = tryWorker();
-            if (!workerUsed) {
-                rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
-                const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                rendererRef.current.loadShader(shaderDef.src, fxStateRef.current.main.shader);
-                // Warmup only on main-thread renderer to avoid Offscreen context loss under heavy compile
-                const fragments = Object.entries(SHADER_LIST).map(([k,v]) => ({ label: k, src: v.src }));
-                rendererRef.current.warmAllShadersAsync(fragments);
-            } else if (workerRef.current) {
-                // Skip warmup on worker to prevent context loss during bulk compiles
-            }
+            const onRestored = () => {
+                if (!canvasRef.current) return;
+                initMainRenderer();
+            };
+
+            const canvas = canvasRef.current as HTMLCanvasElement;
+            canvas.addEventListener('webglcontextlost', onLost, false);
+            canvas.addEventListener('webglcontextrestored', onRestored, false);
 
             audioRef.current.initContext().then(() => {
                 audioRef.current.setupFilters(syncParamsRef.current);
                 setIsBooting(false);
             });
             handleResize();
+
+            return () => {
+                canvas.removeEventListener('webglcontextlost', onLost);
+                canvas.removeEventListener('webglcontextrestored', onRestored);
+            };
         };
 
         const schedule = (cb: () => void) => {
@@ -273,13 +274,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
         };
 
-        schedule(initWork);
+        let offCleanup: any = null;
+        schedule(() => {
+            offCleanup = initWork();
+        });
 
         return () => {
-            if (workerRef.current) {
-                workerRef.current.terminate();
-                workerRef.current = null;
-            }
+            if (offCleanup) offCleanup();
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
