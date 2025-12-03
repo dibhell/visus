@@ -118,6 +118,8 @@ const App: React.FC = () => {
                 videoRef.current.srcObject = null;
                 const sampleUrl = (((import.meta as any).env?.BASE_URL) || '/') + 'sample.mp4';
                 videoRef.current.src = sampleUrl;
+                videoRef.current.autoplay = true;
+                videoRef.current.playsInline = true;
                 videoRef.current.muted = true;
                 videoRef.current.loop = true;
                 videoRef.current.play().catch(() => {});
@@ -194,7 +196,7 @@ const App: React.FC = () => {
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
         canvas.style.position = 'absolute';
         canvas.style.zIndex = '10';
-        canvas.style.backgroundColor = 'rgba(128,0,128,0.3)';
+        canvas.style.backgroundColor = 'transparent';
         canvas.style.pointerEvents = 'none';
 
         if (glService.current && typeof glService.current.resize === 'function') {

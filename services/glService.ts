@@ -12,6 +12,8 @@ export class GLService {
         this.gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false });
         if (!this.gl) return false;
 
+        this.gl.pixelStorei(this.gl.UNPACK_ALIGNMENT, 1);
+
         const b = this.gl.createBuffer();
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, b);
         this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), this.gl.STATIC_DRAW);
@@ -108,6 +110,11 @@ export class GLService {
 
     draw(time: number, video: HTMLVideoElement, computedFx: any) {
         if (!this.program || !this.gl || !this.canvas) return;
+        if (!video || video.readyState < 2 || video.videoWidth < 2 || video.videoHeight < 2) {
+            this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+            return;
+        }
         
         this.gl.useProgram(this.program);
         const u = (n: string) => this.gl!.getUniformLocation(this.program!, n);
@@ -120,7 +127,7 @@ export class GLService {
         this.gl.uniform2f(u("iResolution"), this.canvas.width, this.canvas.height);
         this.gl.uniform2f(u("iVideoResolution"), video?.videoWidth || 0, video?.videoHeight || 0);
         const ch0 = u("iChannel0");
-        if (ch0) this.gl.uniform1i(ch0, 0);
+        if (ch0 !== null) this.gl.uniform1i(ch0, 0);
 
         // Main Layer Controls (Layer 0)
         this.gl.uniform1f(u("uMainFXGain"), computedFx.mainFXGain);
@@ -156,7 +163,7 @@ export class GLService {
 
         this.gl.activeTexture(this.gl.TEXTURE0);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
-        this.gl.clearColor(0.2, 0.0, 0.2, 1.0);
+        this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
         this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
     }

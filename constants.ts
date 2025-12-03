@@ -247,26 +247,9 @@ export const GLSL_HEADER = `
 
 
     vec4 getVideo(vec2 uv) {
-
-        vec2 p = abs(fract(uv * 0.5 + 0.5) * 2.0 - 1.0);
-
+        vec2 p = vec2(clamp(uv.x, 0.0, 1.0), clamp(uv.y, 0.0, 1.0));
         p.y = 1.0 - p.y; // flip vertically to keep video upright
-
-        if(iVideoResolution.x < 2.0) {
-            // Strong fallback debug pattern when no video is available
-            vec2 p = uv * vec2(iResolution.x / max(iResolution.y, 1.0), 1.0);
-            float grid = step(0.9, abs(fract(p.x * 0.2) - 0.5)) + step(0.9, abs(fract(p.y * 0.2) - 0.5));
-            float band = step(0.48, abs(uv.y - 0.5));
-            float blink = 0.5 + 0.5 * sin(iTime * 6.0);
-            vec3 baseCol = mix(vec3(0.0, 0.0, 0.0), vec3(0.9, 0.1, 0.9), band);
-            vec3 gridCol = mix(vec3(0.05, 0.1, 0.2), vec3(0.8, 0.9, 0.2), grid);
-            vec3 dbg = mix(baseCol, gridCol, 0.7);
-            dbg = mix(dbg, vec3(1.0, 0.3, 0.1), blink * band);
-            return vec4(dbg, 1.0);
-        }
-
         return texture2D(iChannel0, p);
-
     }
 
     
@@ -1388,21 +1371,8 @@ export const GLSL_HEADER = `
 // Updated Body: Apply Main Layer (Layer 0) first, then additive chain
 
 const BASE_SHADER_BODY = `void main(){ 
-
     vec2 uv = getUV(gl_FragCoord.xy);
-
-    vec4 base = getVideo(uv);
-
-    // Layer 0 (Main Scene)
-
-    vec4 processedMain = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
-
-    base = mix(base, processedMain, clamp(uMainMix, 0.0, 1.0));
-
-    // Post Chain (Layers 1-5)
-
-    gl_FragColor = applyAdditiveFX(base, uv); 
-
+    gl_FragColor = getVideo(uv); 
 }`;
 
 
