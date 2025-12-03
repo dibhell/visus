@@ -232,7 +232,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     workerRef.current = worker;
                     const offscreen = (canvasRef.current as any).transferControlToOffscreen();
                     const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                    worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
+                    worker.postMessage({ type: "init", canvas: offscreen, fragSrc: shaderDef.src, label: fxStateRef.current.main.shader }, [offscreen]);
                     worker.onmessage = (ev: MessageEvent) => {
                         if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
                     };
@@ -250,12 +250,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             if (!workerUsed) {
                 rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
                 const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                rendererRef.current.loadShader(shaderDef.src);
-                const fragments = Object.values(SHADER_LIST).map(s => s.src);
+                rendererRef.current.loadShader(shaderDef.src, fxStateRef.current.main.shader);
+                const fragments = Object.entries(SHADER_LIST).map(([k,v]) => ({ label: k, src: v.src }));
                 rendererRef.current.warmAllShadersAsync(fragments);
             } else if (workerRef.current) {
-                const fragments = Object.values(SHADER_LIST).map(s => s.src);
-                workerRef.current.postMessage({ type: 'warmShaders', fragments });
+                const fragments = Object.entries(SHADER_LIST).map(([k,v]) => ({ label: k, src: v.src }));
+                workerRef.current.postMessage({ type: "warmShaders", fragments });
             }
 
             audioRef.current.initContext().then(() => {
@@ -287,9 +287,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
         if (workerReadyRef.current && workerRef.current) {
-            workerRef.current.postMessage({ type: 'loadShader', fragSrc: shaderDef.src });
+            workerRef.current.postMessage({ type: "loadShader", fragSrc: shaderDef.src, label: fxState.main.shader });
         } else {
-            rendererRef.current.loadShader(shaderDef.src);
+            rendererRef.current.loadShader(shaderDef.src, fxStateRef.current.main.shader);
         }
     }, [fxState.main.shader]);
 

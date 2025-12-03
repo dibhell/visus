@@ -76,8 +76,9 @@ export class FastGLService {
         });
     }
 
-    loadShader(fragmentSrc: string) {
+    loadShader(fragmentSrc: string, label?: string) {
         if (!this.gl) return;
+        if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) return;
 
         const fallbackSrc = `void main(){ 
             vec2 uv = getUV(gl_FragCoord.xy);
@@ -93,16 +94,16 @@ export class FastGLService {
             if (cached) return cached;
 
             const compile = (type: number, source: string) => {
-                const sh = this.gl!.createShader(type);
-                if (!sh) return null;
-                this.gl!.shaderSource(sh, source);
-                this.gl!.compileShader(sh);
-                if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                    console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh) || '(empty log)');
-                    return null;
-                }
-                return sh;
-            };
+            const sh = this.gl!.createShader(type);
+            if (!sh) return null;
+            this.gl!.shaderSource(sh, source);
+            this.gl!.compileShader(sh);
+            if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
+                console.error('Shader compile error:', label || '', this.gl!.getShaderInfoLog(sh) || '(empty log)');
+                return null;
+            }
+            return sh;
+        };
     
             const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
             const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
@@ -113,9 +114,9 @@ export class FastGLService {
             this.gl!.attachShader(prog, vs);
             this.gl!.attachShader(prog, fs);
             this.gl!.linkProgram(prog);
-    
+
             if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
-                console.error('Program link error');
+                console.error('Program link error', label || '', this.gl!.getProgramInfoLog(prog) || '(empty log)');
                 return null;
             }
             this.programCache.set(src, prog);
@@ -166,20 +167,23 @@ export class FastGLService {
         ]);
     }
 
-    warmAllShadersAsync(fragmentSources: string[]) {
+    warmAllShadersAsync(fragmentSources: { label?: string; src: string; }[]) {
         if (!this.gl) return;
         const unique = Array.from(new Set(fragmentSources));
         let idx = 0;
         const step = () => {
             if (!this.gl) return;
-            const src = unique[idx];
+            if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) return;
+            const item = unique[idx];
+            const src = (item as any)?.src || (item as any);
+            const lbl = (item as any)?.label;
             if (src && !this.programCache.has(src)) {
-                this.loadShader(src);
+                this.loadShader(src, lbl);
             }
             idx += 1;
-            if (idx < unique.length) setTimeout(step, 12);
+            if (idx < unique.length) setTimeout(step, 25);
         };
-        setTimeout(step, 12);
+        setTimeout(step, 25);
     }
 
     updateTexture(video: HTMLVideoElement) {

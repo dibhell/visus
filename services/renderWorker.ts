@@ -33,8 +33,9 @@ const compileShader = (type: number, source: string) => {
     return sh;
 };
 
-const loadShader = (fragSrc: string) => {
+const loadShader = (fragSrc: string, label?: string) => {
     if (!gl) return;
+    if ((gl as any).isContextLost && (gl as any).isContextLost()) return;
 
     const fallbackSrc = `void main(){ 
         vec2 uv = getUV(gl_FragCoord.xy);
@@ -57,7 +58,7 @@ const loadShader = (fragSrc: string) => {
         gl!.attachShader(prog, fs);
         gl!.linkProgram(prog);
         if (!gl!.getProgramParameter(prog, gl!.LINK_STATUS)) {
-            console.error('Program link error for src len', src.length, gl!.getProgramInfoLog(prog) || '(empty log)');
+            console.error('Program link error for src len', src.length, 'label', label || '', gl!.getProgramInfoLog(prog) || '(empty log)');
             return null;
         }
         programCache.set(src, prog);
@@ -106,19 +107,22 @@ const loadShader = (fragSrc: string) => {
     ]);
 };
 
-const warmShadersAsync = (sources: string[]) => {
+const warmShadersAsync = (sources: { label?: string; src: string; }[]) => {
     const unique = Array.from(new Set(sources));
     let idx = 0;
     const step = () => {
         if (!gl) return;
-        const src = unique[idx];
+        if ((gl as any).isContextLost && (gl as any).isContextLost()) return;
+        const item = unique[idx];
+        const src = (item as any)?.src || (item as any);
+        const lbl = (item as any)?.label;
         if (src && !programCache.has(src)) {
-            loadShader(src);
+            loadShader(src, lbl);
         }
         idx += 1;
-        if (idx < unique.length) setTimeout(step, 12);
+        if (idx < unique.length) setTimeout(step, 25);
     };
-    setTimeout(step, 12);
+    setTimeout(step, 25);
 };
 
 const initGL = (c: OffscreenCanvas) => {
@@ -201,7 +205,7 @@ self.onmessage = (e: MessageEvent) => {
             loadShader(fragSrc);
         }
     } else if (type === 'loadShader') {
-        loadShader(e.data.fragSrc);
+        loadShader(e.data.fragSrc, e.data.label);
     } else if (type === 'warmShaders') {
         warmShadersAsync(e.data.fragments || []);
     } else if (type === 'resize') {

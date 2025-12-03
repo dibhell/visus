@@ -25,8 +25,9 @@ export class GLService {
         return true;
     }
 
-    loadShader(fragmentSrc: string) {
+    loadShader(fragmentSrc: string, label?: string) {
         if (!this.gl) return;
+        if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) return;
 
         const fallbackSrc = `void main(){ 
             vec2 uv = gl_FragCoord.xy / iResolution; 
@@ -43,7 +44,7 @@ export class GLService {
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
             if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error("Shader compile error:", this.gl!.getShaderInfoLog(sh) || "(empty log)");
+                console.error("Shader compile error:", label || '', this.gl!.getShaderInfoLog(sh) || "(empty log)");
                 return null;
             }
             return sh;
@@ -63,7 +64,7 @@ export class GLService {
             this.gl!.attachShader(prog, fs);
             this.gl!.linkProgram(prog);
             if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
-               console.error("Program link error");
+               console.error("Program link error", label || '', this.gl!.getProgramInfoLog(prog) || "(empty log)");
                return null;
             }
             this.programCache.set(src, prog);
@@ -79,20 +80,23 @@ export class GLService {
         this.program = prog;
     }
 
-    warmAllShadersAsync(fragmentSources: string[]) {
+    warmAllShadersAsync(fragmentSources: { label?: string; src: string; }[]) {
         if (!this.gl) return;
         const unique = Array.from(new Set(fragmentSources));
         let idx = 0;
         const step = () => {
             if (!this.gl) return;
-            const src = unique[idx];
+            if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) return;
+            const item = unique[idx];
+            const src = (item as any)?.src || (item as any);
+            const lbl = (item as any)?.label;
             if (src && !this.programCache.has(src)) {
-                this.loadShader(src); // uses cache
+                this.loadShader(src, lbl); // uses cache
             }
             idx += 1;
-            if (idx < unique.length) setTimeout(step, 12);
+            if (idx < unique.length) setTimeout(step, 25);
         };
-        setTimeout(step, 12);
+        setTimeout(step, 25);
     }
 
     updateTexture(video: HTMLVideoElement) {
