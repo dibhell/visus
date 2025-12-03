@@ -260,6 +260,81 @@ export const GLSL_HEADER = `
 
     
 
+
+    // Small helper utils for SDF overlays and text-like labels
+    vec2 rotate2D(vec2 p, float a) {
+        float c = cos(a), s = sin(a);
+        return vec2(c * p.x - s * p.y, s * p.x + c * p.y);
+    }
+
+    float sdBox(vec2 p, vec2 b) {
+        vec2 d = abs(p) - b;
+        return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+    }
+
+    float sdHex(vec2 p, float r) {
+        p = abs(p);
+        return max(p.x * 0.866025 + p.y * 0.5, p.y) - r;
+    }
+
+    float sdTriangle(vec2 p) {
+        const float k = 1.7320508075688772;
+        p.x = abs(p.x) - 0.5;
+        p.y = p.y + 0.288675;
+        if (p.x + k * p.y > 0.0) p = vec2(p.x - k * p.y, -k * p.x - p.y) / 2.0;
+        p.x -= clamp(p.x, -1.0, 0.0);
+        return -length(p) * sign(p.y);
+    }
+
+    float lineSegment(vec2 p, vec2 a, vec2 b, float w) {
+        vec2 pa = p - a;
+        vec2 ba = b - a;
+        float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
+        return length(pa - ba * h) - w;
+    }
+
+    bool segOn(int d, int idx) {
+        if (idx == 0) return (d==0||d==2||d==3||d==5||d==6||d==7||d==8||d==9||d==10||d==14||d==15);
+        else if (idx == 1) return (d==0||d==1||d==2||d==3||d==4||d==7||d==8||d==9||d==10||d==13);
+        else if (idx == 2) return (d==0||d==1||d==3||d==4||d==5||d==6||d==7||d==8||d==9||d==10||d==11||d==13);
+        else if (idx == 3) return (d==0||d==2||d==3||d==5||d==6||d==8||d==9||d==11||d==12||d==13||d==14);
+        else if (idx == 4) return (d==0||d==2||d==6||d==8||d==10||d==11||d==12||d==13||d==14||d==15);
+        else if (idx == 5) return (d==0||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==14||d==15);
+        return (d==2||d==3||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==13||d==14||d==15);
+    }
+
+    float sevenSeg(float digit, vec2 p) {
+        int d = int(clamp(floor(digit + 0.5), 0.0, 15.0));
+        float w = 0.06;
+        float m = 0.0;
+        vec2 pa = vec2(-0.32, 0.45), pb = vec2(0.32, 0.45);
+        vec2 pb1 = vec2(0.35, 0.42), pb2 = vec2(0.35, 0.0);
+        vec2 pc1 = vec2(0.35, 0.0), pc2 = vec2(0.35, -0.42);
+        vec2 pd1 = vec2(-0.32, -0.45), pd2 = vec2(0.32, -0.45);
+        vec2 pe1 = vec2(-0.35, -0.42), pe2 = vec2(-0.35, 0.0);
+        vec2 pf1 = vec2(-0.35, 0.42), pf2 = vec2(-0.35, 0.0);
+        vec2 pg1 = vec2(-0.32, 0.0), pg2 = vec2(0.32, 0.0);
+        if (segOn(d, 0)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pa, pb, 0.01)));
+        if (segOn(d, 1)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pb1, pb2, 0.01)));
+        if (segOn(d, 2)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pc1, pc2, 0.01)));
+        if (segOn(d, 3)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pd1, pd2, 0.01)));
+        if (segOn(d, 4)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pe1, pe2, 0.01)));
+        if (segOn(d, 5)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pf1, pf2, 0.01)));
+        if (segOn(d, 6)) m = max(m, smoothstep(w, 0.0, lineSegment(p, pg1, pg2, 0.01)));
+        return m;
+    }
+
+    float morphShape(vec2 p, float t) {
+        float ph = fract(t);
+        float dBox = sdBox(p, vec2(0.85));
+        float dHex = sdHex(p, 0.95);
+        float dTri = sdTriangle(p * 0.95);
+        float a = mix(dBox, dHex, smoothstep(0.05, 0.6, ph));
+        float b = mix(dHex, dTri, smoothstep(0.4, 1.0, ph));
+        return mix(a, b, smoothstep(0.35, 0.85, ph));
+    }
+
+
     // --- UNIFIED LAYER LOGIC ---
 
     // Contains ALL effects (Main & Post) in one switch for maximum flexibility
@@ -1145,6 +1220,120 @@ export const GLSL_HEADER = `
             return mix(bg, vec4(lit, 1.0), amt);
         }
 
+        else if (id == 144) { // DESZYFRATOR (bright/dark tracker)
+             float power = clamp(amt / 14.0, 0.08, 1.2);
+             float t = iTime * (3.0 + power * 3.5);
+             vec2 brightUV = vec2(0.42, 0.42);
+             vec2 darkUV = vec2(0.58, 0.58);
+             float brightLum = -1.0;
+             float darkLum = 4.0;
+
+             for (int i = 0; i < 12; i++) {
+                 float fi = float(i);
+                 vec2 seed = vec2(fi * 12.9898 + t * 0.77, fi * 78.233 + t * 1.13);
+                 vec2 base = vec2(fract(sin(seed.x) * 43758.5453), fract(sin(seed.y) * 24634.6345));
+                 vec2 spread = vec2(sin(fi * 0.9 + t * 0.7), cos(fi * 1.3 - t * 0.6)) * (0.05 + power * 0.03);
+                 vec2 suv = clamp(base + spread, 0.01, 0.99);
+                 vec3 sc = getVideo(suv).rgb;
+                 float lum = dot(sc, vec3(0.299, 0.587, 0.114));
+                 if (lum > brightLum) { brightLum = lum; brightUV = suv; }
+                 if (lum < darkLum) { darkLum = lum; darkUV = suv; }
+             }
+
+             vec3 samples[2];
+             samples[0] = getVideo(brightUV).rgb;
+             samples[1] = getVideo(darkUV).rgb;
+             vec2 targets[2];
+             targets[0] = brightUV;
+             targets[1] = darkUV;
+             vec3 accents[2];
+             accents[0] = mix(vec3(0.22, 0.8, 1.0), vec3(0.55, 1.0, 0.9), clamp(brightLum, 0.0, 1.0));
+             accents[1] = mix(vec3(1.0, 0.42, 0.28), vec3(1.0, 0.68, 0.38), clamp(1.0 - darkLum, 0.0, 1.0));
+
+             vec3 outCol = bg.rgb;
+             float overlayMix = 0.0;
+             float shapeScale = 0.02 + power * 0.015;
+
+             for (int m = 0; m < 2; m++) {
+                 vec2 markUV = targets[m];
+                 vec3 sampleCol = samples[m];
+                 vec3 accent = accents[m];
+                 float dir = (m == 0) ? 1.0 : -1.0;
+
+                 vec2 labelOffset = vec2(dir * (0.12 + 0.02 * sin(t + markUV.x * 4.0)), (markUV.y > 0.5 ? -1.0 : 1.0) * (0.08 + 0.015 * cos(t * 1.2 + markUV.y * 3.0)));
+                 vec2 labelPos = clamp(markUV + labelOffset, vec2(0.05), vec2(0.95));
+
+                 float lineMask = smoothstep(0.005, 0.0, lineSegment(uv, markUV, labelPos, 0.0015 + power * 0.0008));
+
+                 vec2 sp = (uv - markUV) / (shapeScale + 0.0001);
+                 float dShape = morphShape(rotate2D(sp, t * 4.0 + float(m) * 1.2), t * 1.5 + float(m) * 0.3);
+                 float shapeCore = smoothstep(0.12, 0.0, dShape);
+                 float shapeGlow = smoothstep(0.22, 0.0, abs(dShape)) * 0.6;
+                 float ring = smoothstep(0.01, 0.0, abs(length(uv - markUV) - shapeScale * 1.6));
+                 vec3 shapeCol = mix(sampleCol, accent, 0.6);
+                 float sAlpha = clamp((shapeCore * 0.65 + shapeGlow * 0.25 + ring * 0.2) * power, 0.0, 0.65);
+                 outCol = mix(outCol, shapeCol, sAlpha);
+                 overlayMix = max(overlayMix, sAlpha);
+
+                 vec3 lineCol = mix(accent, sampleCol, 0.3);
+                 outCol = mix(outCol, lineCol, lineMask * (0.18 + 0.22 * power));
+                 overlayMix = max(overlayMix, lineMask * 0.2);
+
+                 float box = sdBox(uv - labelPos, vec2(0.09, 0.045));
+                 float labelMask = smoothstep(0.0, 0.02, -box);
+                 float border = smoothstep(0.015, 0.0, abs(box) - 0.004);
+                 vec3 labelCol = mix(accent, sampleCol, 0.4);
+                 outCol = mix(outCol, labelCol, (labelMask * 0.22 + border * 0.18) * power);
+                 overlayMix = max(overlayMix, labelMask * 0.2);
+
+                 float maxX = max(iResolution.x, 1.0);
+                 float maxY = max(iResolution.y, 1.0);
+                 float cx = floor(markUV.x * maxX);
+                 float cy = floor((1.0 - markUV.y) * maxY);
+                 float dx0 = floor(cx / 100.0);
+                 float dx1 = floor(mod(cx / 10.0, 10.0));
+                 float dx2 = floor(mod(cx, 10.0));
+                 float dy0 = floor(cy / 100.0);
+                 float dy1 = floor(mod(cy / 10.0, 10.0));
+                 float dy2 = floor(mod(cy, 10.0));
+
+                 vec3 hexv = clamp(sampleCol * 255.0, 0.0, 255.0);
+                 float rh = floor(hexv.r / 16.0);
+                 float rl = floor(mod(hexv.r, 16.0));
+                 float gh = floor(hexv.g / 16.0);
+                 float gl = floor(mod(hexv.g, 16.0));
+                 float bh = floor(hexv.b / 16.0);
+                 float bl = floor(mod(hexv.b, 16.0));
+
+                 vec2 local = uv - labelPos;
+                 float textMask = 0.0;
+                 if (max(abs(local.x), abs(local.y)) < 0.12) {
+                     float gs = 0.028;
+                     float space = 0.032;
+                     vec2 row1 = vec2(-0.08, 0.014);
+                     vec2 row2 = vec2(-0.08, -0.018);
+                     textMask = max(textMask, sevenSeg(dx0, (local - row1) / gs));
+                     textMask = max(textMask, sevenSeg(dx1, (local - row1 - vec2(space, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(dx2, (local - row1 - vec2(space * 2.0, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(dy0, (local - row1 - vec2(space * 3.4, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(dy1, (local - row1 - vec2(space * 4.4, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(dy2, (local - row1 - vec2(space * 5.4, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(rh, (local - row2) / gs));
+                     textMask = max(textMask, sevenSeg(rl, (local - row2 - vec2(space, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(gh, (local - row2 - vec2(space * 2.3, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(gl, (local - row2 - vec2(space * 3.3, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(bh, (local - row2 - vec2(space * 4.6, 0.0)) / gs));
+                     textMask = max(textMask, sevenSeg(bl, (local - row2 - vec2(space * 5.6, 0.0)) / gs));
+                 }
+                 vec3 textCol = mix(accent, sampleCol, 0.2);
+                 outCol = mix(outCol, textCol, textMask * (0.3 + 0.35 * power));
+                 overlayMix = max(overlayMix, textMask * 0.25);
+             }
+
+             vec3 blended = mix(bg.rgb, outCol, clamp(0.45 + overlayMix * 0.4, 0.0, 0.85));
+             return vec4(blended, 1.0);
+        }
+
 
 
         return bg;
@@ -1321,6 +1510,7 @@ export const SHADER_LIST: ShaderList = {
     '141_VOXELIZER_3D': { id: 141, src: BASE_SHADER_BODY },
     '142_TUNNEL_SDF': { id: 142, src: BASE_SHADER_BODY },
     '143_NORMAL_SPECULAR': { id: 143, src: BASE_SHADER_BODY },
+    '144_DESZYFRATOR': { id: 144, src: BASE_SHADER_BODY },
 
 };
 
