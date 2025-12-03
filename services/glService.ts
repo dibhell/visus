@@ -156,6 +156,8 @@ export class GLService {
 
         this.gl.activeTexture(this.gl.TEXTURE0);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
+        this.gl.clearColor(0.2, 0.0, 0.2, 1.0);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
         this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
     }
 

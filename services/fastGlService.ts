@@ -246,6 +246,8 @@ export class FastGLService {
         gl.uniform1i(u['uFX4_ID']!, fx.fx4_id);
         gl.uniform1i(u['uFX5_ID']!, fx.fx5_id);
 
+        gl.clearColor(0.2, 0.0, 0.2, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
 
