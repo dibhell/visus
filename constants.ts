@@ -1380,9 +1380,8 @@ export const GLSL_HEADER = `
 // Updated Body: Apply Main Layer (Layer 0) first, then additive chain
 
 const BASE_SHADER_BODY = `void main(){ 
-    vec2 uv = getUV(gl_FragCoord.xy);
-    // TEMP: gradient to validate GL pipeline; remove once video render confirmed
-    gl_FragColor = vec4(uv, 0.0, 1.0);
+    // Hardcoded visible color to verify WebGL draw path. Replace with video + FX when confirmed.
+    gl_FragColor = vec4(0.0, 1.0, 0.3, 1.0);
 }`;
 
 
