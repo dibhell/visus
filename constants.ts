@@ -252,7 +252,13 @@ export const GLSL_HEADER = `
 
         p.y = 1.0 - p.y; // flip vertically to keep video upright
 
-        if(iVideoResolution.x < 2.0) return vec4(0.0);
+        if(iVideoResolution.x < 2.0) {
+            // Fallback debug pattern when no video is available
+            float g = 0.5 + 0.5 * sin(iTime + uv.x * 20.0 + uv.y * 10.0);
+            float stripes = step(0.5, fract(uv.y * 20.0));
+            vec3 dbg = mix(vec3(0.05, 0.08, 0.12), vec3(0.2, 0.4, 0.8), g) + stripes * 0.08;
+            return vec4(dbg, 1.0);
+        }
 
         return texture2D(iChannel0, p);
 
