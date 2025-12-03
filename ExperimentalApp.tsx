@@ -251,11 +251,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
                 const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
                 rendererRef.current.loadShader(shaderDef.src, fxStateRef.current.main.shader);
+                // Warmup only on main-thread renderer to avoid Offscreen context loss under heavy compile
                 const fragments = Object.entries(SHADER_LIST).map(([k,v]) => ({ label: k, src: v.src }));
                 rendererRef.current.warmAllShadersAsync(fragments);
             } else if (workerRef.current) {
-                const fragments = Object.entries(SHADER_LIST).map(([k,v]) => ({ label: k, src: v.src }));
-                workerRef.current.postMessage({ type: "warmShaders", fragments });
+                // Skip warmup on worker to prevent context loss during bulk compiles
             }
 
             audioRef.current.initContext().then(() => {
