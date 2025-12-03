@@ -1381,10 +1381,8 @@ export const GLSL_HEADER = `
 
 const BASE_SHADER_BODY = `void main(){ 
     vec2 uv = getUV(gl_FragCoord.xy);
-    vec4 base = getVideo(uv);
-    vec4 processedMain = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
-    base = mix(base, processedMain, clamp(uMainMix, 0.0, 1.0));
-    gl_FragColor = applyAdditiveFX(base, uv);
+    // TEMP: gradient to validate GL pipeline; remove once video render confirmed
+    gl_FragColor = vec4(uv, 0.0, 1.0);
 }`;
 
 

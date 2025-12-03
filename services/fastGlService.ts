@@ -36,6 +36,7 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
+    private loggedVideoSize = false;
     private programCache: Map<string, WebGLProgram> = new Map();
 
     init(canvas: HTMLCanvasElement): boolean {
@@ -199,6 +200,10 @@ export class FastGLService {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
         } else {
             gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+        }
+        if (!this.loggedVideoSize && vw > 0 && vh > 0) {
+            this.loggedVideoSize = true;
+            console.log('[FastGL] video size', vw, vh, 'readyState', video.readyState);
         }
     }
 

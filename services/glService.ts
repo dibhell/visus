@@ -6,6 +6,7 @@ export class GLService {
     tex: WebGLTexture | null = null;
     canvas: HTMLCanvasElement | null = null;
     private programCache: Map<string, WebGLProgram> = new Map();
+    private loggedVideoSize = false;
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
@@ -108,6 +109,10 @@ export class GLService {
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
+        if (!this.loggedVideoSize && video.videoWidth > 0 && video.videoHeight > 0) {
+            this.loggedVideoSize = true;
+            console.log('[GL] video size', video.videoWidth, video.videoHeight, 'readyState', video.readyState);
+        }
     }
 
     draw(time: number, video: HTMLVideoElement, computedFx: any) {
