@@ -28,26 +28,35 @@ export class GLService {
     loadShader(fragmentSrc: string) {
         if (!this.gl) return;
 
+        const fallbackSrc = `void main(){ 
+            vec2 uv = gl_FragCoord.xy / iResolution; 
+            vec4 base = texture2D(iChannel0, uv); 
+            float keep = uMainFXGain + uMainMix + uAdditiveMasterGain + uFX1 + uFX2 + uFX3 + uFX4 + uFX5 + uFX1Mix + uFX2Mix + uFX3Mix + uFX4Mix + uFX5Mix + float(uMainFX_ID + uFX1_ID + uFX2_ID + uFX3_ID + uFX4_ID + uFX5_ID); 
+            keep += iTime * 0.0 + uTranslate.x * 0.0 + uTranslate.y * 0.0 + uScale * 0.0 + uMirror * 0.0;
+            keep += iResolution.x * 0.0 + iResolution.y * 0.0 + iVideoResolution.x * 0.0 + iVideoResolution.y * 0.0;
+            gl_FragColor = base + keep * 0.0; 
+        }`;
+
+        const compile = (type: number, source: string) => {
+            const sh = this.gl!.createShader(type);
+            if (!sh) return null;
+            this.gl!.shaderSource(sh, source);
+            this.gl!.compileShader(sh);
+            if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
+                console.error("Shader compile error:", this.gl!.getShaderInfoLog(sh) || "(empty log)");
+                return null;
+            }
+            return sh;
+        };
+
         const getOrCompile = (src: string) => {
             const cached = this.programCache.get(src);
             if (cached) return cached;
 
-            const compile = (type: number, source: string) => {
-                const sh = this.gl!.createShader(type);
-                if (!sh) return null;
-                this.gl!.shaderSource(sh, source);
-                this.gl!.compileShader(sh);
-                if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                    console.error("Shader compile error:", this.gl!.getShaderInfoLog(sh));
-                    return null;
-                }
-                return sh;
-            };
-    
             const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
             const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
             if (!vs || !fs) return null;
-    
+
             const prog = this.gl!.createProgram();
             if (!prog) return null;
             this.gl!.attachShader(prog, vs);
@@ -61,8 +70,12 @@ export class GLService {
             return prog;
         };
 
-        const prog = getOrCompile(fragmentSrc);
-        if (!prog) return;
+        let prog = getOrCompile(fragmentSrc);
+        if (!prog) {
+            const fb = getOrCompile(fallbackSrc);
+            if (!fb) return;
+            prog = fb;
+        }
         this.program = prog;
     }
 
@@ -77,9 +90,9 @@ export class GLService {
                 this.loadShader(src); // uses cache
             }
             idx += 1;
-            if (idx < unique.length) setTimeout(step, 0);
+            if (idx < unique.length) setTimeout(step, 12);
         };
-        setTimeout(step, 0);
+        setTimeout(step, 12);
     }
 
     updateTexture(video: HTMLVideoElement) {

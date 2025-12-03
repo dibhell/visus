@@ -98,7 +98,7 @@ export class FastGLService {
                 this.gl!.shaderSource(sh, source);
                 this.gl!.compileShader(sh);
                 if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                    console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh));
+                    console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh) || '(empty log)');
                     return null;
                 }
                 return sh;
@@ -177,9 +177,9 @@ export class FastGLService {
                 this.loadShader(src);
             }
             idx += 1;
-            if (idx < unique.length) setTimeout(step, 0);
+            if (idx < unique.length) setTimeout(step, 12);
         };
-        setTimeout(step, 0);
+        setTimeout(step, 12);
     }
 
     updateTexture(video: HTMLVideoElement) {

@@ -57,7 +57,7 @@ const loadShader = (fragSrc: string) => {
         gl!.attachShader(prog, fs);
         gl!.linkProgram(prog);
         if (!gl!.getProgramParameter(prog, gl!.LINK_STATUS)) {
-            console.error('Program link error');
+            console.error('Program link error for src len', src.length, gl!.getProgramInfoLog(prog) || '(empty log)');
             return null;
         }
         programCache.set(src, prog);
@@ -116,9 +116,9 @@ const warmShadersAsync = (sources: string[]) => {
             loadShader(src);
         }
         idx += 1;
-        if (idx < unique.length) setTimeout(step, 0);
+        if (idx < unique.length) setTimeout(step, 12);
     };
-    setTimeout(step, 0);
+    setTimeout(step, 12);
 };
 
 const initGL = (c: OffscreenCanvas) => {
