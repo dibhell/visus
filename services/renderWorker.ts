@@ -157,7 +157,7 @@ const resize = (w: number, h: number) => {
 const drawFrame = (bitmap: ImageBitmap, time: number, fx: FxPacket, videoSize: { w: number; h: number }) => {
     if (!gl || !program || !canvas || !tex) return;
     const u = uniformCache;
-    const required = ['iTime', 'iResolution', 'iVideoResolution', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
+    const required = ['iTime', 'iResolution', 'iVideoResolution', 'iChannel0'];
     if (required.some(name => u[name] === null || u[name] === undefined)) return;
 
     gl.useProgram(program);
