@@ -5,6 +5,7 @@ export class GLService {
     program: WebGLProgram | null = null;
     tex: WebGLTexture | null = null;
     canvas: HTMLCanvasElement | null = null;
+    private programCache: Map<string, WebGLProgram> = new Map();
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
@@ -26,37 +27,59 @@ export class GLService {
 
     loadShader(fragmentSrc: string) {
         if (!this.gl) return;
-        
-        const compile = (type: number, source: string) => {
-            const sh = this.gl!.createShader(type);
-            if (!sh) return null;
-            this.gl!.shaderSource(sh, source);
-            this.gl!.compileShader(sh);
-            if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error("Shader compile error:", this.gl!.getShaderInfoLog(sh));
-                return null;
+
+        const getOrCompile = (src: string) => {
+            const cached = this.programCache.get(src);
+            if (cached) return cached;
+
+            const compile = (type: number, source: string) => {
+                const sh = this.gl!.createShader(type);
+                if (!sh) return null;
+                this.gl!.shaderSource(sh, source);
+                this.gl!.compileShader(sh);
+                if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
+                    console.error("Shader compile error:", this.gl!.getShaderInfoLog(sh));
+                    return null;
+                }
+                return sh;
+            };
+    
+            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
+            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+            if (!vs || !fs) return null;
+    
+            const prog = this.gl!.createProgram();
+            if (!prog) return null;
+            this.gl!.attachShader(prog, vs);
+            this.gl!.attachShader(prog, fs);
+            this.gl!.linkProgram(prog);
+            if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
+               console.error("Program link error");
+               return null;
             }
-            return sh;
+            this.programCache.set(src, prog);
+            return prog;
         };
 
-        const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, GLSL_HEADER + fragmentSrc);
-
-        if (!vs || !fs) return;
-
-        const prog = this.gl.createProgram();
+        const prog = getOrCompile(fragmentSrc);
         if (!prog) return;
-
-        this.gl.attachShader(prog, vs);
-        this.gl.attachShader(prog, fs);
-        this.gl.linkProgram(prog);
-        
-        if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
-           console.error("Program link error");
-           return;
-        }
-
         this.program = prog;
+    }
+
+    warmAllShadersAsync(fragmentSources: string[]) {
+        if (!this.gl) return;
+        const unique = Array.from(new Set(fragmentSources));
+        let idx = 0;
+        const step = () => {
+            if (!this.gl) return;
+            const src = unique[idx];
+            if (src && !this.programCache.has(src)) {
+                this.loadShader(src); // uses cache
+            }
+            idx += 1;
+            if (idx < unique.length) setTimeout(step, 0);
+        };
+        setTimeout(step, 0);
     }
 
     updateTexture(video: HTMLVideoElement) {

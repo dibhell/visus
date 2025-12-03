@@ -1297,7 +1297,7 @@ export const GLSL_HEADER = `
                  float dy1 = floor(mod(cy / 10.0, 10.0));
                  float dy2 = floor(mod(cy, 10.0));
 
-                 vec3 hexv = clamp(sampleCol * 255.0, 0.0, 255.0);
+                 vec3 hexv = clamp(sampleCol * 255.0, vec3(0.0), vec3(255.0));
                  float rh = floor(hexv.r / 16.0);
                  float rl = floor(mod(hexv.r, 16.0));
                  float gh = floor(hexv.g / 16.0);

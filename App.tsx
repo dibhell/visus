@@ -204,6 +204,8 @@ const App: React.FC = () => {
                     const currentShaderKey = fxStateRef.current.main.shader;
                     const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
                     glService.current.loadShader(shaderDef.src);
+                    const fragments = Object.values(SHADER_LIST).map(s => s.src);
+                    glService.current.warmAllShadersAsync(fragments);
                 }
             }
 

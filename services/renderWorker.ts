@@ -10,9 +10,11 @@ let program: WebGLProgram | null = null;
 let tex: WebGLTexture | null = null;
 let canvas: OffscreenCanvas | null = null;
 let uniformCache: Record<string, WebGLUniformLocation | null> = {};
+let programCache: Map<string, WebGLProgram> = new Map();
 
 const cacheUniforms = (names: string[]) => {
     if (!gl || !program) return;
+    uniformCache = {};
     names.forEach((n) => {
         uniformCache[n] = gl!.getUniformLocation(program!, n);
     });
@@ -33,17 +35,40 @@ const compileShader = (type: number, source: string) => {
 
 const loadShader = (fragSrc: string) => {
     if (!gl) return;
-    const vs = compileShader(gl.VERTEX_SHADER, VERT_SRC);
-    const fs = compileShader(gl.FRAGMENT_SHADER, GLSL_HEADER + fragSrc);
-    if (!vs || !fs) return;
-    const prog = gl.createProgram();
-    if (!prog) return;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-        console.error('Program link error');
-        return;
+
+    const fallbackSrc = `void main(){ 
+        vec2 uv = getUV(gl_FragCoord.xy);
+        vec4 base = getVideo(uv);
+        float keep = uMainFXGain + uMainMix + uAdditiveMasterGain + uFX1 + uFX2 + uFX3 + uFX4 + uFX5 + uFX1Mix + uFX2Mix + uFX3Mix + uFX4Mix + uFX5Mix + float(uMainFX_ID + uFX1_ID + uFX2_ID + uFX3_ID + uFX4_ID + uFX5_ID);
+        keep += iTime * 0.0 + uTranslate.x * 0.0 + uTranslate.y * 0.0 + uScale * 0.0 + uMirror * 0.0;
+        keep += iResolution.x * 0.0 + iResolution.y * 0.0 + iVideoResolution.x * 0.0 + iVideoResolution.y * 0.0;
+        gl_FragColor = base + keep * 0.0;
+    }`;
+
+    const getOrCompile = (src: string) => {
+        const cached = programCache.get(src);
+        if (cached) return cached;
+        const vs = compileShader(gl!.VERTEX_SHADER, VERT_SRC);
+        const fs = compileShader(gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+        if (!vs || !fs) return null;
+        const prog = gl!.createProgram();
+        if (!prog) return null;
+        gl!.attachShader(prog, vs);
+        gl!.attachShader(prog, fs);
+        gl!.linkProgram(prog);
+        if (!gl!.getProgramParameter(prog, gl!.LINK_STATUS)) {
+            console.error('Program link error');
+            return null;
+        }
+        programCache.set(src, prog);
+        return prog;
+    };
+
+    let prog = getOrCompile(fragSrc);
+    if (!prog) {
+        const fb = getOrCompile(fallbackSrc);
+        if (!fb) return;
+        prog = fb;
     }
     program = prog;
     gl.useProgram(program);
@@ -79,6 +104,21 @@ const loadShader = (fragSrc: string) => {
         'uFX4_ID',
         'uFX5_ID'
     ]);
+};
+
+const warmShadersAsync = (sources: string[]) => {
+    const unique = Array.from(new Set(sources));
+    let idx = 0;
+    const step = () => {
+        if (!gl) return;
+        const src = unique[idx];
+        if (src && !programCache.has(src)) {
+            loadShader(src);
+        }
+        idx += 1;
+        if (idx < unique.length) setTimeout(step, 0);
+    };
+    setTimeout(step, 0);
 };
 
 const initGL = (c: OffscreenCanvas) => {
@@ -162,6 +202,8 @@ self.onmessage = (e: MessageEvent) => {
         }
     } else if (type === 'loadShader') {
         loadShader(e.data.fragSrc);
+    } else if (type === 'warmShaders') {
+        warmShadersAsync(e.data.fragments || []);
     } else if (type === 'resize') {
         resize(e.data.width, e.data.height);
     } else if (type === 'frame') {

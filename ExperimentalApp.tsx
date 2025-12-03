@@ -251,6 +251,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
                 const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
                 rendererRef.current.loadShader(shaderDef.src);
+                const fragments = Object.values(SHADER_LIST).map(s => s.src);
+                rendererRef.current.warmAllShadersAsync(fragments);
+            } else if (workerRef.current) {
+                const fragments = Object.values(SHADER_LIST).map(s => s.src);
+                workerRef.current.postMessage({ type: 'warmShaders', fragments });
             }
 
             audioRef.current.initContext().then(() => {

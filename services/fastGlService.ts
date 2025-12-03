@@ -36,6 +36,7 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
+    private programCache: Map<string, WebGLProgram> = new Map();
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
@@ -69,6 +70,7 @@ export class FastGLService {
 
     private cacheUniforms(names: string[]) {
         if (!this.gl || !this.program) return;
+        this.uniformCache = {};
         names.forEach(name => {
             this.uniformCache[name] = this.gl!.getUniformLocation(this.program!, name);
         });
@@ -77,32 +79,54 @@ export class FastGLService {
     loadShader(fragmentSrc: string) {
         if (!this.gl) return;
 
-        const compile = (type: number, source: string) => {
-            const sh = this.gl!.createShader(type);
-            if (!sh) return null;
-            this.gl!.shaderSource(sh, source);
-            this.gl!.compileShader(sh);
-            if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh));
+        const fallbackSrc = `void main(){ 
+            vec2 uv = getUV(gl_FragCoord.xy);
+            vec4 base = getVideo(uv);
+            float keep = uMainFXGain + uMainMix + uAdditiveMasterGain + uFX1 + uFX2 + uFX3 + uFX4 + uFX5 + uFX1Mix + uFX2Mix + uFX3Mix + uFX4Mix + uFX5Mix + float(uMainFX_ID + uFX1_ID + uFX2_ID + uFX3_ID + uFX4_ID + uFX5_ID);
+            keep += iTime * 0.0 + uTranslate.x * 0.0 + uTranslate.y * 0.0 + uScale * 0.0 + uMirror * 0.0;
+            keep += iResolution.x * 0.0 + iResolution.y * 0.0 + iVideoResolution.x * 0.0 + iVideoResolution.y * 0.0;
+            gl_FragColor = base + keep * 0.0;
+        }`;
+
+        const getOrCompile = (src: string) => {
+            const cached = this.programCache.get(src);
+            if (cached) return cached;
+
+            const compile = (type: number, source: string) => {
+                const sh = this.gl!.createShader(type);
+                if (!sh) return null;
+                this.gl!.shaderSource(sh, source);
+                this.gl!.compileShader(sh);
+                if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
+                    console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh));
+                    return null;
+                }
+                return sh;
+            };
+    
+            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
+            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+            if (!vs || !fs) return null;
+    
+            const prog = this.gl!.createProgram();
+            if (!prog) return null;
+            this.gl!.attachShader(prog, vs);
+            this.gl!.attachShader(prog, fs);
+            this.gl!.linkProgram(prog);
+    
+            if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
+                console.error('Program link error');
                 return null;
             }
-            return sh;
+            this.programCache.set(src, prog);
+            return prog;
         };
 
-        const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, GLSL_HEADER + fragmentSrc);
-        if (!vs || !fs) return;
-
-        const prog = this.gl.createProgram();
-        if (!prog) return;
-
-        this.gl.attachShader(prog, vs);
-        this.gl.attachShader(prog, fs);
-        this.gl.linkProgram(prog);
-
-        if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
-            console.error('Program link error');
-            return;
+        let prog = getOrCompile(fragmentSrc);
+        if (!prog) {
+            const fb = getOrCompile(fallbackSrc);
+            if (!fb) return;
+            prog = fb;
         }
 
         this.program = prog;
@@ -140,6 +164,22 @@ export class FastGLService {
             'uFX4_ID',
             'uFX5_ID'
         ]);
+    }
+
+    warmAllShadersAsync(fragmentSources: string[]) {
+        if (!this.gl) return;
+        const unique = Array.from(new Set(fragmentSources));
+        let idx = 0;
+        const step = () => {
+            if (!this.gl) return;
+            const src = unique[idx];
+            if (src && !this.programCache.has(src)) {
+                this.loadShader(src);
+            }
+            idx += 1;
+            if (idx < unique.length) setTimeout(step, 0);
+        };
+        setTimeout(step, 0);
     }
 
     updateTexture(video: HTMLVideoElement) {
