@@ -1377,7 +1377,8 @@ export const GLSL_HEADER = `
 // Updated Body: Apply Main Layer (Layer 0) first, then additive chain
 
 const BASE_SHADER_BODY = `void main(){ 
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); 
+    vec2 uv = getUV(gl_FragCoord.xy);
+    gl_FragColor = getVideo(uv); 
 }`;
 
 

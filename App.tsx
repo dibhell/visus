@@ -677,19 +677,19 @@ const App: React.FC = () => {
 
     return (
         <div className="w-full h-screen overflow-hidden bg-[#020617] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
-            <canvas
-                ref={canvasRef}
-                className={`absolute origin-center ${isMobile && panelVisible ? 'z-50 pointer-events-none' : 'z-10'}`}
-                style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)'}}
-            />
             <video
                 ref={videoRef}
-                className="fixed top-2 right-2 w-48 h-32 z-[200] opacity-70 pointer-events-none border border-accent"
+                className="fixed inset-0 w-full h-full object-contain pointer-events-none z-[5]"
                 crossOrigin="anonymous"
                 loop
                 muted
                 playsInline
                 autoPlay
+            />
+            <canvas
+                ref={canvasRef}
+                className={`absolute origin-center ${isMobile && panelVisible ? 'z-50 pointer-events-none' : 'z-10'}`}
+                style={{boxShadow: '0 0 100px rgba(0,0,0,0.5)', border: '2px solid red', opacity: 1}}
             />
 
             {/* Status Bar */}
