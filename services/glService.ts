@@ -104,7 +104,7 @@ export class GLService {
     }
 
     updateTexture(video: HTMLVideoElement) {
-        if (!this.gl || !this.tex || !video || video.readyState < 2) return;
+        if (!this.gl || !this.tex || !video || video.readyState < 1) return;
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
         this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
@@ -116,15 +116,9 @@ export class GLService {
             const needResize = (this.canvas.width !== video.videoWidth || this.canvas.height !== video.videoHeight);
             if (needResize) this.resize(video.videoWidth, video.videoHeight);
         }
-        const vReady = video && video.readyState >= 2;
+        const vReady = video && video.readyState >= 1;
         const vW = vReady ? (video?.videoWidth || 0) : 0;
         const vH = vReady ? (video?.videoHeight || 0) : 0;
-
-        if (!vReady || vW < 2 || vH < 2) {
-            this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-            return;
-        }
         
         this.gl.useProgram(this.program);
         const u = (n: string) => this.gl!.getUniformLocation(this.program!, n);
@@ -173,7 +167,7 @@ export class GLService {
 
         this.gl.activeTexture(this.gl.TEXTURE0);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
-        this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        this.gl.clearColor(1.0, 0.0, 0.0, 1.0);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
         this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
     }

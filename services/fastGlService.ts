@@ -188,7 +188,7 @@ export class FastGLService {
     }
 
     updateTexture(video: HTMLVideoElement) {
-        if (!this.gl || !this.tex || !video || video.readyState < 2) return;
+        if (!this.gl || !this.tex || !video || video.readyState < 1) return;
         const gl = this.gl;
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
         const vw = video.videoWidth || 0;
@@ -209,11 +209,6 @@ export class FastGLService {
             const needsResize = (this.canvas.width !== video.videoWidth || this.canvas.height !== video.videoHeight);
             if (needsResize) this.resize(video.videoWidth, video.videoHeight);
         }
-        if (!video || video.readyState < 1 || video.videoWidth < 2 || video.videoHeight < 2) {
-            this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-            return;
-        }
 
         const gl = this.gl;
         gl.useProgram(this.program);
@@ -225,7 +220,7 @@ export class FastGLService {
         const set2f = (name: string, v1: number, v2: number) => { const loc = u[name]; if (loc) gl.uniform2f(loc, v1, v2); };
         const set1i = (name: string, val: number) => { const loc = u[name]; if (loc) gl.uniform1i(loc, val); };
 
-        const vReady = video && video.readyState >= 2;
+        const vReady = video && video.readyState >= 1;
         const vW = vReady ? (video?.videoWidth || 0) : 0;
         const vH = vReady ? (video?.videoHeight || 0) : 0;
 
@@ -260,7 +255,7 @@ export class FastGLService {
         set1i('uFX4_ID', fx.fx4_id);
         set1i('uFX5_ID', fx.fx5_id);
 
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.clearColor(1.0, 0.0, 0.0, 1.0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
