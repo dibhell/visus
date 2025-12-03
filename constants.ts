@@ -253,10 +253,15 @@ export const GLSL_HEADER = `
         p.y = 1.0 - p.y; // flip vertically to keep video upright
 
         if(iVideoResolution.x < 2.0) {
-            // Fallback debug pattern when no video is available
-            float g = 0.5 + 0.5 * sin(iTime + uv.x * 20.0 + uv.y * 10.0);
-            float stripes = step(0.5, fract(uv.y * 20.0));
-            vec3 dbg = mix(vec3(0.05, 0.08, 0.12), vec3(0.2, 0.4, 0.8), g) + stripes * 0.08;
+            // Strong fallback debug pattern when no video is available
+            vec2 p = uv * vec2(iResolution.x / max(iResolution.y, 1.0), 1.0);
+            float grid = step(0.95, abs(fract(p.x * 0.25) - 0.5)) + step(0.95, abs(fract(p.y * 0.25) - 0.5));
+            float band = step(0.48, abs(uv.y - 0.5));
+            float blink = 0.5 + 0.5 * sin(iTime * 4.0);
+            vec3 baseCol = mix(vec3(0.06, 0.08, 0.14), vec3(0.12, 0.16, 0.3), uv.y);
+            vec3 alert = mix(vec3(0.1, 0.2, 0.4), vec3(1.0, 0.35, 0.35), blink * band);
+            vec3 gridCol = mix(baseCol, vec3(0.25, 0.5, 1.0), grid * 0.8);
+            vec3 dbg = mix(gridCol, alert, 0.6 * band);
             return vec4(dbg, 1.0);
         }
 
