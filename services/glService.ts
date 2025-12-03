@@ -119,6 +119,8 @@ export class GLService {
         this.gl.uniform1f(u("iTime"), time / 1000);
         this.gl.uniform2f(u("iResolution"), this.canvas.width, this.canvas.height);
         this.gl.uniform2f(u("iVideoResolution"), video?.videoWidth || 0, video?.videoHeight || 0);
+        const ch0 = u("iChannel0");
+        if (ch0) this.gl.uniform1i(ch0, 0);
 
         // Main Layer Controls (Layer 0)
         this.gl.uniform1f(u("uMainFXGain"), computedFx.mainFXGain);

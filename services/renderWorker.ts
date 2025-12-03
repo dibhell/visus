@@ -82,6 +82,7 @@ const loadShader = (fragSrc: string, label?: string) => {
         'iTime',
         'iResolution',
         'iVideoResolution',
+        'iChannel0',
         'uMainFXGain',
         'uMainFX_ID',
         'uMainMix',
@@ -167,6 +168,7 @@ const drawFrame = (bitmap: ImageBitmap, time: number, fx: FxPacket, videoSize: {
     gl.uniform1f(u['iTime']!, time / 1000);
     gl.uniform2f(u['iResolution']!, canvas.width, canvas.height);
     gl.uniform2f(u['iVideoResolution']!, videoSize.w, videoSize.h);
+    gl.uniform1i(u['iChannel0']!, 0);
 
     gl.uniform1f(u['uMainFXGain']!, fx.mainFXGain);
     gl.uniform1i(u['uMainFX_ID']!, fx.main_id);

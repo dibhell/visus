@@ -142,6 +142,7 @@ export class FastGLService {
             'iTime',
             'iResolution',
             'iVideoResolution',
+            'iChannel0',
             'uMainFXGain',
             'uMainFX_ID',
             'uMainMix',
@@ -217,6 +218,7 @@ export class FastGLService {
         gl.uniform1f(u['iTime']!, time / 1000);
         gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
         gl.uniform2f(u['iVideoResolution']!, video?.videoWidth || 0, video?.videoHeight || 0);
+        gl.uniform1i(u['iChannel0']!, 0); // bind sampler to texture unit 0
 
         gl.uniform1f(u['uMainFXGain']!, fx.mainFXGain);
         gl.uniform1i(u['uMainFX_ID']!, fx.main_id);
