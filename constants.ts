@@ -1144,6 +1144,56 @@ export const GLSL_HEADER = `
             vec3 lit = c * (0.4 + 0.6 * diff) + vec3(spec);
             return mix(bg, vec4(lit, 1.0), amt);
         }
+        else if (id == 144) { // DESZYFRATOR
+            // Prostolinijne wykrycie jasnego i ciemnego punktu na siatce 8x8 (lekko, bez zmian w core)
+            const float N = 8.0;
+            float bestBright = -1.0;
+            float bestDark = 10.0;
+            vec2 posBright = vec2(0.5);
+            vec2 posDark = vec2(0.5);
+            for (float y = 0.0; y < N; y += 1.0) {
+                for (float x = 0.0; x < N; x += 1.0) {
+                    vec2 p = (vec2(x + 0.5, y + 0.5) / N);
+                    vec3 c = getVideo(p).rgb;
+                    float l = dot(c, vec3(0.299, 0.587, 0.114));
+                    if (l > bestBright) { bestBright = l; posBright = p; }
+                    if (l < bestDark) { bestDark = l; posDark = p; }
+                }
+            }
+            // Kształt + linia + etykieta
+            float sdBox(vec2 p, vec2 b) {
+                vec2 d = abs(p) - b;
+                return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+            }
+            float lineSegment(vec2 p, vec2 a, vec2 b, float w) {
+                vec2 pa = p - a;
+                vec2 ba = b - a;
+                float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
+                return length(pa - ba * h) - w;
+            }
+            vec4 outCol = bg;
+            vec2 pts[2];
+            pts[0] = posBright;
+            pts[1] = posDark;
+            vec3 cols[2];
+            cols[0] = vec3(0.95, 0.2, 0.7);
+            cols[1] = vec3(0.2, 0.8, 1.0);
+            for (int i = 0; i < 2; i++) {
+                vec2 p = pts[i];
+                vec3 col = cols[i];
+                vec2 d = uv - p;
+                float r = 0.014 * (1.0 + 0.3 * sin(iTime * 3.0 + float(i)));
+                float shape = smoothstep(r, r * 0.6, length(d));
+                vec2 labelPos = p + vec2(0.12 * (i == 0 ? 1.0 : -1.0), 0.08);
+                float line = smoothstep(0.002, 0.0, lineSegment(uv, p, labelPos, 0.0008));
+                float box = smoothstep(0.0, 0.01, -sdBox(uv - labelPos, vec2(0.045, 0.02)));
+                float alpha = clamp((shape * 0.5 + line * 0.5 + box * 0.7) * amt, 0.0, 1.0);
+                vec3 mixCol = mix(bg.rgb, col, 0.75);
+                outCol.rgb = mix(outCol.rgb, mixCol, alpha);
+                outCol.a = 1.0;
+            }
+            return outCol;
+        }
 
 
 
@@ -1321,6 +1371,7 @@ export const SHADER_LIST: ShaderList = {
     '141_VOXELIZER_3D': { id: 141, src: BASE_SHADER_BODY },
     '142_TUNNEL_SDF': { id: 142, src: BASE_SHADER_BODY },
     '143_NORMAL_SPECULAR': { id: 143, src: BASE_SHADER_BODY },
+    '144_DESZYFRATOR': { id: 144, src: BASE_SHADER_BODY },
 
 };
 
