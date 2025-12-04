@@ -1257,20 +1257,32 @@ export const GLSL_HEADER = `
             pts[0] = posBright;
             pts[1] = posDark;
             vec3 cols[2];
-            cols[0] = vec3(0.95, 0.2, 0.7);
-            cols[1] = vec3(0.2, 0.8, 1.0);
+            cols[0] = vec3(1.0); // white overlay
+            cols[1] = vec3(1.0);
             for (int i = 0; i < 2; i++) {
                 vec2 p = pts[i];
                 vec3 col = cols[i];
                 vec2 d = uv - p;
-                float r = 0.014 * (1.0 + 0.3 * sin(iTime * 3.0 + float(i)));
-                float shape = smoothstep(r, r * 0.6, length(d));
-                vec2 labelPos = p + vec2(0.12 * (i == 0 ? 1.0 : -1.0), 0.08);
-                float line = smoothstep(0.002, 0.0, lineSegment(uv, p, labelPos, 0.0008));
-                float box = smoothstep(0.0, 0.01, -sdBox(uv - labelPos, vec2(0.045, 0.02)));
-                float alpha = clamp((shape * 0.5 + line * 0.5 + box * 0.7) * amt, 0.0, 1.0);
-                vec3 mixCol = mix(bg.rgb, col, 0.75);
-                outCol.rgb = mix(outCol.rgb, mixCol, alpha);
+                float r = 0.012 * (1.0 + 0.2 * sin(iTime * 3.0 + float(i)));
+                float circle = 1.0 - smoothstep(r, r * 0.6, length(d)); // thin dot
+
+                vec2 labelPos = p + vec2(0.12 * (i == 0 ? 1.0 : -1.0), 0.06);
+                float seg = lineSegment(uv, p, labelPos, 0.0006);
+                float line = 1.0 - smoothstep(0.0006, 0.0012, seg);
+
+                float boxDist = sdBox(uv - labelPos, vec2(0.05, 0.025));
+                float box = 1.0 - smoothstep(0.001, 0.003, abs(boxDist)); // outline only
+
+                // Text overlays (coords + HEX)
+                vec3 sampleCol = getVideo(p).rgb;
+                float textScale = 0.012;
+                float hex = renderHex(uv, labelPos + vec2(-0.048, 0.0), sampleCol, textScale);
+                float coordX = renderCoord(uv, labelPos + vec2(-0.048, -0.024), p.x, textScale);
+                float coordY = renderCoord(uv, labelPos + vec2(-0.048, -0.048), p.y, textScale);
+                float text = clamp(hex + coordX + coordY, 0.0, 1.0);
+
+                float alpha = clamp((circle * 0.8 + line * 0.6 + box * 0.7 + text) * amt, 0.0, 1.0);
+                outCol.rgb = mix(outCol.rgb, vec3(1.0), alpha);
                 outCol.a = 1.0;
             }
             return outCol;
