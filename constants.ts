@@ -273,6 +273,84 @@ export const GLSL_HEADER = `
         return length(pa - ba * h) - w;
     }
 
+    // --- TINY PIXEL FONT (7-seg + dot) ---
+    float segLine(vec2 p, vec2 a, vec2 b) {
+        vec2 pa = p - a;
+        vec2 ba = b - a;
+        float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
+        float d = length(pa - ba * h);
+        return 1.0 - smoothstep(0.06, 0.1, d);
+    }
+
+    float drawDigit(vec2 uv, int d) {
+        // uv in [0,1]x[0,1], 7-seg style
+        vec2 p = uv * vec2(1.0, 1.8) - vec2(0.0, 0.4);
+        bool s0 = d==0||d==2||d==3||d==5||d==6||d==7||d==8||d==9||d==10||d==12||d==14||d==15;
+        bool s1 = d==0||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==13||d==14||d==15;
+        bool s2 = d==0||d==1||d==2||d==3||d==4||d==7||d==8||d==9||d==10||d==13;
+        bool s3 = d==2||d==3||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==13||d==14;
+        bool s4 = d==0||d==2||d==6||d==8||d==10||d==11||d==12||d==14||d==15;
+        bool s5 = d==0||d==1||d==3||d==4||d==5||d==6||d==7||d==8||d==9||d==10||d==11||d==13;
+        bool s6 = d==0||d==2||d==3||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==14||d==15;
+        float a = 0.0;
+        if (s0) a = max(a, segLine(p, vec2(-0.45, 0.9), vec2(0.45, 0.9)));
+        if (s1) a = max(a, segLine(p, vec2(-0.55, 0.8), vec2(-0.55, 0.1)));
+        if (s2) a = max(a, segLine(p, vec2(0.55, 0.8), vec2(0.55, 0.1)));
+        if (s3) a = max(a, segLine(p, vec2(-0.45, 0.0), vec2(0.45, 0.0)));
+        if (s4) a = max(a, segLine(p, vec2(-0.55,-0.1), vec2(-0.55,-0.8)));
+        if (s5) a = max(a, segLine(p, vec2(0.55,-0.1), vec2(0.55,-0.8)));
+        if (s6) a = max(a, segLine(p, vec2(-0.45,-0.9), vec2(0.45,-0.9)));
+        return a;
+    }
+
+    float drawDotChar(vec2 uv) {
+        vec2 d = uv - vec2(0.0, -0.9);
+        float r = length(d);
+        return 1.0 - smoothstep(0.12, 0.18, r);
+    }
+
+    float drawChar(vec2 uv, int code) {
+        if (code < 0) return 0.0;
+        if (code == 16) return drawDotChar(uv);
+        int d = code;
+        return drawDigit(uv, d);
+    }
+
+    float renderHex(vec2 uv, vec2 origin, vec3 col, float scale) {
+        int r = int(clamp(col.r * 255.0 + 0.5, 0.0, 255.0));
+        int g = int(clamp(col.g * 255.0 + 0.5, 0.0, 255.0));
+        int b = int(clamp(col.b * 255.0 + 0.5, 0.0, 255.0));
+        int d0 = r / 16; int d1 = r - d0 * 16;
+        int d2 = g / 16; int d3 = g - d2 * 16;
+        int d4 = b / 16; int d5 = b - d4 * 16;
+        int digits[6];
+        digits[0] = d0; digits[1] = d1; digits[2] = d2; digits[3] = d3; digits[4] = d4; digits[5] = d5;
+        float a = 0.0;
+        vec2 p = (uv - origin) / scale;
+        for (int i = 0; i < 6; i++) {
+            a = max(a, drawChar(p - vec2(float(i) * 1.1, 0.0), digits[i]));
+        }
+        return a;
+    }
+
+    float renderCoord(vec2 uv, vec2 origin, float v, float scale) {
+        float clamped = clamp(v, 0.0, 0.999);
+        int scaled = int(clamped * 100.0 + 0.5); // two decimals
+        int tens = scaled / 10;
+        int ones = scaled - tens * 10;
+        int digits[4];
+        digits[0] = 0;      // leading zero since <1.0
+        digits[1] = 16;     // dot
+        digits[2] = tens;
+        digits[3] = ones;
+        float a = 0.0;
+        vec2 p = (uv - origin) / scale;
+        for (int i = 0; i < 4; i++) {
+            a = max(a, drawChar(p - vec2(float(i) * 1.1, 0.0), digits[i]));
+        }
+        return a;
+    }
+
     // --- UNIFIED LAYER LOGIC ---
 
     // Contains ALL effects (Main & Post) in one switch for maximum flexibility
