@@ -1,134 +1,4 @@
-export interface SyncParam {
-
-  bpm: number;
-
-  offset: number;
-
-  freq: number;
-
-  width: number;
-
-  gain: number;
-
-}
-
-
-
-export type RoutingType = 'off' | 'bpm' | 'sync1' | 'sync2' | 'sync3';
-
-
-
-export type AspectRatioMode = 'native' | 'fit' | '16:9' | '9:16' | '1:1' | '4:5' | '21:9' | 'manual';
-
-
-
-export interface TransformConfig {
-
-  x: number;
-
-  y: number;
-
-  scale: number;
-
-}
-
-
-
-export interface FxConfig {
-
-  shader: string;
-
-  routing: RoutingType;
-
-  gain: number;
-
-  mix?: number; 
-
-}
-
-
-
-export interface FxState {
-
-  main: FxConfig;
-
-  fx1: FxConfig;
-
-  fx2: FxConfig;
-
-  fx3: FxConfig;
-
-  fx4: FxConfig;
-
-  fx5: FxConfig;
-
-}
-
-
-
-export interface ShaderDefinition {
-
-  id: number;
-
-  src: string;
-
-}
-
-
-
-export interface ShaderList {
-
-  [key: string]: ShaderDefinition;
-
-}
-
-
-
-export interface FilterBand {
-
-  name: string;
-
-  bandpass: BiquadFilterNode;
-
-  analyser: AnalyserNode;
-
-  data: any; // Relaxed type to prevent build errors with Uint8Array mismatches
-
-}
-
-
-
-export interface BandsData {
-
-  sync1: number;
-
-  sync2: number;
-
-  sync3: number;
-
-  [key: string]: number;
-
-}
-
-
-
-export interface MusicTrack {
-
-  trackId: number;
-
-  artistName: string;
-
-  trackName: string;
-
-  previewUrl: string;
-
-  artworkUrl100: string;
-
-}
-
-
-
-export const GLSL_HEADER = `
+(function(){"use strict";const u=`
 
     precision mediump float;
 
@@ -259,19 +129,6 @@ export const GLSL_HEADER = `
     }
 
     
-
-    // Global helpers (GLSL disallows nested function defs)
-    float sdBox(vec2 p, vec2 b) {
-        vec2 d = abs(p) - b;
-        return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-    }
-
-    float lineSegment(vec2 p, vec2 a, vec2 b, float w) {
-        vec2 pa = p - a;
-        vec2 ba = b - a;
-        float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
-        return length(pa - ba * h) - w;
-    }
 
     // --- UNIFIED LAYER LOGIC ---
 
@@ -1173,7 +1030,17 @@ export const GLSL_HEADER = `
                     if (l < bestDark) { bestDark = l; posDark = p; }
                 }
             }
-            // Shape + line + label (helpers defined globally)
+            // Kształt + linia + etykieta
+            float sdBox(vec2 p, vec2 b) {
+                vec2 d = abs(p) - b;
+                return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+            }
+            float lineSegment(vec2 p, vec2 a, vec2 b, float w) {
+                vec2 pa = p - a;
+                vec2 ba = b - a;
+                float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
+                return length(pa - ba * h) - w;
+            }
             vec4 outCol = bg;
             vec2 pts[2];
             pts[0] = posBright;
@@ -1234,150 +1101,4 @@ export const GLSL_HEADER = `
 
     }
 
-`;
-
-
-
-// Updated Body: Apply Main Layer (Layer 0) first, then additive chain
-
-const BASE_SHADER_BODY = `void main(){ 
-
-    vec2 uv = getUV(gl_FragCoord.xy);
-
-    vec4 base = getVideo(uv);
-
-    // Layer 0 (Main Scene)
-
-    vec4 processedMain = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
-
-    base = mix(base, processedMain, clamp(uMainMix, 0.0, 1.0));
-
-    // Post Chain (Layers 1-5)
-
-    gl_FragColor = applyAdditiveFX(base, uv); 
-
-}`;
-
-
-
-// Unified List - All effects now use the same BASE_SHADER_BODY
-
-export const SHADER_LIST: ShaderList = {
-
-    '00_NONE': { id: 0, src: BASE_SHADER_BODY },
-
-    
-
-    // Additive
-
-    '1_RGB_SHIFT': { id: 1, src: BASE_SHADER_BODY },
-
-    '2_INVERT_COLOR': { id: 2, src: BASE_SHADER_BODY },
-
-    '3_GLITCH_LINES': { id: 3, src: BASE_SHADER_BODY },
-
-    '4_PIXELATE': { id: 4, src: BASE_SHADER_BODY },
-
-    '5_BRIGHT_FLASH': { id: 5, src: BASE_SHADER_BODY },
-
-    '6_KALEIDO_4X': { id: 6, src: BASE_SHADER_BODY },
-
-    '7_VHS_RETRO': { id: 7, src: BASE_SHADER_BODY },
-
-    '8_STEAM_COLOR': { id: 8, src: BASE_SHADER_BODY },
-
-    '9_SCANLINES': { id: 9, src: BASE_SHADER_BODY },
-
-    '22_FISHEYE_LENS': { id: 22, src: BASE_SHADER_BODY },
-
-    '23_ZOOM_PULSE': { id: 23, src: BASE_SHADER_BODY },
-
-    '24_GLITCH_DIGITAL': { id: 24, src: BASE_SHADER_BODY },
-
-    '25_GLITCH_ANALOG': { id: 25, src: BASE_SHADER_BODY },
-
-    '26_MIRROR_QUAD': { id: 26, src: BASE_SHADER_BODY },
-
-    '27_HALFTONE': { id: 27, src: BASE_SHADER_BODY },
-
-    '28_GAMEBOY': { id: 28, src: BASE_SHADER_BODY },
-
-    '29_THERMAL': { id: 29, src: BASE_SHADER_BODY },
-
-    '30_DUOTONE': { id: 30, src: BASE_SHADER_BODY },
-
-    '31_THRESHOLD': { id: 31, src: BASE_SHADER_BODY },
-
-
-
-    // Main Scenes (Now usable anywhere)
-
-    '100_GLITCH_SCENE': { id: 100, src: BASE_SHADER_BODY },
-
-    '101_TUNNEL_WARP': { id: 101, src: BASE_SHADER_BODY },
-
-    '102_NEON_EDGES': { id: 102, src: BASE_SHADER_BODY },
-
-    '103_COLOR_SHIFT': { id: 103, src: BASE_SHADER_BODY },
-
-    '104_MIRROR_X': { id: 104, src: BASE_SHADER_BODY },
-
-    '105_WAVE_VERT': { id: 105, src: BASE_SHADER_BODY },
-
-    '106_STEAM_ENGINE': { id: 106, src: BASE_SHADER_BODY },
-
-    '107_CYBER_FAILURE': { id: 107, src: BASE_SHADER_BODY },
-
-    '108_BIO_HAZARD': { id: 108, src: BASE_SHADER_BODY },
-
-    '109_ZOOM_TOP': { id: 109, src: BASE_SHADER_BODY },
-
-    '110_ZOOM_BTM': { id: 110, src: BASE_SHADER_BODY },
-
-    '111_ZOOM_CTR': { id: 111, src: BASE_SHADER_BODY },
-
-    '112_ASCII_MATRIX': { id: 112, src: BASE_SHADER_BODY },
-
-    '113_WATER_RIPPLE': { id: 113, src: BASE_SHADER_BODY },
-
-    '114_PIXEL_SORT': { id: 114, src: BASE_SHADER_BODY },
-
-    '115_HEX_PIXELATE': { id: 115, src: BASE_SHADER_BODY },
-
-    '116_AUDIO_SHAKE': { id: 116, src: BASE_SHADER_BODY },
-
-    '117_BARANORAMA': { id: 117, src: BASE_SHADER_BODY },
-
-    '118_CHROMA_FRACTURE': { id: 118, src: BASE_SHADER_BODY },
-    '119_LIQUID_VHS': { id: 119, src: BASE_SHADER_BODY },
-    '120_VORONOI_MELT': { id: 120, src: BASE_SHADER_BODY },
-    '121_FEEDBACK_ECHO': { id: 121, src: BASE_SHADER_BODY },
-    '122_HEX_GLASS': { id: 122, src: BASE_SHADER_BODY },
-    '123_VISC_GLITCH': { id: 123, src: BASE_SHADER_BODY },
-    '124_MELT_SHIFT': { id: 124, src: BASE_SHADER_BODY },
-    '125_DRIP_CHROMA': { id: 125, src: BASE_SHADER_BODY },
-    '126_FLUID_PIXEL_SMEAR': { id: 126, src: BASE_SHADER_BODY },
-    '127_WAVE_SLICE': { id: 127, src: BASE_SHADER_BODY },
-    '128_LIQUID_ECHO': { id: 128, src: BASE_SHADER_BODY },
-    '129_FLUID_FEEDBACK': { id: 129, src: BASE_SHADER_BODY },
-    '130_GEL_TRAIL': { id: 130, src: BASE_SHADER_BODY },
-    '131_VISC_RIPPLE': { id: 131, src: BASE_SHADER_BODY },
-    '132_CHROMA_WASH': { id: 132, src: BASE_SHADER_BODY },
-    '133_NEURAL_BLOOM': { id: 133, src: BASE_SHADER_BODY },
-    '134_DATA_STREAM': { id: 134, src: BASE_SHADER_BODY },
-    '135_SLIT_SCAN': { id: 135, src: BASE_SHADER_BODY },
-    '136_ANAGLYPH_DRIFT': { id: 136, src: BASE_SHADER_BODY },
-    '137_ASCII_PLASMA': { id: 137, src: BASE_SHADER_BODY },
-    '138_FRACTAL_FLAMES': { id: 138, src: BASE_SHADER_BODY },
-    '139_POLAR_GLITCH': { id: 139, src: BASE_SHADER_BODY },
-    '140_DATA_MOSHER': { id: 140, src: BASE_SHADER_BODY },
-    '141_VOXELIZER_3D': { id: 141, src: BASE_SHADER_BODY },
-    '142_TUNNEL_SDF': { id: 142, src: BASE_SHADER_BODY },
-    '143_NORMAL_SPECULAR': { id: 143, src: BASE_SHADER_BODY },
-    '144_DESZYFRATOR': { id: 144, src: BASE_SHADER_BODY },
-
-};
-
-
-
-export const VERT_SRC = `attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }`;
+`,n="attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }";let e=null,c=null,v=null,l=null,m={};const d=o=>{!e||!c||o.forEach(a=>{m[a]=e.getUniformLocation(c,a)})},f=(o,a)=>{if(!e)return null;const i=e.createShader(o);return i?(e.shaderSource(i,a),e.compileShader(i),e.getShaderParameter(i,e.COMPILE_STATUS)?i:(console.error("Shader compile error:",e.getShaderInfoLog(i)),null)):null},s=o=>{if(!e)return;const a=f(e.VERTEX_SHADER,n),i=f(e.FRAGMENT_SHADER,u+o);if(!a||!i)return;const r=e.createProgram();if(!r)return;if(e.attachShader(r,a),e.attachShader(r,i),e.linkProgram(r),!e.getProgramParameter(r,e.LINK_STATUS)){console.error("Program link error");return}c=r,e.useProgram(c);const t=e.getAttribLocation(c,"position");e.enableVertexAttribArray(t),e.vertexAttribPointer(t,2,e.FLOAT,!1,0,0),d(["iTime","iResolution","iVideoResolution","uMainFXGain","uMainFX_ID","uMainMix","uAdditiveMasterGain","uTranslate","uScale","uMirror","uFX1","uFX2","uFX3","uFX4","uFX5","uFX1Mix","uFX2Mix","uFX3Mix","uFX4Mix","uFX5Mix","uFX1_ID","uFX2_ID","uFX3_ID","uFX4_ID","uFX5_ID"])},g=o=>{if(l=o,e=l.getContext("webgl",{preserveDrawingBuffer:!1,alpha:!1}),!e)return!1;const a=e.createBuffer();return e.bindBuffer(e.ARRAY_BUFFER,a),e.bufferData(e.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),e.STATIC_DRAW),v=e.createTexture(),e.bindTexture(e.TEXTURE_2D,v),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_MIN_FILTER,e.LINEAR),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_MAG_FILTER,e.LINEAR),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_WRAP_T,e.CLAMP_TO_EDGE),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_WRAP_S,e.CLAMP_TO_EDGE),e.pixelStorei(e.UNPACK_FLIP_Y_WEBGL,!0),e.texImage2D(e.TEXTURE_2D,0,e.RGBA,1,1,0,e.RGBA,e.UNSIGNED_BYTE,new Uint8Array([0,0,0,255])),!0},p=(o,a)=>{!e||!l||(l.width=o,l.height=a,e.viewport(0,0,o,a))},x=(o,a,i,r)=>{if(!e||!c||!l||!v)return;const t=m;t.iTime&&(e.useProgram(c),e.activeTexture(e.TEXTURE0),e.bindTexture(e.TEXTURE_2D,v),e.texImage2D(e.TEXTURE_2D,0,e.RGBA,e.RGBA,e.UNSIGNED_BYTE,o),e.uniform1f(t.iTime,a/1e3),e.uniform2f(t.iResolution,l.width,l.height),e.uniform2f(t.iVideoResolution,r.w,r.h),e.uniform1f(t.uMainFXGain,i.mainFXGain),e.uniform1i(t.uMainFX_ID,i.main_id),e.uniform1f(t.uMainMix,i.mainMix),e.uniform1f(t.uAdditiveMasterGain,i.additiveMasterGain),e.uniform2f(t.uTranslate,i.transform.x,i.transform.y),e.uniform1f(t.uScale,i.transform.scale),e.uniform1f(t.uMirror,i.isMirrored?1:0),e.uniform1f(t.uFX1,i.fx1),e.uniform1f(t.uFX2,i.fx2),e.uniform1f(t.uFX3,i.fx3),e.uniform1f(t.uFX4,i.fx4),e.uniform1f(t.uFX5,i.fx5),e.uniform1f(t.uFX1Mix,i.fx1Mix),e.uniform1f(t.uFX2Mix,i.fx2Mix),e.uniform1f(t.uFX3Mix,i.fx3Mix),e.uniform1f(t.uFX4Mix,i.fx4Mix),e.uniform1f(t.uFX5Mix,i.fx5Mix),e.uniform1i(t.uFX1_ID,i.fx1_id),e.uniform1i(t.uFX2_ID,i.fx2_id),e.uniform1i(t.uFX3_ID,i.fx3_id),e.uniform1i(t.uFX4_ID,i.fx4_id),e.uniform1i(t.uFX5_ID,i.fx5_id),e.drawArrays(e.TRIANGLES,0,6))};self.onmessage=o=>{const{type:a}=o.data;if(a==="init"){const{canvas:i,fragSrc:r}=o.data;g(i)&&s(r)}else if(a==="loadShader")s(o.data.fragSrc);else if(a==="resize")p(o.data.width,o.data.height);else if(a==="frame"){const{bitmap:i,time:r,fx:t,videoSize:b}=o.data;x(i,r,t,b),i.close(),self.postMessage({type:"frame-done"})}}})();
