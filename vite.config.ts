@@ -2,8 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
+const base = process.env.VITE_BASE || '/visus/'
+
 export default defineConfig({
   plugins: [react()],
-  // Dedicated path for the test site on GitHub Pages.
-  base: '/visus/visus-tst/',
+  // Default production base (main). Override with VITE_BASE for test builds.
+  base,
 })
