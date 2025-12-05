@@ -1256,32 +1256,35 @@ export const GLSL_HEADER = `
             vec2 pts[2];
             pts[0] = posBright;
             pts[1] = posDark;
-            vec3 cols[2];
-            cols[0] = vec3(1.0); // white overlay
-            cols[1] = vec3(1.0);
             for (int i = 0; i < 2; i++) {
                 vec2 p = pts[i];
-                vec3 col = cols[i];
                 vec2 d = uv - p;
-                float r = 0.012 * (1.0 + 0.2 * sin(iTime * 3.0 + float(i)));
-                float circle = 1.0 - smoothstep(r, r * 0.6, length(d)); // thin dot
 
-                vec2 labelPos = p + vec2(0.12 * (i == 0 ? 1.0 : -1.0), 0.06);
-                float seg = lineSegment(uv, p, labelPos, 0.0006);
-                float line = 1.0 - smoothstep(0.0006, 0.0012, seg);
+                // Dot (thin white ring)
+                float r = 0.01;
+                float dot = smoothstep(r * 0.9, r, length(d)) - smoothstep(r, r * 1.15, length(d));
 
-                float boxDist = sdBox(uv - labelPos, vec2(0.05, 0.025));
-                float box = 1.0 - smoothstep(0.001, 0.003, abs(boxDist)); // outline only
+                // Callout position and line
+                vec2 labelPos = p + vec2(0.13 * (i == 0 ? 1.0 : -1.0), 0.05);
+                float seg = lineSegment(uv, p, labelPos, 0.0004);
+                float line = 1.0 - smoothstep(0.0005, 0.001, seg);
 
-                // Text overlays (coords + HEX)
+                // Rounded-ish box outline
+                vec2 boxSize = vec2(0.055, 0.032);
+                float boxDist = sdBox(uv - labelPos, boxSize);
+                float box = smoothstep(0.002, 0.0, -abs(boxDist)); // thin outline
+
+                // Sample color for HEX
                 vec3 sampleCol = getVideo(p).rgb;
-                float textScale = 0.012;
-                float hex = renderHex(uv, labelPos + vec2(-0.048, 0.0), sampleCol, textScale);
-                float coordX = renderCoord(uv, labelPos + vec2(-0.048, -0.024), p.x, textScale);
-                float coordY = renderCoord(uv, labelPos + vec2(-0.048, -0.048), p.y, textScale);
+
+                // Text: 3 lines (HEX, X, Y)
+                float textScale = 0.011;
+                float hex = renderHex(uv, labelPos + vec2(-0.05, 0.012), sampleCol, textScale);
+                float coordX = renderCoord(uv, labelPos + vec2(-0.05, -0.008), p.x, textScale);
+                float coordY = renderCoord(uv, labelPos + vec2(-0.05, -0.028), p.y, textScale);
                 float text = clamp(hex + coordX + coordY, 0.0, 1.0);
 
-                float alpha = clamp((circle * 0.8 + line * 0.6 + box * 0.7 + text) * amt, 0.0, 1.0);
+                float alpha = clamp((dot * 0.9 + line * 0.8 + box * 0.9 + text) * amt, 0.0, 1.0);
                 outCol.rgb = mix(outCol.rgb, vec3(1.0), alpha);
                 outCol.a = 1.0;
             }
