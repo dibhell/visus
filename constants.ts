@@ -1272,7 +1272,8 @@ export const GLSL_HEADER = `
                 // Rounded-ish box outline only (no fill)
                 vec2 boxSize = vec2(0.06, 0.03);
                 float boxDist = sdBox(uv - labelPos, boxSize);
-                float box = smoothstep(0.0015, 0.0, -abs(boxDist));
+                float border = 0.0015;
+                float box = 1.0 - smoothstep(border, border + 0.001, abs(boxDist)); // outline only
 
                 // Sample color for HEX text only (text stays white)
                 vec3 sampleCol = getVideo(p).rgb;
