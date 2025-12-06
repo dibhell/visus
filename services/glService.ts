@@ -5,6 +5,8 @@ export class GLService {
     program: WebGLProgram | null = null;
     tex: WebGLTexture | null = null;
     canvas: HTMLCanvasElement | null = null;
+    uniformLocations: Record<string, WebGLUniformLocation | null> = {};
+    attribLocations: Record<string, number> = {};
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
@@ -17,6 +19,7 @@ export class GLService {
         
         this.tex = this.gl.createTexture();
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
+        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
@@ -57,12 +60,47 @@ export class GLService {
         }
 
         this.program = prog;
+
+        // Cache uniform and attribute locations for faster draw calls
+        const uniformNames = [
+            "iTime",
+            "iResolution",
+            "iVideoResolution",
+            "uMainFXGain",
+            "uMainFX_ID",
+            "uMainMix",
+            "uAdditiveMasterGain",
+            "uTranslate",
+            "uScale",
+            "uMirror",
+            "uFX1",
+            "uFX2",
+            "uFX3",
+            "uFX4",
+            "uFX5",
+            "uFX1Mix",
+            "uFX2Mix",
+            "uFX3Mix",
+            "uFX4Mix",
+            "uFX5Mix",
+            "uFX1_ID",
+            "uFX2_ID",
+            "uFX3_ID",
+            "uFX4_ID",
+            "uFX5_ID",
+        ];
+        this.uniformLocations = {};
+        uniformNames.forEach(name => {
+            this.uniformLocations[name] = this.gl!.getUniformLocation(prog, name);
+        });
+        this.attribLocations = {
+            position: this.gl.getAttribLocation(prog, "position"),
+        };
     }
 
     updateTexture(video: HTMLVideoElement) {
         if (!this.gl || !this.tex || !video || video.readyState < 2) return;
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
     }
 
@@ -70,47 +108,61 @@ export class GLService {
         if (!this.program || !this.gl || !this.canvas) return;
         
         this.gl.useProgram(this.program);
-        const u = (n: string) => this.gl!.getUniformLocation(this.program!, n);
+        const u = (n: string) => this.uniformLocations[n];
+        const set1f = (name: string, v: number) => {
+            const loc = u(name);
+            if (loc !== null && loc !== undefined) this.gl!.uniform1f(loc, v);
+        };
+        const set2f = (name: string, a: number, b: number) => {
+            const loc = u(name);
+            if (loc !== null && loc !== undefined) this.gl!.uniform2f(loc, a, b);
+        };
+        const set1i = (name: string, v: number) => {
+            const loc = u(name);
+            if (loc !== null && loc !== undefined) this.gl!.uniform1i(loc, v);
+        };
 
-        const posLoc = this.gl.getAttribLocation(this.program, "position");
-        this.gl.enableVertexAttribArray(posLoc);
-        this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
+        const posLoc = this.attribLocations["position"];
+        if (posLoc >= 0) {
+            this.gl.enableVertexAttribArray(posLoc);
+            this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
+        }
 
-        this.gl.uniform1f(u("iTime"), time / 1000);
-        this.gl.uniform2f(u("iResolution"), this.canvas.width, this.canvas.height);
-        this.gl.uniform2f(u("iVideoResolution"), video?.videoWidth || 0, video?.videoHeight || 0);
+        set1f("iTime", time / 1000);
+        set2f("iResolution", this.canvas.width, this.canvas.height);
+        set2f("iVideoResolution", video?.videoWidth || 0, video?.videoHeight || 0);
 
         // Main Layer Controls (Layer 0)
-        this.gl.uniform1f(u("uMainFXGain"), computedFx.mainFXGain);
-        this.gl.uniform1i(u("uMainFX_ID"), computedFx.main_id);
-        this.gl.uniform1f(u("uMainMix"), computedFx.mainMix || 1.0);
+        set1f("uMainFXGain", computedFx.mainFXGain);
+        set1i("uMainFX_ID", computedFx.main_id);
+        set1f("uMainMix", computedFx.mainMix || 1.0);
         
         // Additive Chain Controls (Layers 1-5)
-        this.gl.uniform1f(u("uAdditiveMasterGain"), computedFx.additiveMasterGain);
+        set1f("uAdditiveMasterGain", computedFx.additiveMasterGain);
 
         // Transforms & Mirror
-        this.gl.uniform2f(u("uTranslate"), computedFx.transform.x, computedFx.transform.y);
-        this.gl.uniform1f(u("uScale"), computedFx.transform.scale);
-        this.gl.uniform1f(u("uMirror"), computedFx.isMirrored ? 1.0 : 0.0);
+        set2f("uTranslate", computedFx.transform.x, computedFx.transform.y);
+        set1f("uScale", computedFx.transform.scale);
+        set1f("uMirror", computedFx.isMirrored ? 1.0 : 0.0);
 
         // UFX - Levels
-        this.gl.uniform1f(u("uFX1"), computedFx.fx1);
-        this.gl.uniform1f(u("uFX2"), computedFx.fx2);
-        this.gl.uniform1f(u("uFX3"), computedFx.fx3);
-        this.gl.uniform1f(u("uFX4"), computedFx.fx4);
-        this.gl.uniform1f(u("uFX5"), computedFx.fx5);
-        this.gl.uniform1f(u("uFX1Mix"), computedFx.fx1Mix || 1.0);
-        this.gl.uniform1f(u("uFX2Mix"), computedFx.fx2Mix || 1.0);
-        this.gl.uniform1f(u("uFX3Mix"), computedFx.fx3Mix || 1.0);
-        this.gl.uniform1f(u("uFX4Mix"), computedFx.fx4Mix || 1.0);
-        this.gl.uniform1f(u("uFX5Mix"), computedFx.fx5Mix || 1.0);
+        set1f("uFX1", computedFx.fx1);
+        set1f("uFX2", computedFx.fx2);
+        set1f("uFX3", computedFx.fx3);
+        set1f("uFX4", computedFx.fx4);
+        set1f("uFX5", computedFx.fx5);
+        set1f("uFX1Mix", computedFx.fx1Mix || 1.0);
+        set1f("uFX2Mix", computedFx.fx2Mix || 1.0);
+        set1f("uFX3Mix", computedFx.fx3Mix || 1.0);
+        set1f("uFX4Mix", computedFx.fx4Mix || 1.0);
+        set1f("uFX5Mix", computedFx.fx5Mix || 1.0);
 
         // UFX - IDs
-        this.gl.uniform1i(u("uFX1_ID"), computedFx.fx1_id);
-        this.gl.uniform1i(u("uFX2_ID"), computedFx.fx2_id);
-        this.gl.uniform1i(u("uFX3_ID"), computedFx.fx3_id);
-        this.gl.uniform1i(u("uFX4_ID"), computedFx.fx4_id);
-        this.gl.uniform1i(u("uFX5_ID"), computedFx.fx5_id);
+        set1i("uFX1_ID", computedFx.fx1_id);
+        set1i("uFX2_ID", computedFx.fx2_id);
+        set1i("uFX3_ID", computedFx.fx3_id);
+        set1i("uFX4_ID", computedFx.fx4_id);
+        set1i("uFX5_ID", computedFx.fx5_id);
 
         this.gl.activeTexture(this.gl.TEXTURE0);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);

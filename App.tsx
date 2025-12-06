@@ -34,6 +34,7 @@ const App: React.FC = () => {
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const lastVuUpdateRef = useRef<number>(0);
+    const lastUiUpdateRef = useRef<number>(0);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -123,6 +124,8 @@ const App: React.FC = () => {
     };
 
     const handleResize = useCallback(() => {
+        const MAX_W = 1920;
+        const MAX_H = 1080;
         if (!canvasRef.current) return;
         
         const wWindow = window.innerWidth;
@@ -160,6 +163,13 @@ const App: React.FC = () => {
              finalH = 1080; finalW = 2520;
         } else if (aspectRatio === 'fit') {
              finalW = wWindow; finalH = hWindow;
+        }
+
+        // Clamp render resolution to keep GPU load manageable, preserve aspect ratio
+        const clampScale = Math.min(1, MAX_W / finalW, MAX_H / finalH);
+        if (clampScale < 1) {
+            finalW = Math.round(finalW * clampScale);
+            finalH = Math.round(finalH * clampScale);
         }
 
         const canvas = canvasRef.current;
@@ -217,8 +227,8 @@ const App: React.FC = () => {
             const ae = audioService.current;
             ae.update(); 
             
-            // Read VU Meters (throttle to ~20-30 Hz to spare React/paint)
-            if ((t - lastVuUpdateRef.current) > 40) {
+            // Read VU Meters (throttled)
+            if ((t - lastVuUpdateRef.current) > 200) {
                 const levels = ae.getLevels();
                 setVuLevels(levels);
                 lastVuUpdateRef.current = t;
@@ -283,13 +293,15 @@ const App: React.FC = () => {
 
             }
 
-            if (t - lastTimeRef.current > 100) {
-                const dt = t - lastTimeRef.current;
-                const instFps = dt > 0 ? 1000 / dt : 0;
+            const dt = t - lastTimeRef.current;
+            const instFps = dt > 0 ? 1000 / dt : 0;
+            lastTimeRef.current = t;
+
+            if (t - lastUiUpdateRef.current > 250) {
                 const smooth = (fps * 0.7) + (instFps * 0.3);
                 setFps(Math.round(smooth));
                 setVisualLevels(lvls);
-                lastTimeRef.current = t;
+                lastUiUpdateRef.current = t;
             }
 
             animationFrameRef.current = requestAnimationFrame(loop);
@@ -509,9 +521,10 @@ const App: React.FC = () => {
                 try { await audioService.current.ctx.resume(); } catch {}
             }
 
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const videoStream = (canvas as any).captureStream(30);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const recordFps = 24;
+        const videoStream = (canvas as any).captureStream(recordFps);
             const videoTracks = videoStream.getVideoTracks();
             const recordingAudio = audioService.current.createRecordingStream();
 
