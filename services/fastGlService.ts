@@ -36,6 +36,7 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
+    private isPassthrough = false;
     private static FALLBACK_FRAG = `
 precision mediump float;
 uniform vec2 iResolution;
@@ -84,6 +85,7 @@ void main() {
 
     loadShader(fragmentSrc: string, isFallback = false) {
         if (!this.gl) return;
+        this.isPassthrough = isFallback;
 
         const compile = (type: number, source: string) => {
             const sh = this.gl!.createShader(type);
@@ -125,34 +127,38 @@ void main() {
         this.gl.enableVertexAttribArray(posLoc);
         this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
 
-        this.cacheUniforms([
-            'iTime',
-            'iResolution',
-            'iVideoResolution',
-            'iChannel0',
-            'uMainFXGain',
-            'uMainFX_ID',
-            'uMainMix',
-            'uAdditiveMasterGain',
-            'uTranslate',
-            'uScale',
-            'uMirror',
-            'uFX1',
-            'uFX2',
-            'uFX3',
-            'uFX4',
-            'uFX5',
-            'uFX1Mix',
-            'uFX2Mix',
-            'uFX3Mix',
-            'uFX4Mix',
-            'uFX5Mix',
-            'uFX1_ID',
-            'uFX2_ID',
-            'uFX3_ID',
-            'uFX4_ID',
-            'uFX5_ID'
-        ]);
+        if (this.isPassthrough) {
+            this.cacheUniforms(['iResolution', 'iChannel0']);
+        } else {
+            this.cacheUniforms([
+                'iTime',
+                'iResolution',
+                'iVideoResolution',
+                'iChannel0',
+                'uMainFXGain',
+                'uMainFX_ID',
+                'uMainMix',
+                'uAdditiveMasterGain',
+                'uTranslate',
+                'uScale',
+                'uMirror',
+                'uFX1',
+                'uFX2',
+                'uFX3',
+                'uFX4',
+                'uFX5',
+                'uFX1Mix',
+                'uFX2Mix',
+                'uFX3Mix',
+                'uFX4Mix',
+                'uFX5Mix',
+                'uFX1_ID',
+                'uFX2_ID',
+                'uFX3_ID',
+                'uFX4_ID',
+                'uFX5_ID'
+            ]);
+        }
     }
 
     updateTexture(video: HTMLVideoElement) {
@@ -179,12 +185,18 @@ void main() {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
         const u = this.uniformCache;
+
+        // Passthrough mode: only resolution + sampler, no FX uniforms needed.
+        if (this.isPassthrough) {
+            if (u['iChannel0']) gl.uniform1i(u['iChannel0']!, 0);
+            if (u['iResolution']) gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            return;
+        }
+
         const required = ['iTime', 'iResolution', 'iVideoResolution', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
         if (required.some(name => !u[name])) return;
-        // Bind sampler to texture unit 0
-        if (u['iChannel0']) {
-            gl.uniform1i(u['iChannel0']!, 0);
-        }
+        if (u['iChannel0']) gl.uniform1i(u['iChannel0']!, 0);
 
         gl.uniform1f(u['iTime']!, time / 1000);
         gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
