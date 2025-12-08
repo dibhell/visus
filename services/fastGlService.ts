@@ -224,7 +224,15 @@ void main(){
     }
 
     loadShader(fragmentSrc: string, mode: 'normal' | 'passthrough' | 'safe' = 'normal') {
-        if (!this.gl && !this.useCanvas2D) return;
+        if (this.useCanvas2D) return; // Already in canvas fallback, skip WebGL shaders
+        if (!this.gl) {
+            this.enableCanvasFallback();
+            return;
+        }
+        if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) {
+            this.enableCanvasFallback();
+            return;
+        }
         // Optional manual disable: ?fx=0 or localStorage visus_fx=off
         const disableFx = typeof location !== 'undefined' && (location.search.includes('fx=0') || localStorage.getItem('visus_fx') === 'off');
         if (disableFx && mode === 'normal') {
@@ -240,7 +248,11 @@ void main(){
         this.isPassthrough = mode === 'passthrough';
 
         const compile = (type: number, source: string) => {
-            const sh = this.gl!.createShader(type);
+            if (!this.gl) return null;
+            if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) {
+                return null;
+            }
+            const sh = this.gl.createShader(type);
             if (!sh) return null;
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
