@@ -441,15 +441,18 @@ void main(){
     }
 
     resize(w: number, h: number) {
-        if (!this.gl || !this.canvas) return;
+        if (!this.canvas) return;
         if (this.canvas.width !== w || this.canvas.height !== h) {
             this.canvas.width = w;
             this.canvas.height = h;
         }
-        this.gl.viewport(0, 0, w, h);
+        if (this.gl) {
+            this.gl.viewport(0, 0, w, h);
+        }
     }
 
     isReady() {
+        if (this.useCanvas2D && this.canvas && this.ctx2d) return true;
         return !!(this.gl && this.program && this.tex && this.canvas);
     }
 }
