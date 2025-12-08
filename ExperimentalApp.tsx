@@ -38,6 +38,7 @@ const Credits: React.FC = () => (
 ;
 
 const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
+    const ENABLE_WORKER_RENDER = false; // disable OffscreenCanvas worker (stability/perf on GH Pages)
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
@@ -225,33 +226,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (!canvasRef.current) return;
 
         const initWork = () => {
-            const tryWorker = () => {
-                if (!(canvasRef.current as any).transferControlToOffscreen) return false;
-                try {
-                    const worker = new (RenderWorker as any)();
-                    workerRef.current = worker;
-                    const offscreen = (canvasRef.current as any).transferControlToOffscreen();
-                    const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                    worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
-                    worker.onmessage = (ev: MessageEvent) => {
-                        if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
-                    };
-                    workerReadyRef.current = true;
-                    useWorkerRenderRef.current = true;
-                    return true;
-                } catch (err) {
-                    workerReadyRef.current = false;
-                    useWorkerRenderRef.current = false;
-                    return false;
-                }
-            };
-
-            const workerUsed = tryWorker();
-            if (!workerUsed) {
-                rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
-                const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                rendererRef.current.loadShader(shaderDef.src);
-            }
+            // Worker rendering disabled (stability on GH Pages / avoid OffscreenCanvas issues)
+            workerReadyRef.current = false;
+            useWorkerRenderRef.current = false;
+            rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
+            const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+            rendererRef.current.loadShader(shaderDef.src);
 
             audioRef.current.initContext().then(() => {
                 audioRef.current.setupFilters(syncParamsRef.current);
