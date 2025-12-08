@@ -224,7 +224,7 @@ void main(){
     }
 
     loadShader(fragmentSrc: string, mode: 'normal' | 'passthrough' | 'safe' = 'normal') {
-        if (!this.gl) return;
+        if (!this.gl && !this.useCanvas2D) return;
         // Optional manual disable: ?fx=0 or localStorage visus_fx=off
         const disableFx = typeof location !== 'undefined' && (location.search.includes('fx=0') || localStorage.getItem('visus_fx') === 'off');
         if (disableFx && mode === 'normal') {
@@ -233,8 +233,8 @@ void main(){
             return;
         }
         if (!fragmentSrc) {
-            console.error('Shader source missing, using passthrough.');
-            this.loadShader(FastGLService.FALLBACK_FRAG, 'passthrough');
+            console.error('Shader source missing, using canvas fallback.');
+            this.enableCanvasFallback();
             return;
         }
         this.isPassthrough = mode === 'passthrough';
@@ -253,8 +253,8 @@ void main(){
 
         const prependHeader = mode === 'normal';
         const fsSource = prependHeader ? GLSL_HEADER + fragmentSrc : fragmentSrc;
-        const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, fsSource);
+        const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
+        const fs = compile(this.gl!.FRAGMENT_SHADER, fsSource);
         if (!vs || !fs) {
             if (mode === 'normal') {
                 console.warn('Falling back to safe FX shader (compile failed). Source length:', fsSource.length);
@@ -263,20 +263,21 @@ void main(){
                 console.warn('Safe FX shader failed; using passthrough.');
                 this.loadShader(FastGLService.FALLBACK_FRAG, 'passthrough');
             } else {
-                console.warn('Fallback passthrough shader failed; giving up.');
+                console.warn('Fallback passthrough shader failed; enabling Canvas2D fallback.');
+                this.enableCanvasFallback();
             }
             return;
         }
 
-        const prog = this.gl.createProgram();
+        const prog = this.gl!.createProgram();
         if (!prog) return;
 
-        this.gl.attachShader(prog, vs);
-        this.gl.attachShader(prog, fs);
-        this.gl.linkProgram(prog);
+        this.gl!.attachShader(prog, vs);
+        this.gl!.attachShader(prog, fs);
+        this.gl!.linkProgram(prog);
 
-        if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
-            console.error('Program link error', this.gl.getProgramInfoLog(prog) || '');
+        if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
+            console.error('Program link error', this.gl!.getProgramInfoLog(prog) || '');
             if (mode === 'normal') {
                 console.warn('Falling back to safe FX shader (link failed).');
                 this.loadShader(FastGLService.SAFE_FX_SHADER, 'safe');
@@ -291,12 +292,22 @@ void main(){
         }
 
         this.program = prog;
-        this.gl.useProgram(prog);
+        if (!this.gl) {
+            this.enableCanvasFallback();
+            return;
+        }
+        const gl = this.gl;
+        gl.useProgram(prog);
 
-        const posLoc = this.gl.getAttribLocation(prog, 'position');
+        const posLoc = gl.getAttribLocation(prog, 'position');
         this.positionLoc = posLoc;
-        this.gl.enableVertexAttribArray(posLoc);
-        this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
+        if (posLoc >= 0) {
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+        } else {
+            this.enableCanvasFallback();
+            return;
+        }
 
         if (this.isPassthrough) {
             this.cacheUniforms(['iResolution', 'iChannel0']);
