@@ -40,6 +40,7 @@ export class FastGLService {
     private useCanvas2D = false;
     private ctx2d: CanvasRenderingContext2D | null = null;
     private hostIsStatic = (typeof location !== 'undefined') && (location.hostname.includes('github.io') || location.hostname.includes('netlify.app'));
+    private allowWebGL = true;
     private isMinimalShader = false;
     private static FALLBACK_FRAG = `
 precision mediump float;
@@ -198,6 +199,7 @@ void main(){
         this.canvas = canvas;
         const forceFx = typeof location !== 'undefined' && (location.search.includes('fx=1') || localStorage.getItem('visus_fx') === 'on');
         const forceCanvas = this.hostIsStatic && !forceFx;
+        this.allowWebGL = !forceCanvas;
 
         // On static hosts (github.io / netlify.app) default to Canvas2D unless user forces fx
         if (forceCanvas) {
@@ -248,7 +250,7 @@ void main(){
     }
 
     loadShader(fragmentSrc: string, mode: 'normal' | 'passthrough' | 'safe' = 'normal') {
-        if (this.hostIsStatic || this.useCanvas2D) return; // Already in canvas fallback on static hosts
+        if (this.useCanvas2D || !this.allowWebGL) return; // Already in canvas fallback or WebGL disabled
         if (!this.gl) {
             this.enableCanvasFallback();
             return;
