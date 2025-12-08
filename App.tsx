@@ -9,7 +9,7 @@ import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
 import ExperimentalApp from './ExperimentalApp';
-const ICON_PNG = '/visus/icon.png';
+const ICON_PNG = '/icon.png';
 
 // --- ICONS (SVG) ---
 const ICONS = {

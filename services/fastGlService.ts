@@ -40,6 +40,7 @@ export class FastGLService {
     private useCanvas2D = false;
     private ctx2d: CanvasRenderingContext2D | null = null;
     private hostIsGhPages = (typeof location !== 'undefined') && location.hostname.includes('github.io');
+    private isMinimalShader = false;
     private static FALLBACK_FRAG = `
 precision mediump float;
 uniform vec2 iResolution;
@@ -47,6 +48,19 @@ uniform sampler2D iChannel0;
 void main() {
     vec2 uv = gl_FragCoord.xy / iResolution.xy;
     gl_FragColor = texture2D(iChannel0, uv);
+}`;
+    private static MINIMAL_FX_SHADER = `
+precision mediump float;
+uniform vec2 iResolution;
+uniform sampler2D iChannel0;
+uniform float iTime;
+void main(){
+    vec2 uv = gl_FragCoord.xy / iResolution.xy;
+    vec4 col = texture2D(iChannel0, uv);
+    // proste falowanie barw dla namiastki FX
+    float hue = sin(iTime*0.5 + uv.y*20.0)*0.05;
+    col.rgb = clamp(col.rgb + vec3(hue, -hue*0.5, hue*0.3), 0.0, 1.0);
+    gl_FragColor = col;
 }`;
     // Reduced FX shader (safe subset) to avoid driver limits on large monolithic shader
     private static SAFE_FX_SHADER = `
@@ -253,6 +267,7 @@ void main(){
             return;
         }
         this.isPassthrough = mode === 'passthrough';
+        this.isMinimalShader = mode === 'safe';
 
         const compile = (type: number, source: string) => {
             if (!this.gl) return null;
@@ -271,7 +286,7 @@ void main(){
         };
 
         const prependHeader = mode === 'normal';
-        const fsSource = prependHeader ? GLSL_HEADER + fragmentSrc : fragmentSrc;
+        const fsSource = mode === 'safe' ? FastGLService.MINIMAL_FX_SHADER : (prependHeader ? GLSL_HEADER + fragmentSrc : fragmentSrc);
         const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
         const fs = compile(this.gl!.FRAGMENT_SHADER, fsSource);
         if (!vs || !fs) {
@@ -329,7 +344,7 @@ void main(){
         }
 
         if (this.isPassthrough) {
-            this.cacheUniforms(['iResolution', 'iChannel0']);
+            this.cacheUniforms(['iResolution', 'iChannel0', 'iTime']);
         } else {
             this.cacheUniforms([
                 'iTime',
@@ -395,10 +410,11 @@ void main(){
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
         const u = this.uniformCache;
 
-        // Passthrough mode: only resolution + sampler, no FX uniforms needed.
-        if (this.isPassthrough) {
+        // Passthrough/minimal mode: only resolution + sampler (+ time) needed.
+        if (this.isPassthrough || this.isMinimalShader) {
             if (u['iChannel0']) gl.uniform1i(u['iChannel0']!, 0);
             if (u['iResolution']) gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
+            if (u['iTime']) gl.uniform1f(u['iTime']!, time / 1000);
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             return;
         }
