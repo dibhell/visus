@@ -85,6 +85,13 @@ void main() {
 
     loadShader(fragmentSrc: string, isFallback = false) {
         if (!this.gl) return;
+        // Hard fallback on GitHub Pages (stability-first, disables FX)
+        const forcePassthrough = typeof location !== 'undefined' && location.hostname.includes('github.io');
+        if (forcePassthrough && !isFallback) {
+            console.warn('Forcing passthrough shader on github.io (no FX).');
+            this.loadShader(FastGLService.FALLBACK_FRAG, true);
+            return;
+        }
         if (!fragmentSrc) {
             console.error('Shader source missing, using passthrough.');
             this.loadShader(FastGLService.FALLBACK_FRAG, true);
@@ -104,11 +111,12 @@ void main() {
             return sh;
         };
 
+        const fsSource = isFallback ? fragmentSrc : GLSL_HEADER + fragmentSrc;
         const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, isFallback ? fragmentSrc : GLSL_HEADER + fragmentSrc);
+        const fs = compile(this.gl.FRAGMENT_SHADER, fsSource);
         if (!vs || !fs) {
             if (!isFallback) {
-                console.warn('Falling back to passthrough shader (compile failed)');
+                console.warn('Falling back to passthrough shader (compile failed). Source length:', fsSource.length);
                 this.loadShader(FastGLService.FALLBACK_FRAG, true);
             }
             return;
