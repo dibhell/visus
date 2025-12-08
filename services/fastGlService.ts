@@ -85,6 +85,11 @@ void main() {
 
     loadShader(fragmentSrc: string, isFallback = false) {
         if (!this.gl) return;
+        if (!fragmentSrc) {
+            console.error('Shader source missing, using passthrough.');
+            this.loadShader(FastGLService.FALLBACK_FRAG, true);
+            return;
+        }
         this.isPassthrough = isFallback;
 
         const compile = (type: number, source: string) => {
@@ -93,7 +98,7 @@ void main() {
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
             if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh));
+                console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh) || '(empty log)');
                 return null;
             }
             return sh;
@@ -101,7 +106,13 @@ void main() {
 
         const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
         const fs = compile(this.gl.FRAGMENT_SHADER, isFallback ? fragmentSrc : GLSL_HEADER + fragmentSrc);
-        if (!vs || !fs) return;
+        if (!vs || !fs) {
+            if (!isFallback) {
+                console.warn('Falling back to passthrough shader (compile failed)');
+                this.loadShader(FastGLService.FALLBACK_FRAG, true);
+            }
+            return;
+        }
 
         const prog = this.gl.createProgram();
         if (!prog) return;
