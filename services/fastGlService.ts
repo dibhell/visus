@@ -39,7 +39,7 @@ export class FastGLService {
     private isPassthrough = false;
     private useCanvas2D = false;
     private ctx2d: CanvasRenderingContext2D | null = null;
-    private hostIsGhPages = (typeof location !== 'undefined') && location.hostname.includes('github.io');
+    private hostIsStatic = (typeof location !== 'undefined') && (location.hostname.includes('github.io') || location.hostname.includes('netlify.app'));
     private isMinimalShader = false;
     private static FALLBACK_FRAG = `
 precision mediump float;
@@ -196,8 +196,11 @@ void main(){
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
-        // On GitHub Pages force Canvas2D (avoid WebGL compile/link issues on limited contexts)
-        if (this.hostIsGhPages) {
+        const forceFx = typeof location !== 'undefined' && (location.search.includes('fx=1') || localStorage.getItem('visus_fx') === 'on');
+        const forceCanvas = this.hostIsStatic && !forceFx;
+
+        // On static hosts (github.io / netlify.app) default to Canvas2D unless user forces fx
+        if (forceCanvas) {
             this.ctx2d = canvas.getContext('2d');
             this.useCanvas2D = !!this.ctx2d;
             return this.useCanvas2D;
@@ -245,7 +248,7 @@ void main(){
     }
 
     loadShader(fragmentSrc: string, mode: 'normal' | 'passthrough' | 'safe' = 'normal') {
-        if (this.hostIsGhPages || this.useCanvas2D) return; // Already in canvas fallback, skip WebGL shaders on gh-pages
+        if (this.hostIsStatic || this.useCanvas2D) return; // Already in canvas fallback on static hosts
         if (!this.gl) {
             this.enableCanvasFallback();
             return;
