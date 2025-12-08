@@ -37,6 +37,8 @@ export class FastGLService {
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
     private isPassthrough = false;
+    private useCanvas2D = false;
+    private ctx2d: CanvasRenderingContext2D | null = null;
     private static FALLBACK_FRAG = `
 precision mediump float;
 uniform vec2 iResolution;
@@ -168,15 +170,30 @@ void main(){
     base = mix(base, processedMain, clamp(uMainMix, 0.0, 1.0));
     gl_FragColor = applyAdditiveFX(base, uv);
 }`;
+    private enableCanvasFallback() {
+        if (!this.canvas) return;
+        this.gl = null;
+        this.program = null;
+        this.tex = null;
+        this.useCanvas2D = true;
+        this.ctx2d = this.canvas.getContext('2d');
+    }
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
+        // Try WebGL first
         this.gl = canvas.getContext('webgl', {
             preserveDrawingBuffer: false,
             alpha: false,
             powerPreference: 'high-performance'
         });
-        if (!this.gl) return false;
+
+        if (!this.gl) {
+            // Fallback to Canvas2D renderer (no FX) if WebGL is unavailable
+            this.ctx2d = canvas.getContext('2d');
+            this.useCanvas2D = !!this.ctx2d;
+            return this.useCanvas2D;
+        }
 
         const gl = this.gl;
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -267,7 +284,8 @@ void main(){
                 console.warn('Safe FX shader failed; using passthrough.');
                 this.loadShader(FastGLService.FALLBACK_FRAG, 'passthrough');
             } else {
-                console.warn('Fallback passthrough shader failed; giving up.');
+                console.warn('Fallback passthrough shader failed; enabling Canvas2D fallback.');
+                this.enableCanvasFallback();
             }
             return;
         }
@@ -330,6 +348,14 @@ void main(){
     }
 
     draw(time: number, video: HTMLVideoElement, fx: ExperimentalFxPacket) {
+        // Canvas2D fallback: draw video frame without FX
+        if (this.useCanvas2D && this.ctx2d && this.canvas) {
+            try {
+                this.ctx2d.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+            } catch {}
+            return;
+        }
+
         if (!this.program || !this.gl || !this.canvas || !this.tex) return;
         if (this.positionLoc === null || this.positionLoc < 0) return;
 
