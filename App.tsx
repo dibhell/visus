@@ -34,6 +34,8 @@ const App: React.FC = () => {
     const animationFrameRef = useRef<number>(0);
     const lastTimeRef = useRef<number>(0);
     const lastVuUpdateRef = useRef<number>(0);
+    const lastUiUpdateRef = useRef<number>(0);
+    const renderScaleRef = useRef<number>(0.7);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -64,6 +66,7 @@ const App: React.FC = () => {
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
     const [isMirrored, setIsMirrored] = useState(false);
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
+    const [renderScale, setRenderScale] = useState(0.7);
 
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
@@ -83,6 +86,7 @@ const App: React.FC = () => {
         fx4: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
         fx5: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
     });
+    const renderScalePresets = [1, 0.85, 0.7, 0.55, 0.45, 0.35];
 
     const fxStateRef = useRef(fxState);
     const syncParamsRef = useRef(syncParams);
@@ -101,6 +105,7 @@ const App: React.FC = () => {
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
+    useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
 
     // Apply Mixer Volume Changes
     useEffect(() => {
@@ -123,6 +128,8 @@ const App: React.FC = () => {
     };
 
     const handleResize = useCallback(() => {
+        const MAX_W = 1920;
+        const MAX_H = 1080;
         if (!canvasRef.current) return;
         
         const wWindow = window.innerWidth;
@@ -162,10 +169,20 @@ const App: React.FC = () => {
              finalW = wWindow; finalH = hWindow;
         }
 
+        // Clamp render resolution to keep GPU load manageable, keep aspect ratio
+        const clampScale = Math.min(1, MAX_W / finalW, MAX_H / finalH);
+        if (clampScale < 1) {
+            finalW = Math.round(finalW * clampScale);
+            finalH = Math.round(finalH * clampScale);
+        }
+
+        const renderW = Math.max(4, Math.round(finalW * renderScaleRef.current));
+        const renderH = Math.max(4, Math.round(finalH * renderScaleRef.current));
+
         const canvas = canvasRef.current;
-        if (canvas.width !== finalW || canvas.height !== finalH) {
-             canvas.width = finalW;
-             canvas.height = finalH;
+        if (canvas.width !== renderW || canvas.height !== renderH) {
+             canvas.width = renderW;
+             canvas.height = renderH;
         }
 
         const scale = Math.min(availableW / finalW, availableH / finalH);
@@ -178,7 +195,7 @@ const App: React.FC = () => {
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
         if (glService.current && typeof glService.current.resize === 'function') {
-            glService.current.resize(finalW, finalH);
+            glService.current.resize(renderW, renderH);
         }
     }, [aspectRatio, panelVisible]);
 
@@ -187,6 +204,10 @@ const App: React.FC = () => {
         const t = setTimeout(handleResize, 300); 
         return () => clearTimeout(t);
     }, [panelVisible, handleResize]);
+
+    useEffect(() => {
+        handleResize();
+    }, [renderScale, handleResize]);
 
     useEffect(() => {
         if (!isSystemActive) return;
@@ -222,7 +243,7 @@ const App: React.FC = () => {
                 const ae = audioService.current;
                 ae.update(); 
                 
-                if ((t - lastVuUpdateRef.current) > 40) {
+                if ((t - lastVuUpdateRef.current) > 200) {
                     const levels = ae.getLevels();
                     setVuLevels(levels);
                     lastVuUpdateRef.current = t;
@@ -286,13 +307,15 @@ const App: React.FC = () => {
                     glService.current.draw(t, videoRef.current, computedFx);
                 }
 
-                if (t - lastTimeRef.current > 100) {
-                    const dt = t - lastTimeRef.current;
-                    const instFps = dt > 0 ? 1000 / dt : 0;
+                const dt = t - lastTimeRef.current;
+                const instFps = dt > 0 ? 1000 / dt : 0;
+                lastTimeRef.current = t;
+
+                if (t - lastUiUpdateRef.current > 250) {
                     const smooth = (fps * 0.7) + (instFps * 0.3);
                     setFps(Math.round(smooth));
                     setVisualLevels(lvls);
-                    lastTimeRef.current = t;
+                    lastUiUpdateRef.current = t;
                 }
 
                 animationFrameRef.current = requestAnimationFrame(loop);
@@ -513,9 +536,10 @@ const App: React.FC = () => {
                 try { await audioService.current.ctx.resume(); } catch {}
             }
 
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const videoStream = (canvas as any).captureStream(30);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const recordFps = 24;
+        const videoStream = (canvas as any).captureStream(recordFps);
             const videoTracks = videoStream.getVideoTracks();
             const recordingAudio = audioService.current.createRecordingStream();
 
@@ -645,10 +669,12 @@ const App: React.FC = () => {
             <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
                 <span className="hidden md:inline">RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
-                {mixer.mic.active && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC</span>}
-                {isRecording && <span className="text-red-500 animate-pulse font-black tracking-widest">● REC</span>}
+                <span className="hidden md:inline">Scale: {Math.round(renderScaleRef.current * 100)}%</span>
+                {mixer.mic.active && <span className="text-red-500 animate-pulse font-black tracking-widest">MIC</span>}
+                {isRecording && <span className="text-red-500 animate-pulse font-black tracking-widest">REC</span>}
             </div>
 
+            
             {/* MODALS */}
             {showCatalog && (
                 <MusicCatalog onSelect={loadMusicTrack} onClose={() => setShowCatalog(false)} />
@@ -789,6 +815,26 @@ const App: React.FC = () => {
                             {['native', '16:9', '9:16', '4:5', '1:1', 'fit'].map(r => (
                                 <button key={r} onClick={() => setAspectRatio(r as AspectRatioMode)} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === r ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>{r.toUpperCase()}</button>
                             ))}
+                        </div>
+
+                        {/* RENDER SCALE */}
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 mb-3">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-[9px] text-slate-500 font-bold tracking-wider">RENDER SCALE</div>
+                                <div className="text-[9px] text-slate-400">{Math.round(renderScale * 100)}%</div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {renderScalePresets.map(val => (
+                                    <button
+                                        key={val}
+                                        onClick={() => setRenderScale(val)}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${renderScale === val ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-300 border-white/5 hover:border-white/20'}`}
+                                    >
+                                        {Math.round(val * 100)}%
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-2">Lower = mniej obciazenia GPU (HD klipy).</div>
                         </div>
                         
                         {/* GEOMETRY CONTROLS */}

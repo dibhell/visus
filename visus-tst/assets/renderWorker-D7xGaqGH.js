@@ -1,4 +1,4 @@
-(function(){"use strict";const u=`
+(function(){"use strict";const d=`
 
     precision mediump float;
 
@@ -141,6 +141,84 @@
         vec2 ba = b - a;
         float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
         return length(pa - ba * h) - w;
+    }
+
+    // --- TINY PIXEL FONT (7-seg + dot) ---
+    float segLine(vec2 p, vec2 a, vec2 b) {
+        vec2 pa = p - a;
+        vec2 ba = b - a;
+        float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
+        float d = length(pa - ba * h);
+        return 1.0 - smoothstep(0.06, 0.1, d);
+    }
+
+    float drawDigit(vec2 uv, int d) {
+        // uv in [0,1]x[0,1], 7-seg style
+        vec2 p = uv * vec2(1.0, 1.8) - vec2(0.0, 0.4);
+        bool s0 = d==0||d==2||d==3||d==5||d==6||d==7||d==8||d==9||d==10||d==12||d==14||d==15;
+        bool s1 = d==0||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==13||d==14||d==15;
+        bool s2 = d==0||d==1||d==2||d==3||d==4||d==7||d==8||d==9||d==10||d==13;
+        bool s3 = d==2||d==3||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==13||d==14;
+        bool s4 = d==0||d==2||d==6||d==8||d==10||d==11||d==12||d==14||d==15;
+        bool s5 = d==0||d==1||d==3||d==4||d==5||d==6||d==7||d==8||d==9||d==10||d==11||d==13;
+        bool s6 = d==0||d==2||d==3||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==14||d==15;
+        float a = 0.0;
+        if (s0) a = max(a, segLine(p, vec2(-0.45, 0.9), vec2(0.45, 0.9)));
+        if (s1) a = max(a, segLine(p, vec2(-0.55, 0.8), vec2(-0.55, 0.1)));
+        if (s2) a = max(a, segLine(p, vec2(0.55, 0.8), vec2(0.55, 0.1)));
+        if (s3) a = max(a, segLine(p, vec2(-0.45, 0.0), vec2(0.45, 0.0)));
+        if (s4) a = max(a, segLine(p, vec2(-0.55,-0.1), vec2(-0.55,-0.8)));
+        if (s5) a = max(a, segLine(p, vec2(0.55,-0.1), vec2(0.55,-0.8)));
+        if (s6) a = max(a, segLine(p, vec2(-0.45,-0.9), vec2(0.45,-0.9)));
+        return a;
+    }
+
+    float drawDotChar(vec2 uv) {
+        vec2 d = uv - vec2(0.0, -0.9);
+        float r = length(d);
+        return 1.0 - smoothstep(0.12, 0.18, r);
+    }
+
+    float drawChar(vec2 uv, int code) {
+        if (code < 0) return 0.0;
+        if (code == 16) return drawDotChar(uv);
+        int d = code;
+        return drawDigit(uv, d);
+    }
+
+    float renderHex(vec2 uv, vec2 origin, vec3 col, float scale) {
+        int r = int(clamp(col.r * 255.0 + 0.5, 0.0, 255.0));
+        int g = int(clamp(col.g * 255.0 + 0.5, 0.0, 255.0));
+        int b = int(clamp(col.b * 255.0 + 0.5, 0.0, 255.0));
+        int d0 = r / 16; int d1 = r - d0 * 16;
+        int d2 = g / 16; int d3 = g - d2 * 16;
+        int d4 = b / 16; int d5 = b - d4 * 16;
+        int digits[6];
+        digits[0] = d0; digits[1] = d1; digits[2] = d2; digits[3] = d3; digits[4] = d4; digits[5] = d5;
+        float a = 0.0;
+        vec2 p = (uv - origin) / scale;
+        for (int i = 0; i < 6; i++) {
+            a = max(a, drawChar(p - vec2(float(i) * 1.1, 0.0), digits[i]));
+        }
+        return a;
+    }
+
+    float renderCoord(vec2 uv, vec2 origin, float v, float scale) {
+        float clamped = clamp(v, 0.0, 0.999);
+        int scaled = int(clamped * 100.0 + 0.5); // two decimals
+        int tens = scaled / 10;
+        int ones = scaled - tens * 10;
+        int digits[4];
+        digits[0] = 0;      // leading zero since <1.0
+        digits[1] = 16;     // dot
+        digits[2] = tens;
+        digits[3] = ones;
+        float a = 0.0;
+        vec2 p = (uv - origin) / scale;
+        for (int i = 0; i < 4; i++) {
+            a = max(a, drawChar(p - vec2(float(i) * 1.1, 0.0), digits[i]));
+        }
+        return a;
     }
 
     // --- UNIFIED LAYER LOGIC ---
@@ -1048,21 +1126,36 @@
             vec2 pts[2];
             pts[0] = posBright;
             pts[1] = posDark;
-            vec3 cols[2];
-            cols[0] = vec3(0.95, 0.2, 0.7);
-            cols[1] = vec3(0.2, 0.8, 1.0);
             for (int i = 0; i < 2; i++) {
                 vec2 p = pts[i];
-                vec3 col = cols[i];
                 vec2 d = uv - p;
-                float r = 0.014 * (1.0 + 0.3 * sin(iTime * 3.0 + float(i)));
-                float shape = smoothstep(r, r * 0.6, length(d));
-                vec2 labelPos = p + vec2(0.12 * (i == 0 ? 1.0 : -1.0), 0.08);
-                float line = smoothstep(0.002, 0.0, lineSegment(uv, p, labelPos, 0.0008));
-                float box = smoothstep(0.0, 0.01, -sdBox(uv - labelPos, vec2(0.045, 0.02)));
-                float alpha = clamp((shape * 0.5 + line * 0.5 + box * 0.7) * amt, 0.0, 1.0);
-                vec3 mixCol = mix(bg.rgb, col, 0.75);
-                outCol.rgb = mix(outCol.rgb, mixCol, alpha);
+
+                // Dot (thin white ring, small)
+                float r = 0.007;
+                float dot = smoothstep(r * 0.9, r, length(d)) - smoothstep(r, r * 1.12, length(d));
+
+                // Callout position and line (very thin)
+                vec2 labelPos = p + vec2(0.11 * (i == 0 ? 1.0 : -1.0), 0.04);
+                float seg = lineSegment(uv, p, labelPos, 0.00025);
+                float line = 1.0 - smoothstep(0.00035, 0.0007, seg);
+
+                // Rounded-ish box outline only (no fill)
+                vec2 boxSize = vec2(0.06, 0.03);
+                float boxDist = sdBox(uv - labelPos, boxSize);
+                float box = smoothstep(0.0015, 0.0, -abs(boxDist));
+
+                // Sample color for HEX text only (text stays white)
+                vec3 sampleCol = getVideo(p).rgb;
+
+                // Text: 3 lines (HEX, X, Y)
+                float textScale = 0.0095;
+                float hex = renderHex(uv, labelPos + vec2(-0.055, 0.012), sampleCol, textScale);
+                float coordX = renderCoord(uv, labelPos + vec2(-0.055, -0.006), p.x, textScale);
+                float coordY = renderCoord(uv, labelPos + vec2(-0.055, -0.024), p.y, textScale);
+                float text = clamp(hex + coordX + coordY, 0.0, 1.0);
+
+                float alpha = clamp((dot * 0.7 + line * 0.6 + box * 0.8 + text) * amt, 0.0, 0.85);
+                outCol.rgb = mix(outCol.rgb, vec3(1.0), alpha);
                 outCol.a = 1.0;
             }
             return outCol;
@@ -1104,4 +1197,4 @@
 
     }
 
-`,n="attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }";let e=null,c=null,v=null,l=null,m={};const d=o=>{!e||!c||o.forEach(a=>{m[a]=e.getUniformLocation(c,a)})},f=(o,a)=>{if(!e)return null;const i=e.createShader(o);return i?(e.shaderSource(i,a),e.compileShader(i),e.getShaderParameter(i,e.COMPILE_STATUS)?i:(console.error("Shader compile error:",e.getShaderInfoLog(i)),null)):null},s=o=>{if(!e)return;const a=f(e.VERTEX_SHADER,n),i=f(e.FRAGMENT_SHADER,u+o);if(!a||!i)return;const r=e.createProgram();if(!r)return;if(e.attachShader(r,a),e.attachShader(r,i),e.linkProgram(r),!e.getProgramParameter(r,e.LINK_STATUS)){console.error("Program link error");return}c=r,e.useProgram(c);const t=e.getAttribLocation(c,"position");e.enableVertexAttribArray(t),e.vertexAttribPointer(t,2,e.FLOAT,!1,0,0),d(["iTime","iResolution","iVideoResolution","uMainFXGain","uMainFX_ID","uMainMix","uAdditiveMasterGain","uTranslate","uScale","uMirror","uFX1","uFX2","uFX3","uFX4","uFX5","uFX1Mix","uFX2Mix","uFX3Mix","uFX4Mix","uFX5Mix","uFX1_ID","uFX2_ID","uFX3_ID","uFX4_ID","uFX5_ID"])},g=o=>{if(l=o,e=l.getContext("webgl",{preserveDrawingBuffer:!1,alpha:!1}),!e)return!1;const a=e.createBuffer();return e.bindBuffer(e.ARRAY_BUFFER,a),e.bufferData(e.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),e.STATIC_DRAW),v=e.createTexture(),e.bindTexture(e.TEXTURE_2D,v),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_MIN_FILTER,e.LINEAR),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_MAG_FILTER,e.LINEAR),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_WRAP_T,e.CLAMP_TO_EDGE),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_WRAP_S,e.CLAMP_TO_EDGE),e.pixelStorei(e.UNPACK_FLIP_Y_WEBGL,!0),e.texImage2D(e.TEXTURE_2D,0,e.RGBA,1,1,0,e.RGBA,e.UNSIGNED_BYTE,new Uint8Array([0,0,0,255])),!0},p=(o,a)=>{!e||!l||(l.width=o,l.height=a,e.viewport(0,0,o,a))},b=(o,a,i,r)=>{if(!e||!c||!l||!v)return;const t=m;t.iTime&&(e.useProgram(c),e.activeTexture(e.TEXTURE0),e.bindTexture(e.TEXTURE_2D,v),e.texImage2D(e.TEXTURE_2D,0,e.RGBA,e.RGBA,e.UNSIGNED_BYTE,o),e.uniform1f(t.iTime,a/1e3),e.uniform2f(t.iResolution,l.width,l.height),e.uniform2f(t.iVideoResolution,r.w,r.h),e.uniform1f(t.uMainFXGain,i.mainFXGain),e.uniform1i(t.uMainFX_ID,i.main_id),e.uniform1f(t.uMainMix,i.mainMix),e.uniform1f(t.uAdditiveMasterGain,i.additiveMasterGain),e.uniform2f(t.uTranslate,i.transform.x,i.transform.y),e.uniform1f(t.uScale,i.transform.scale),e.uniform1f(t.uMirror,i.isMirrored?1:0),e.uniform1f(t.uFX1,i.fx1),e.uniform1f(t.uFX2,i.fx2),e.uniform1f(t.uFX3,i.fx3),e.uniform1f(t.uFX4,i.fx4),e.uniform1f(t.uFX5,i.fx5),e.uniform1f(t.uFX1Mix,i.fx1Mix),e.uniform1f(t.uFX2Mix,i.fx2Mix),e.uniform1f(t.uFX3Mix,i.fx3Mix),e.uniform1f(t.uFX4Mix,i.fx4Mix),e.uniform1f(t.uFX5Mix,i.fx5Mix),e.uniform1i(t.uFX1_ID,i.fx1_id),e.uniform1i(t.uFX2_ID,i.fx2_id),e.uniform1i(t.uFX3_ID,i.fx3_id),e.uniform1i(t.uFX4_ID,i.fx4_id),e.uniform1i(t.uFX5_ID,i.fx5_id),e.drawArrays(e.TRIANGLES,0,6))};self.onmessage=o=>{const{type:a}=o.data;if(a==="init"){const{canvas:i,fragSrc:r}=o.data;g(i)&&s(r)}else if(a==="loadShader")s(o.data.fragSrc);else if(a==="resize")p(o.data.width,o.data.height);else if(a==="frame"){const{bitmap:i,time:r,fx:t,videoSize:x}=o.data;b(i,r,t,x),i.close(),self.postMessage({type:"frame-done"})}}})();
+`,n="attribute vec2 position; void main() { gl_Position = vec4(position, 0.0, 1.0); }";let e=null,c=null,v=null,l=null,f={};const u=o=>{!e||!c||o.forEach(a=>{f[a]=e.getUniformLocation(c,a)})},m=(o,a)=>{if(!e)return null;const i=e.createShader(o);return i?(e.shaderSource(i,a),e.compileShader(i),e.getShaderParameter(i,e.COMPILE_STATUS)?i:(console.error("Shader compile error:",e.getShaderInfoLog(i)),null)):null},s=o=>{if(!e)return;const a=m(e.VERTEX_SHADER,n),i=m(e.FRAGMENT_SHADER,d+o);if(!a||!i)return;const r=e.createProgram();if(!r)return;if(e.attachShader(r,a),e.attachShader(r,i),e.linkProgram(r),!e.getProgramParameter(r,e.LINK_STATUS)){console.error("Program link error");return}c=r,e.useProgram(c);const t=e.getAttribLocation(c,"position");e.enableVertexAttribArray(t),e.vertexAttribPointer(t,2,e.FLOAT,!1,0,0),u(["iTime","iResolution","iVideoResolution","uMainFXGain","uMainFX_ID","uMainMix","uAdditiveMasterGain","uTranslate","uScale","uMirror","uFX1","uFX2","uFX3","uFX4","uFX5","uFX1Mix","uFX2Mix","uFX3Mix","uFX4Mix","uFX5Mix","uFX1_ID","uFX2_ID","uFX3_ID","uFX4_ID","uFX5_ID"])},g=o=>{if(l=o,e=l.getContext("webgl",{preserveDrawingBuffer:!1,alpha:!1}),!e)return!1;const a=e.createBuffer();return e.bindBuffer(e.ARRAY_BUFFER,a),e.bufferData(e.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),e.STATIC_DRAW),v=e.createTexture(),e.bindTexture(e.TEXTURE_2D,v),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_MIN_FILTER,e.LINEAR),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_MAG_FILTER,e.LINEAR),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_WRAP_T,e.CLAMP_TO_EDGE),e.texParameteri(e.TEXTURE_2D,e.TEXTURE_WRAP_S,e.CLAMP_TO_EDGE),e.pixelStorei(e.UNPACK_FLIP_Y_WEBGL,!0),e.texImage2D(e.TEXTURE_2D,0,e.RGBA,1,1,0,e.RGBA,e.UNSIGNED_BYTE,new Uint8Array([0,0,0,255])),!0},p=(o,a)=>{!e||!l||(l.width=o,l.height=a,e.viewport(0,0,o,a))},b=(o,a,i,r)=>{if(!e||!c||!l||!v)return;const t=f;t.iTime&&(e.useProgram(c),e.activeTexture(e.TEXTURE0),e.bindTexture(e.TEXTURE_2D,v),e.texImage2D(e.TEXTURE_2D,0,e.RGBA,e.RGBA,e.UNSIGNED_BYTE,o),e.uniform1f(t.iTime,a/1e3),e.uniform2f(t.iResolution,l.width,l.height),e.uniform2f(t.iVideoResolution,r.w,r.h),e.uniform1f(t.uMainFXGain,i.mainFXGain),e.uniform1i(t.uMainFX_ID,i.main_id),e.uniform1f(t.uMainMix,i.mainMix),e.uniform1f(t.uAdditiveMasterGain,i.additiveMasterGain),e.uniform2f(t.uTranslate,i.transform.x,i.transform.y),e.uniform1f(t.uScale,i.transform.scale),e.uniform1f(t.uMirror,i.isMirrored?1:0),e.uniform1f(t.uFX1,i.fx1),e.uniform1f(t.uFX2,i.fx2),e.uniform1f(t.uFX3,i.fx3),e.uniform1f(t.uFX4,i.fx4),e.uniform1f(t.uFX5,i.fx5),e.uniform1f(t.uFX1Mix,i.fx1Mix),e.uniform1f(t.uFX2Mix,i.fx2Mix),e.uniform1f(t.uFX3Mix,i.fx3Mix),e.uniform1f(t.uFX4Mix,i.fx4Mix),e.uniform1f(t.uFX5Mix,i.fx5Mix),e.uniform1i(t.uFX1_ID,i.fx1_id),e.uniform1i(t.uFX2_ID,i.fx2_id),e.uniform1i(t.uFX3_ID,i.fx3_id),e.uniform1i(t.uFX4_ID,i.fx4_id),e.uniform1i(t.uFX5_ID,i.fx5_id),e.drawArrays(e.TRIANGLES,0,6))};self.onmessage=o=>{const{type:a}=o.data;if(a==="init"){const{canvas:i,fragSrc:r}=o.data;g(i)&&s(r)}else if(a==="loadShader")s(o.data.fragSrc);else if(a==="resize")p(o.data.width,o.data.height);else if(a==="frame"){const{bitmap:i,time:r,fx:t,videoSize:x}=o.data;b(i,r,t,x),i.close(),self.postMessage({type:"frame-done"})}}})();
