@@ -85,10 +85,10 @@ void main() {
 
     loadShader(fragmentSrc: string, isFallback = false) {
         if (!this.gl) return;
-        // Hard fallback on GitHub Pages (stability-first, disables FX)
-        const forcePassthrough = typeof location !== 'undefined' && location.hostname.includes('github.io');
-        if (forcePassthrough && !isFallback) {
-            console.warn('Forcing passthrough shader on github.io (no FX).');
+        // Optional manual disable: ?fx=0 or localStorage visus_fx=off
+        const disableFx = typeof location !== 'undefined' && (location.search.includes('fx=0') || localStorage.getItem('visus_fx') === 'off');
+        if (disableFx && !isFallback) {
+            console.warn('FX disabled by flag (?fx=0 or visus_fx=off); using passthrough shader.');
             this.loadShader(FastGLService.FALLBACK_FRAG, true);
             return;
         }
