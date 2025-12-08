@@ -39,6 +39,7 @@ export class FastGLService {
     private isPassthrough = false;
     private useCanvas2D = false;
     private ctx2d: CanvasRenderingContext2D | null = null;
+    private hostIsGhPages = (typeof location !== 'undefined') && location.hostname.includes('github.io');
     private static FALLBACK_FRAG = `
 precision mediump float;
 uniform vec2 iResolution;
@@ -181,6 +182,12 @@ void main(){
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
+        // On GitHub Pages force Canvas2D (avoid WebGL compile/link issues on limited contexts)
+        if (this.hostIsGhPages) {
+            this.ctx2d = canvas.getContext('2d');
+            this.useCanvas2D = !!this.ctx2d;
+            return this.useCanvas2D;
+        }
         // Try WebGL first
         this.gl = canvas.getContext('webgl', {
             preserveDrawingBuffer: false,
@@ -224,7 +231,7 @@ void main(){
     }
 
     loadShader(fragmentSrc: string, mode: 'normal' | 'passthrough' | 'safe' = 'normal') {
-        if (this.useCanvas2D) return; // Already in canvas fallback, skip WebGL shaders
+        if (this.hostIsGhPages || this.useCanvas2D) return; // Already in canvas fallback, skip WebGL shaders on gh-pages
         if (!this.gl) {
             this.enableCanvasFallback();
             return;
