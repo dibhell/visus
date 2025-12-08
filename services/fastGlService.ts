@@ -36,6 +36,14 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
+    private static FALLBACK_FRAG = `
+precision mediump float;
+uniform vec2 iResolution;
+uniform sampler2D iChannel0;
+void main() {
+    vec2 uv = gl_FragCoord.xy / iResolution.xy;
+    gl_FragColor = texture2D(iChannel0, uv);
+}`;
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
@@ -74,7 +82,7 @@ export class FastGLService {
         });
     }
 
-    loadShader(fragmentSrc: string) {
+    loadShader(fragmentSrc: string, isFallback = false) {
         if (!this.gl) return;
 
         const compile = (type: number, source: string) => {
@@ -90,7 +98,7 @@ export class FastGLService {
         };
 
         const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, GLSL_HEADER + fragmentSrc);
+        const fs = compile(this.gl.FRAGMENT_SHADER, isFallback ? fragmentSrc : GLSL_HEADER + fragmentSrc);
         if (!vs || !fs) return;
 
         const prog = this.gl.createProgram();
@@ -101,7 +109,11 @@ export class FastGLService {
         this.gl.linkProgram(prog);
 
         if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
-            console.error('Program link error');
+            console.error('Program link error', this.gl.getProgramInfoLog(prog) || '');
+            if (!isFallback) {
+                console.warn('Falling back to passthrough shader (video only)');
+                this.loadShader(FastGLService.FALLBACK_FRAG, true);
+            }
             return;
         }
 
@@ -117,6 +129,7 @@ export class FastGLService {
             'iTime',
             'iResolution',
             'iVideoResolution',
+            'iChannel0',
             'uMainFXGain',
             'uMainFX_ID',
             'uMainMix',
@@ -165,6 +178,10 @@ export class FastGLService {
         gl.useProgram(this.program);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        // Bind sampler to texture unit 0
+        if (u['iChannel0']) {
+            gl.uniform1i(u['iChannel0']!, 0);
+        }
 
         const u = this.uniformCache;
         const required = ['iTime', 'iResolution', 'iVideoResolution', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
