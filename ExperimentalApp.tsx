@@ -921,54 +921,54 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const videoTracks = canvasStream.getVideoTracks();
 
         const buildRecordingAudio = () => {
-            const tapFactory = (audioRef.current as any).createRecordingTap;
-            if (typeof tapFactory === 'function') {
-                const tap = tapFactory.call(audioRef.current);
-                return { stream: tap?.stream ?? null, cleanup: () => (audioRef.current as any).releaseRecordingTap?.(tap) };
+            const streamFactory = (audioRef.current as any).createRecordingStream;
+            if (typeof streamFactory === 'function') {
+                return streamFactory.call(audioRef.current);
             }
             const stream = audioRef.current.getAudioStream();
             return { stream, cleanup: () => {} };
         };
         const recordingAudio = buildRecordingAudio();
+        const mixTracks: MediaStreamTrack[] = (recordingAudio.stream?.getAudioTracks() || [])
+            .filter((t: MediaStreamTrack): t is MediaStreamTrack => t.readyState === 'live');
+        mixTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
 
-        const pickFirstLiveTrack = (streams: Array<{ stream: MediaStream | null, label: string }>) => {
-            streams.forEach(s => {
-                const tracks = s.stream?.getAudioTracks() || [];
-                console.debug('[VISUS] candidate stream', s.label, 'tracks:', tracks.length, tracks.map(t => ({ label: t.label, readyState: t.readyState })));
-            });
-            for (const entry of streams) {
-                if (!entry.stream) continue;
-                const t = entry.stream.getAudioTracks().find(track => track.readyState === 'live');
-                if (t) {
-                    t.enabled = true;
-                    console.debug('Using audio track from', entry.label, t.label);
-                    return t;
-                }
+        const channelActive = (audioRef.current as any).channelActive || {};
+        const hasActiveAudioSource =
+            (mixerRef.current.video.active && mixerRef.current.video.hasSource) ||
+            (mixerRef.current.music.active && mixerRef.current.music.hasSource) ||
+            (mixerRef.current.mic.active && mixerRef.current.mic.hasSource);
+        console.info('[VISUS] record start', {
+            channels: mixerRef.current,
+            channelActive,
+            mixTrackCount: mixTracks.length,
+            videoTracks: videoTracks.length,
+            videoSource: {
+                hasSource: mixerRef.current.video.hasSource,
+                playing: mixerRef.current.video.playing,
+                attached: !!videoRef.current?.srcObject || !!videoRef.current?.src
             }
-            return null;
-        };
+        });
 
-        const candidateStreams = [
-            { stream: audioElRef.current && (audioElRef.current as any).captureStream ? (audioElRef.current as any).captureStream() : null, label: 'audio element captureStream' },
-            { stream: recordingAudio.stream, label: 'recording stream' },
-            { stream: videoRef.current && (videoRef.current as any).captureStream ? (videoRef.current as any).captureStream() : null, label: 'video element captureStream' },
-        ];
-
-        const audioTrack = pickFirstLiveTrack(candidateStreams);
-
-        if (!audioTrack) {
-            if (preferWebCodecs) {
-                alert('WebCodecs: brak ?cie?ki audio ? nagranie by?oby tylko wideo. Wy??cz WebCodecs, aby nagra? audio.');
-                setUseWebCodecsRecord(false);
-            } else {
-                alert('Brak ?cie?ki audio w nagraniu (0 track?w). Upewnij si?, ?e ?r?d?o audio jest w??czone.');
-            }
+        if (!hasActiveAudioSource) {
+            console.warn('[VISUS] record aborted: no active VIDEO/MUSIC/MIC source armed for mix');
+            recordingAudio.cleanup?.();
+            alert('Brak aktywnego zrodla audio (VIDEO/MUSIC/MIC). Wlacz kanal i sprobuj ponownie.');
             return false;
         }
 
-        console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: 1, labels: [audioTrack.label] });
+        if (mixTracks.length === 0) {
+            console.warn('[VISUS] record aborted: master mix has 0 audio tracks');
+            recordingAudio.cleanup?.();
+            const msg = preferWebCodecs
+                ? 'WebCodecs: master mix has no audio tracks (VIDEO/MUSIC/MIC). Turn on a source and retry.'
+                : 'Brak sciezki audio w master mixie (VIDEO/MUSIC/MIC). Wlacz zrodlo i sprobuj ponownie.';
+            alert(msg);
+            if (preferWebCodecs) setUseWebCodecsRecord(false);
+            return false;
+        }
 
-        const combinedStream = new MediaStream([...videoTracks, audioTrack]);
+        const combinedStream = new MediaStream([...videoTracks, ...mixTracks]);
         console.debug('[VISUS] combinedStream audio tracks:', combinedStream.getAudioTracks().length);
         try {
             const pickMimeType = () => {
@@ -983,18 +983,25 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             };
             const mimeType = pickMimeType();
             if (!mimeType) {
-                alert('MediaRecorder: brak obs?ugiwanego formatu (mp4/webm).');
+                recordingAudio.cleanup?.();
+                alert('MediaRecorder: brak obslugiwanych formatow (mp4/webm).');
                 return false;
             }
             const fileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
             console.debug('[VISUS] MediaRecorder mime selected:', mimeType);
             if (combinedStream.getAudioTracks().length === 0) {
-                alert('Nagrywanie przerwane: brak aktywnej ?cie?ki audio w strumieniu.');
+                console.warn('[VISUS] combined stream missing audio track');
+                recordingAudio.cleanup?.();
+                alert('Nagrywanie przerwane: brak aktywnej sciezki audio w strumieniu.');
                 return false;
             }
             const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate, audioBitsPerSecond: 192000 });
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
+            recorder.onerror = (event) => {
+                console.error('[VISUS] MediaRecorder runtime error', event);
+                recordingAudio.cleanup?.();
+            };
             recorder.onstop = () => {
                 recordingAudio.cleanup?.();
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
@@ -1012,6 +1019,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             setIsRecording(true);
             return true;
         } catch (e) {
+            console.error('[VISUS] MediaRecorder error', e);
+            recordingAudio.cleanup?.();
             alert('Recording failed: ' + e);
             return false;
         }
