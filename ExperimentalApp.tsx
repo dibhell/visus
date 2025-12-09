@@ -388,18 +388,27 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         console.info('[VISUS] debug flags', { debugNoAudio, debugNoGL, debugNoLoop });
     }, [debugNoAudio, debugNoGL, debugNoLoop]);
-    const rendererRef = useRef<FastGLService>(new FastGLService());
+    const rendererRef = useRef<FastGLService>(null as unknown as FastGLService);
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
     const bitmapInFlightRef = useRef(false);
     const useWorkerRenderRef = useRef(false);
     const canvas2dRef = useRef<CanvasRenderingContext2D | null>(null);
     const webCodecsSupported = typeof (window as any).VideoEncoder !== 'undefined' && typeof (window as any).MediaStreamTrackProcessor !== 'undefined';
-    const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
+    const audioRef = useRef<ExperimentalAudioEngine>(null as unknown as ExperimentalAudioEngine);
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        rendererRef.current = new FastGLService();
+        audioRef.current = new ExperimentalAudioEngine();
+        return () => {
+            rendererRef.current = null as unknown as FastGLService;
+            audioRef.current = null as unknown as ExperimentalAudioEngine;
+        };
+    }, []);
 
     const rafRef = useRef<number>(0);
     const lastFrameRef = useRef<number>(0);
