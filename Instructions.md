@@ -1,6 +1,9 @@
-# Instructions - strojenie FX/VU (stan 0.1.0)
+# Instructions - strojenie FX/VU (stan 0.2.6)
 
 Cel: potwierdzi? nowe strojenie audio-reactive; overlay/log wy??czony.
+
+0) Startup debug (INITIALIZE/OOM)
+- Je?li wyst?puje zawieszenie po INITIALIZE, u?yj flag: `debug_nogl=1`, `debug_noaudio=1`, `debug_noworker=1` (kombinacje) i sprawd? logi `[VISUS] init start ...` (GL/Audio/Worker) oraz Error Boundary.
 
 1) Czu?o??/mapowanie
 - FX: pow(0.7) + smoothing 35%, sufit 24; VU: pow(0.8) + smoothing 45%, sufit 10. Sprawd? na Bass/Mid/High i ewentualnie skoryguj mno?nik/alpha/clamp.

@@ -1,12 +1,13 @@
 # VISUS Experimental - Status i kierunki prac
 
-## Co zosta?o zrobione
+## Co zostało zrobione
 - Render przeniesiony do workera z OffscreenCanvas (`RenderWorker` + `FastGLService`) z fallbackiem.
 - Adaptacyjne LOD (renderScale) zale?ne od FPS.
 - Nagrywanie WebCodecs (prefer HW) + fallback MediaRecorder (WebM).
 - Audio: osobny `vizAnalyser`, tap-y prefader, filtry pasmowe sync1/2/3 z analyserem 256 i smoothingiem 0.55 + wyg?adzanie bandLevels (35%), FFT fallback clamp 1, szybkie VU (`getLevelsFast`).
 - Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker; debug overlay/log wy??czony.
 - Performance: dynamiczny frame cap (auto 60?30?24), Performance Mode (FFT co 1/2/3 klatki), limiter UI/VU (20 FPS), Ultra Low renderScale + lock 0.5x, HUD z dt/mode/cap.
+- Startup: flagi diagnostyczne `debug_nogl`/`debug_noaudio`/`debug_noworker`, logi `[VISUS] init ...`, Error Boundary dla `ExperimentalAppFull`, tworzenie FastGL/Audio w `useEffect`.
 
 ## Obecne problemy
 - Do potwierdzenia live: czułość audio-reactive (FX sufit 24, VU 10, smoothing 30/35%) na Bass/Mid/High; możliwe drobne korekty mnożników/alpha/clamp.
@@ -35,7 +36,9 @@
 - `webgl-fastgl` – główny wątek z FastGLService, używany gdy worker jest wyłączony (`render=webgl` lub `worker=0`) albo worker init się nie powiedzie.
 - `canvas2d` – fallback lub wymuszenie (`render=canvas` albo `fx=0`/`visus_fx=off`); żadnych prób WebGL.
 - Parametry:
-  - `render=auto|webgl|canvas` (URL lub `localStorage.visus_render`),
-  - `worker=0/1` (URL lub `localStorage.visus_worker`) – wyłącza worker w trybie auto,
-  - `fx=0/1` lub `localStorage.visus_fx=off/on` – wymusza Canvas2D lub WebGL/FX.
+- `render=auto|webgl|canvas` (URL lub `localStorage.visus_render`),
+- `worker=0/1` (URL lub `localStorage.visus_worker`) – wyłącza worker w trybie auto,
+- `fx=0/1` lub `localStorage.visus_fx=off/on` – wymusza Canvas2D lub WebGL/FX.
+- Startup/diag:
+  - `debug_nogl=1`, `debug_noaudio=1`, `debug_noworker=1` (kombinacje) do izolacji modułu powodującego OOM/freeze.
 - Dev overlay (`dev=1` lub `localStorage.visus_dev=1`) pokazuje renderMode, wynik probe webgl2/webgl, przyczynę fallbacku i ostatni błąd shadera.
