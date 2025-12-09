@@ -70,6 +70,14 @@ const getDebugInitMode = (): 'none' | 'mock' | 'layout' => {
     return mode === 'mock' || mode === 'layout' ? (mode as 'mock' | 'layout') : 'none';
 };
 
+const getDebugFlag = (name: string): boolean => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get(name) === '1' || params.get(name) === 'true') return true;
+    const ls = localStorage.getItem(`visus_${name}`);
+    return ls === '1' || ls === 'true';
+};
+
 type PerformanceMode = 'high' | 'medium' | 'low';
 
 const getPerformanceMode = (): PerformanceMode => {
@@ -173,11 +181,115 @@ const ExperimentalAppLayout: React.FC<ExperimentalProps> = ({ onExit }) => (
         <div className="absolute top-4 left-4 z-50 text-xs bg-black/60 px-3 py-2 rounded-lg border border-white/10">
             Layout debug mode (no init)
         </div>
-        <div className="flex items-center justify-center h-full">
-            <div className="text-center bg-white/5 border border-white/10 rounded-2xl p-10 shadow-2xl">
-                <div className="text-4xl font-black mb-4">VISUS Layout</div>
-                <div className="text-sm text-slate-400 mb-6">UI placeholder bez Audio/WebGL/loop</div>
-                <button className="px-4 py-2 bg-accent text-black rounded-lg" onClick={onExit}>Exit</button>
+        {/* Canvas placeholder */}
+        <div className="absolute inset-0 flex items-center justify-center">
+            <div className="relative">
+                <div className="bg-black/70 border border-white/10 shadow-2xl" style={{ width: '960px', height: '540px' }}>
+                    <div className="w-full h-full opacity-20 flex items-center justify-center text-slate-500 text-lg font-semibold">
+                        Canvas placeholder
+                    </div>
+                </div>
+            </div>
+        </div>
+        {/* HUD placeholder */}
+        <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-200 flex gap-3 bg-black/70 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
+            <span className="text-accent">FPS: --</span>
+            <span className="hidden md:inline">dt: -- ms</span>
+            <span className="hidden md:inline">Scale: --</span>
+            <span className="hidden md:inline">Cap: --</span>
+            <span className="hidden md:inline">Mode: --</span>
+            <span className="hidden md:inline">Perf: --</span>
+        </div>
+        {/* Left panel skeleton */}
+        <div className="fixed z-40 glass-panel flex flex-col shadow-[20px_0_50px_rgba(0,0,0,0.6)] md:top-0 md:left-0 md:h-full md:w-[380px] md:border-r md:border-t-0 md:rounded-none bottom-0 left-0 w-full h-[60vh] rounded-t-3xl border-t border-white/10">
+            <div className="px-6 py-4 md:p-6 border-b border-white/5 flex justify-between items-center bg-gradient-to-r from-white/5 to-transparent">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full border border-white/10 shadow-lg bg-black flex items-center justify-center overflow-hidden">
+                        <img src={ICON_PNG} alt="Logo" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-black text-white tracking-tighter leading-none">VISUS</h2>
+                        <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">LAYOUT ONLY</div>
+                    </div>
+                </div>
+                <button onClick={onExit} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">✕</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
+                <section>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+                        Source Mixer
+                    </div>
+                    <div className="flex justify-between gap-2 p-2 bg-black/30 rounded-2xl border border-white/10">
+                        {['VIDEO', 'MUSIC', 'MIC'].map((label, idx) => (
+                            <div key={label} className="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-center text-[11px] text-slate-300">
+                                <div className="font-bold mb-2">{label}</div>
+                                <div className="h-2 bg-slate-700 rounded-full mb-2"></div>
+                                <div className="text-[10px] text-slate-500">Inactive (layout)</div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
+                <section>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        Output & Framing
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 mb-3">
+                        {['native', '16:9', '9:16', '4:5', '1:1', 'fit'].map((r) => (
+                            <button key={r} className="p-2 text-[9px] font-bold rounded border bg-white/5 border-white/5 text-slate-400 cursor-default">
+                                {r.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="bg-black/20 p-3 rounded-xl border border-white/5 mb-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="text-[9px] text-slate-500 font-bold tracking-wider">GEOMETRY</div>
+                            <button className="flex items-center gap-2 px-2 py-1 rounded text-[9px] font-bold border bg-white/5 border-white/5 text-slate-400 cursor-default">
+                                MIRROR
+                            </button>
+                        </div>
+                        <div className="flex justify-around items-center text-[10px] text-slate-500">
+                            <div>Scale</div>
+                            <div>Pan X</div>
+                            <div>Pan Y</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
+                            FX Chain
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        {['Main', 'Layer 1', 'Layer 2', 'Layer 3', 'Layer 4', 'Layer 5'].map((name) => (
+                            <div key={name} className="bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-slate-300">
+                                {name} (layout)
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-3 bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-slate-300">
+                        Additive Master (layout)
+                    </div>
+                </section>
+
+                <section>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+                        Performance Lab
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        {['Quality', 'Frame Cap', 'Performance Mode', 'UI Update Limit', 'Recording FPS', 'Recorder Bitrate', 'WebCodecs', 'Auto Scale'].map((label) => (
+                            <div key={label} className="bg-white/5 border border-white/10 rounded-xl p-3 text-[11px] text-slate-300">
+                                {label} (layout)
+                            </div>
+                        ))}
+                    </div>
+                </section>
             </div>
         </div>
     </div>
@@ -270,6 +382,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         console.log('[VISUS] ExperimentalApp mounted');
         return () => console.log('[VISUS] ExperimentalApp unmounted');
     }, []);
+    const debugNoAudio = getDebugFlag('debug_no_audio');
+    const debugNoGL = getDebugFlag('debug_no_gl');
+    const debugNoLoop = getDebugFlag('debug_no_loop');
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
@@ -536,6 +651,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
     useEffect(() => {
         if (!canvasRef.current) return;
+        if (debugNoGL && debugNoAudio) {
+            setIsBooting(false);
+            return;
+        }
 
         const initWork = async () => {
             const canvas = canvasRef.current as HTMLCanvasElement;
@@ -658,10 +777,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 }
             }
 
-            audioRef.current.initContext().then(() => {
-                audioRef.current.setupFilters(syncParamsRef.current);
+            if (!debugNoAudio) {
+                audioRef.current.initContext().then(() => {
+                    audioRef.current.setupFilters(syncParamsRef.current);
+                    setIsBooting(false);
+                });
+            } else {
                 setIsBooting(false);
-            });
+            }
             handleResize();
         };
 
@@ -673,7 +796,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
         };
 
-        schedule(initWork);
+        if (!debugNoGL) {
+            schedule(initWork);
+        } else {
+            setRenderMode('canvas2d');
+            setFallbackReason('USER_FORCE');
+            setLastShaderError('debug_no_gl');
+            setIsBooting(false);
+        }
 
         return () => {
             if (workerRef.current) {
@@ -687,6 +817,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
+        if (debugNoGL) return;
         const onLost = (ev: Event) => {
             if (typeof (ev as any).preventDefault === 'function') {
                 (ev as any).preventDefault();
@@ -708,7 +839,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, []);
 
     useEffect(() => {
-        if (renderMode === 'canvas2d') return;
+        if (renderMode === 'canvas2d' || debugNoGL) return;
         const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
         if (renderMode === 'webgl-worker' && workerReadyRef.current && workerRef.current) {
             workerRef.current.postMessage({ type: 'loadShader', fragSrc: shaderDef.src });
@@ -733,6 +864,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [fxState.main.shader, renderMode]);
 
     useEffect(() => {
+        if (debugNoLoop) {
+            console.info('[VISUS] debug_no_loop=1 → render loop skipped');
+            return;
+        }
         let mounted = true;
 
         const scheduleNext = () => {
