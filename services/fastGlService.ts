@@ -29,6 +29,11 @@ export interface ExperimentalFxPacket {
  * It is wired only to the experimental mode so the legacy path remains untouched.
  */
 export class FastGLService {
+    // Optional flags allow the caller to note worker usage intent (for debug toggles).
+    // They are currently informational only.
+    constructor(config?: { noWorker?: boolean }) {
+        void config;
+    }
     private gl: WebGLRenderingContext | null = null;
     private program: WebGLProgram | null = null;
     private tex: WebGLTexture | null = null;

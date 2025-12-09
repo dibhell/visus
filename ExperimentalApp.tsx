@@ -377,17 +377,28 @@ const PanelSettings: React.FC<{
                     />
 ));
 
+const getDebugFlags = () => {
+    const p = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    return {
+        noGL: p.get('debug_nogl') === '1' || p.get('debug_no_gl') === '1',
+        noAudio: p.get('debug_noaudio') === '1' || p.get('debug_no_audio') === '1',
+        noWorker: p.get('debug_noworker') === '1' || p.get('debug_no_worker') === '1',
+    };
+};
+
 const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
+    console.log('[VISUS] ExperimentalAppFull mount start');
     useEffect(() => {
         console.log('[VISUS] ExperimentalApp mounted');
         return () => console.log('[VISUS] ExperimentalApp unmounted');
     }, []);
-    const debugNoAudio = getDebugFlag('debug_no_audio');
-    const debugNoGL = getDebugFlag('debug_no_gl');
+    const debugFlagSet = getDebugFlags();
+    const debugNoAudio = getDebugFlag('debug_no_audio') || debugFlagSet.noAudio;
+    const debugNoGL = getDebugFlag('debug_no_gl') || debugFlagSet.noGL;
     const debugNoLoop = getDebugFlag('debug_no_loop');
     useEffect(() => {
-        console.info('[VISUS] debug flags', { debugNoAudio, debugNoGL, debugNoLoop });
-    }, [debugNoAudio, debugNoGL, debugNoLoop]);
+        console.info('[VISUS] debug flags', { debugNoAudio, debugNoGL, debugNoLoop, flags: debugFlagSet });
+    }, [debugNoAudio, debugNoGL, debugNoLoop, debugFlagSet.noAudio, debugFlagSet.noGL, debugFlagSet.noWorker]);
     const rendererRef = useRef<FastGLService>(null as unknown as FastGLService);
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
@@ -402,13 +413,30 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const uiPanelRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        rendererRef.current = new FastGLService();
-        audioRef.current = new ExperimentalAudioEngine();
+        console.log('[VISUS] init useEffect enter');
+        console.log('[VISUS] init start', { noGL: debugFlagSet.noGL, noAudio: debugFlagSet.noAudio, noWorker: debugFlagSet.noWorker });
+        try {
+            if (!debugFlagSet.noGL) {
+                rendererRef.current = new FastGLService({ noWorker: debugFlagSet.noWorker });
+                console.log('[VISUS] FastGLService created');
+            } else {
+                rendererRef.current = new FastGLService({ noWorker: true });
+                console.log('[VISUS] GL disabled via debug flag');
+            }
+            audioRef.current = new ExperimentalAudioEngine();
+            if (debugFlagSet.noAudio) {
+                console.log('[VISUS] Audio disabled via debug flag (engine stub only)');
+            } else {
+                console.log('[VISUS] ExperimentalAudioEngine created');
+            }
+        } catch (err) {
+            console.error('[VISUS] init error', err);
+        }
         return () => {
             rendererRef.current = null as unknown as FastGLService;
             audioRef.current = null as unknown as ExperimentalAudioEngine;
         };
-    }, []);
+    }, [debugFlagSet.noGL, debugFlagSet.noAudio, debugFlagSet.noWorker]);
 
     const rafRef = useRef<number>(0);
     const lastFrameRef = useRef<number>(0);
@@ -536,8 +564,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
     useEffect(() => {
         setRenderPreference(getRenderPreference());
-        setWorkerPreference(getWorkerPreference());
-    }, []);
+        const baseWorkerPref = getWorkerPreference();
+        setWorkerPreference(debugFlagSet.noWorker ? false : baseWorkerPref);
+    }, [debugFlagSet.noWorker]);
     useEffect(() => {
         (window as any).__VISUS_METRICS__ = {
             renderScaleRef,
@@ -1883,11 +1912,35 @@ const toggleRecording = async () => {
     );
 };
 
+class VisusErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+    constructor(props: { children: React.ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError(err: any) {
+        console.error('[VISUS] Render error (boundary)', err);
+        return { hasError: true };
+    }
+    componentDidCatch(err: any, info: any) {
+        console.error('[VISUS] Render error info', err, info);
+    }
+    render() {
+        if (this.state.hasError) {
+            return <div className="w-full h-screen flex items-center justify-center bg-slate-900 text-slate-100">VISUS Render Error</div>;
+        }
+        return this.props.children;
+    }
+}
+
 const ExperimentalApp: React.FC<ExperimentalProps> = (props) => {
     const debugInitMode = getDebugInitMode();
     if (debugInitMode === 'mock') return <ExperimentalAppMock {...props} />;
     if (debugInitMode === 'layout') return <ExperimentalAppLayout {...props} />;
-    return <ExperimentalAppFull {...props} />;
+    return (
+        <VisusErrorBoundary>
+            <ExperimentalAppFull {...props} />
+        </VisusErrorBoundary>
+    );
 };
 
 export default ExperimentalApp;
