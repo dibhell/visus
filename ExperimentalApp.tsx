@@ -159,6 +159,30 @@ const PerformanceHUD: React.FC<{
     </div>
 ));
 
+const ExperimentalAppMock: React.FC<ExperimentalProps> = ({ onExit }) => (
+    <div className="w-full h-screen flex items-center justify-center bg-slate-900 text-slate-100 flex-col gap-4">
+        <div className="text-3xl font-black">VISUS STUDIO MOCK</div>
+        <div className="text-sm text-slate-400">debug_init=mock – bez WebGL/Audio/FX</div>
+        <button className="px-4 py-2 bg-accent text-black rounded-lg" onClick={onExit}>Exit</button>
+    </div>
+);
+
+const ExperimentalAppLayout: React.FC<ExperimentalProps> = ({ onExit }) => (
+    <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black"></div>
+        <div className="absolute top-4 left-4 z-50 text-xs bg-black/60 px-3 py-2 rounded-lg border border-white/10">
+            Layout debug mode (no init)
+        </div>
+        <div className="flex items-center justify-center h-full">
+            <div className="text-center bg-white/5 border border-white/10 rounded-2xl p-10 shadow-2xl">
+                <div className="text-4xl font-black mb-4">VISUS Layout</div>
+                <div className="text-sm text-slate-400 mb-6">UI placeholder bez Audio/WebGL/loop</div>
+                <button className="px-4 py-2 bg-accent text-black rounded-lg" onClick={onExit}>Exit</button>
+            </div>
+        </div>
+    </div>
+);
+
 const PanelSettings: React.FC<{
     quality: QualityMode;
     setQuality: (q: QualityMode) => void;
@@ -241,12 +265,11 @@ const PanelSettings: React.FC<{
                     />
 ));
 
-const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
+const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         console.log('[VISUS] ExperimentalApp mounted');
         return () => console.log('[VISUS] ExperimentalApp unmounted');
     }, []);
-    const debugInitMode = getDebugInitMode();
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
@@ -301,7 +324,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [lockResolution, setLockResolution] = useState<boolean>(getLockResolution());
     const [useWorkletFFT, setUseWorkletFFT] = useState<boolean>(getUseWorkletFFT());
     const [useVideoFrameCb, setUseVideoFrameCb] = useState<boolean>(getUseVideoFrameCallback());
-    const debugInitModeRef = useRef<'none' | 'mock' | 'layout'>(debugInitMode);
     const frameCapRef = useRef<number>(frameCap);
     const uiFpsLimitRef = useRef<number>(uiFpsLimit);
     const performanceModeRef = useRef<PerformanceMode>(performanceMode);
@@ -371,7 +393,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { visualLevelsRef.current = visualLevels; }, [visualLevels]);
-    useEffect(() => { debugInitModeRef.current = debugInitMode; }, [debugInitMode]);
     useEffect(() => { performanceModeRef.current = performanceMode; localStorage.setItem('visus_perf_mode', performanceMode); }, [performanceMode]);
     useEffect(() => { uiFpsLimitRef.current = uiFpsLimit; localStorage.setItem('visus_ui_fps', String(uiFpsLimit)); }, [uiFpsLimit]);
     useEffect(() => { frameCapRef.current = frameCap; localStorage.setItem('visus_framecap', String(frameCap)); }, [frameCap]);
@@ -421,10 +442,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     };
 
     const handleResize = useCallback(() => {
-        if (!canvasRef.current || debugInitModeRef.current === 'layout') {
-            setIsBooting(false);
-            return;
-        }
+        if (!canvasRef.current) return;
 
         const wWindow = window.innerWidth;
         const hWindow = window.innerHeight;
@@ -484,7 +502,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [aspectRatio, panelVisible]);
 
     useEffect(() => {
-        if (debugInitModeRef.current !== 'none') return;
         handleResize();
         const t = setTimeout(handleResize, 300);
         window.addEventListener('resize', handleResize);
@@ -670,7 +687,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-        if (debugInitModeRef.current !== 'none') return;
         const onLost = (ev: Event) => {
             if (typeof (ev as any).preventDefault === 'function') {
                 (ev as any).preventDefault();
@@ -692,7 +708,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, []);
 
     useEffect(() => {
-        if (renderMode === 'canvas2d' || debugInitModeRef.current !== 'none') return;
+        if (renderMode === 'canvas2d') return;
         const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
         if (renderMode === 'webgl-worker' && workerReadyRef.current && workerRef.current) {
             workerRef.current.postMessage({ type: 'loadShader', fragSrc: shaderDef.src });
@@ -717,10 +733,6 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [fxState.main.shader, renderMode]);
 
     useEffect(() => {
-        if (debugInitModeRef.current !== 'none') {
-            setIsBooting(false);
-            return;
-        }
         let mounted = true;
 
         const scheduleNext = () => {
@@ -1380,33 +1392,6 @@ const toggleRecording = async () => {
         onExit();
     };
 
-    if (debugInitMode === 'mock') {
-        return (
-            <div className="w-full h-screen flex items-center justify-center bg-slate-900 text-slate-100 flex-col gap-4">
-                <div className="text-3xl font-black">VISUS STUDIO MOCK</div>
-                <button className="px-4 py-2 bg-accent text-black rounded-lg" onClick={onExit}>Exit</button>
-            </div>
-        );
-    }
-
-    if (debugInitMode === 'layout') {
-        return (
-            <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-900 via-[#020617] to-black"></div>
-                <div className="absolute top-4 left-4 z-50 text-xs bg-black/60 px-3 py-2 rounded-lg border border-white/10">
-                    Layout debug mode (no init)
-                </div>
-                <div className="flex items-center justify-center h-full">
-                    <div className="text-center bg-white/5 border border-white/10 rounded-2xl p-10 shadow-2xl">
-                        <div className="text-4xl font-black mb-4">VISUS Layout</div>
-                        <div className="text-sm text-slate-400 mb-6">UI bez audio/WebGL/loop</div>
-                        <button className="px-4 py-2 bg-accent text-black rounded-lg" onClick={onExit}>Exit</button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
             <canvas
@@ -1713,6 +1698,13 @@ const toggleRecording = async () => {
             <Credits />
         </div>
     );
+};
+
+const ExperimentalApp: React.FC<ExperimentalProps> = (props) => {
+    const debugInitMode = getDebugInitMode();
+    if (debugInitMode === 'mock') return <ExperimentalAppMock {...props} />;
+    if (debugInitMode === 'layout') return <ExperimentalAppLayout {...props} />;
+    return <ExperimentalAppFull {...props} />;
 };
 
 export default ExperimentalApp;
