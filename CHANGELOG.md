@@ -1,10 +1,15 @@
 # Changelog
 
 ## [Unreleased]
-- Playlist UX/backlog: np. playlista z klipami video (do rozwa�enia).
+- Playlist UX/backlog: np. playlista z klipami video (do rozważenia).
+
+## [0.2.6] - 2025-12-10
+- Startup: nowe flagi diagnostyczne (debug_nogl, debug_noaudio, debug_noworker) oraz czytelne logi inicjalizacji GL/Audio/Worker.
+- Stabilnosc: Error Boundary dla ExperimentalAppFull, instancje FastGL/Audio tworzone w useEffect (brak ciezkich obiektow w renderze).
+- Debug: worker preference respektuje flage wylaczajaca worker; mock/layout bez zmian.
 
 ## [0.2.5] - 2025-12-10
-- Audio: worklet (RMS/bands/buckets) jako g��wny FFT z prze��cznikiem fallback; mniej getByteFrequencyData na g��wnym w�tku.
+- Audio: worklet (RMS/bands/buckets) jako główny FFT z przełącznikiem fallback; mniej getByteFrequencyData na głównym wątku.
 - Render: scheduler requestVideoFrameCallback (toggle), histereza Auto Scale (10 klatek <25 FPS down, 20 klatek >50 FPS up, cool-down).
 - WebGL: batched uniformy FX (float/int arrays) + cache program/texture; HUD w memo.
 - UI: Performance Lab w memo PanelSettings, memo SpectrumVisualizer/FxSlot/MixerChannel/HUD, stabilne propsy (useCallback).
@@ -12,26 +17,26 @@
 
 
 ## [0.2.4] - 2025-12-09
-- Performance: dynamic frame cap (auto 60→30→24), FFT sampling stride per performance mode (high/medium/low), UI/VU update limiter (domyślnie 20 FPS), pomijanie ciężkich FFT przy długich klatkach.
-- Quality: nowy poziom Ultra Low (35%) oraz blokada rozdzielczości 0.5x dla słabych GPU; auto LOD respektuje blokadę.
+- Performance: dynamic frame cap (auto 60â†’30â†’24), FFT sampling stride per performance mode (high/medium/low), UI/VU update limiter (domyĹ›lnie 20 FPS), pomijanie ciÄ™ĹĽkich FFT przy dĹ‚ugich klatkach.
+- Quality: nowy poziom Ultra Low (35%) oraz blokada rozdzielczoĹ›ci 0.5x dla sĹ‚abych GPU; auto LOD respektuje blokadÄ™.
 - HUD: pasek statusu pokazuje dt, render scale, tryb renderu, cap mode i profil performance.
 - Audio/recording: nagrywanie zawsze z miksu master; abort gdy brak aktywnego VIDEO/MUSIC/MIC.
-- UI: Performance Lab zyskał przełącznik trybu performance, limit UI FPS oraz przełącznik automatycznego capu.
+- UI: Performance Lab zyskaĹ‚ przeĹ‚Ä…cznik trybu performance, limit UI FPS oraz przeĹ‚Ä…cznik automatycznego capu.
 
 ## [0.2.3] - 2025-12-03
-- Mobile: canvas widoczny nad panelem (FX podczas strojenia), usunięty mini-podgląd.
-- UI/mobile: pełna szerokość canvasu, wysokość ~45% ekranu przy otwartym panelu.
-- Preview: usunięty dodatkowy overlay w Experimental, zostaje główny canvas.
+- Mobile: canvas widoczny nad panelem (FX podczas strojenia), usuniÄ™ty mini-podglÄ…d.
+- UI/mobile: peĹ‚na szerokoĹ›Ä‡ canvasu, wysokoĹ›Ä‡ ~45% ekranu przy otwartym panelu.
+- Preview: usuniÄ™ty dodatkowy overlay w Experimental, zostaje gĹ‚Ăłwny canvas.
 
 ## [0.2.2] - 2025-12-02
-- Nagrywanie: wybór pojedynczego żywego toru audio (prior: captureStream audio -> miks -> captureStream video), WebM/Opus preferowane; brak pustych tracków.
-- UI: throttling VU do ~25 Hz, render canvas uwzględnia szerokość panelu bocznego przy skalowaniu.
+- Nagrywanie: wybĂłr pojedynczego ĹĽywego toru audio (prior: captureStream audio -> miks -> captureStream video), WebM/Opus preferowane; brak pustych trackĂłw.
+- UI: throttling VU do ~25 Hz, render canvas uwzglÄ™dnia szerokoĹ›Ä‡ panelu bocznego przy skalowaniu.
 - WebGL: `powerPreference: high-performance`, antialias off dla mniejszego overheadu.
 - Audio: `AudioContext` z `latencyHint: 'playback'` (mniej CPU).
-- Build: Tailwind z lokalnego buildu (PostCSS), usunięto CDN.
+- Build: Tailwind z lokalnego buildu (PostCSS), usuniÄ™to CDN.
 
 ## [0.2.1] - 2025-12-01
-- Fallbacki nagrywania audio: miks + captureStream elementów, preferencja WebM/Opus, naprawione brak audio w plikach.
+- Fallbacki nagrywania audio: miks + captureStream elementĂłw, preferencja WebM/Opus, naprawione brak audio w plikach.
 - Credits zaktualizowane do v0.2.1.
 
 ## [0.2.0] - 2025-11-28

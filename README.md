@@ -4,29 +4,29 @@
 
 # VISUS Experimental Engine
 
-VISUS to przeglądarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (pliki, mic), nakłada shadery WebGL jako efekty, reaguje na pasma audio i potrafi nagrywać output do WebM (MediaRecorder lub WebCodecs). UI umożliwia sterowanie geometrią, proporcjami, łańcuchem FX (Depth/Wet), routingiem FX na pasma (Bass/Mid/High) lub BPM, a także adaptacyjne skalowanie jakości pod FPS.
+VISUS to przegladarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (pliki, mic), naklada shadery WebGL jako efekty, reaguje na pasma audio i potrafi nagrywac output do WebM (MediaRecorder lub WebCodecs). UI umozliwia sterowanie geometria, proporcjami, lancuchem FX (Depth/Wet), routingiem FX na pasma (Bass/Mid/High) lub BPM, a takze adaptacyjne skalowanie jakosci pod FPS.
 
 ## Jak jest zbudowana
 - **Frontend:** React + TypeScript + Vite.
-- **Render:** WebGL (GLSL fragment shader) z OffscreenCanvas w workerze (`RenderWorker`) i fallbackiem na główny wątek; `FastGLService` zarządza teksturą wideo i uniformami FX.
+- **Render:** WebGL (GLSL fragment shader) z OffscreenCanvas w workerze (`RenderWorker`) i fallbackiem na glowny watek; `FastGLService` zarzadza tekstura wideo i uniformami FX.
 - **Audio:** Web Audio API (AnalyserNode, BiquadFilter) z dedykowanym `ExperimentalAudioEngine`, tap-analyserami prefader, filtrami pasm (sync1/2/3), FFT fallbackiem dla bandLevels oraz szybkim VU (`getLevelsFast`).
-- **Nagrywanie:** MediaRecorder oraz ścieżka WebCodecs (`MediaStreamTrackProcessor + VideoEncoder`) z preferencją akceleracji HW; zapis do WebM.
-- **Adaptacja jakości:** pętla FPS zmienia `renderScale` (LOD) zależnie od wydajności.
+- **Nagrywanie:** MediaRecorder oraz sciezka WebCodecs (`MediaStreamTrackProcessor + VideoEncoder`) z preferencja akceleracji HW; zapis do WebM.
+- **Adaptacja jakosci:** petla FPS zmienia `renderScale` (LOD) w zaleznosci od wydajnosci.
 
-## Wersjonowanie (bieżący stan)
+## Wersjonowanie (biezacy stan)
 - **Branch:** `main`
-- **Wersja:** 0.2.4 (patrz `CHANGELOG.md`)
-- **Ostatnie zmiany:** dynamiczny frame cap (auto 60→30→24), tryb Performance (FFT co 1/2/3 klatki), limiter UI (20 FPS), nowy poziom Ultra Low (35%) + blokada rozdzielczości 0.5x, HUD z dt/mode/cap. Nagrywanie korzysta wyłącznie z miksu master (VIDEO/MUSIC/MIC).
-- **Znane problemy:** do potwierdzenia live: czułość Bass/Mid/High po throttlingu, wydajność na słabszych GPU (test 1080p + FX), optymalizacja batchowania uniformów WebGL.
+- **Wersja:** 0.2.6 (patrz `CHANGELOG.md`)
+- **Ostatnie zmiany:** diagnostyczne flagi startowe (`debug_nogl`/`debug_noaudio`/`debug_noworker`), logi init GL/Audio, Error Boundary dla `ExperimentalAppFull`, inicjalizacja GL/Audio w `useEffect`; dynamiczny frame cap (auto 60->30->24), tryb Performance (FFT co 1/2/3 klatki), limiter UI (20 FPS), nowy poziom Ultra Low (35%) + blokada rozdzielczosci 0.5x, HUD z dt/mode/cap. Nagrywanie korzysta wylacznie z miksu master (VIDEO/MUSIC/MIC).
+- **Znane problemy:** do potwierdzenia live: czulosc Bass/Mid/High po throttlingu, wydajnosc na slabszych GPU (test 1080p + FX), optymalizacja batchowania uniformow WebGL.
 
 ## Uruchomienie lokalne
 **Wymagania:** Node.js 18+
 
-1. Instalacja zależności:  
+1. Instalacja zaleznosci:  
    `npm install`
 2. Dev server:  
    `npm run dev`
 3. Build produkcyjny (sprawdzenie przed push):  
    `npm run build`
 
-> Uwaga: aplikacja korzysta wyłącznie z zasobów lokalnych (brak zewnętrznych kluczy/API).
+> Uwaga: aplikacja korzysta wylacznie z zasobow lokalnych (brak zewnetrznych kluczy/API).

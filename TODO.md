@@ -1,5 +1,8 @@
 # TODO - VISUS Experimental
 
+0) Startup debug (OOM/INITIALIZE)
+   - Uruchom scenariusze: `?debug_nogl=1&debug_noaudio=1&debug_noworker=1`, `?debug_nogl=1&debug_noaudio=1`, `?debug_nogl=1`, `?debug_nogl=0&debug_noworker=1`; zapisz w konsoli które moduły startują i czy pojawia się OOM/render error.
+
 1) Strojenie FX audio-reactive
    - Nowe mapowanie: pow(0.7) + smoothing 35% z sufitem FX 24; VU pow(0.8) + smoothing 45% z sufitem 10. Zweryfikowa? na Bass/Mid/High czy czu?o?? jest wystarczaj?ca; w razie potrzeby skorygowa? mno?nik/limit.
    - Sprawdzi?, czy smoothing VU nie spowalnia UI wzgl?dem pasma.
