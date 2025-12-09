@@ -51,6 +51,39 @@ const getWorkerPreference = (): boolean => {
     return true;
 };
 
+type PerformanceMode = 'high' | 'medium' | 'low';
+
+const getPerformanceMode = (): PerformanceMode => {
+    if (typeof window === 'undefined') return 'high';
+    const ls = localStorage.getItem('visus_perf_mode') as PerformanceMode | null;
+    if (ls === 'medium' || ls === 'low') return ls;
+    return 'high';
+};
+
+const getFrameCapMode = (): 'dynamic' | 'manual' => {
+    if (typeof window === 'undefined') return 'dynamic';
+    const ls = localStorage.getItem('visus_framecap_mode');
+    return ls === 'manual' ? 'manual' : 'dynamic';
+};
+
+const getFrameCapValue = (): number => {
+    if (typeof window === 'undefined') return 60;
+    const ls = parseInt(localStorage.getItem('visus_framecap') || '', 10);
+    return Number.isFinite(ls) ? ls : 60;
+};
+
+const getUiFpsLimit = (): number => {
+    if (typeof window === 'undefined') return 20;
+    const ls = parseInt(localStorage.getItem('visus_ui_fps') || '', 10);
+    if (ls === 15 || ls === 20 || ls === 30) return ls;
+    return 20;
+};
+
+const getLockResolution = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('visus_lock_res') === '1';
+};
+
 const isDevMode = () => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -80,7 +113,7 @@ const Credits: React.FC = () => (
     <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-200 bg-black/70 border border-white/10 px-4 py-2 rounded-full backdrop-blur pointer-events-none flex items-center gap-2">
         <span className="opacity-90">Studio Popłoch © 2025 • Pan Grzyb •</span>
         <a className="underline pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
-        <span className="opacity-90">• v0.2.3</span>
+        <span className="opacity-90">• v0.2.4</span>
     </div>
 );
 
@@ -103,6 +136,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const lastUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
+    const frameIndexRef = useRef<number>(0);
+    const slowFrameStreakRef = useRef<number>(0);
+    const lastBandLevelsRef = useRef<{ sync1: number; sync2: number; sync3: number }>({ sync1: 0, sync2: 0, sync3: 0 });
+    const lastFftDataRef = useRef<Uint8Array | null>(null);
+    const lastDtRef = useRef<number>(0);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -117,13 +155,21 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [fps, setFps] = useState(0);
     const [renderMode, setRenderMode] = useState<RenderMode>('webgl-worker');
-    const [frameCap, setFrameCap] = useState(60);
+    const [frameCap, setFrameCap] = useState(getFrameCapValue());
+    const [frameCapMode, setFrameCapMode] = useState<'dynamic' | 'manual'>(getFrameCapMode());
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(8000000);
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
     const [quality, setQuality] = useState<QualityMode>('high');
+    const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(getPerformanceMode());
+    const [uiFpsLimit, setUiFpsLimit] = useState<number>(getUiFpsLimit());
+    const [lockResolution, setLockResolution] = useState<boolean>(getLockResolution());
+    const frameCapRef = useRef<number>(frameCap);
+    const uiFpsLimitRef = useRef<number>(uiFpsLimit);
+    const performanceModeRef = useRef<PerformanceMode>(performanceMode);
+    const frameCapModeRef = useRef<'dynamic' | 'manual'>(frameCapMode);
     const [webglProbe, setWebglProbe] = useState<{ webgl2: boolean; webgl: boolean }>({ webgl2: false, webgl: false });
     const [fallbackReason, setFallbackReason] = useState<FallbackReason>('NONE');
     const [lastShaderError, setLastShaderError] = useState<string>('');
@@ -187,6 +233,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { visualLevelsRef.current = visualLevels; }, [visualLevels]);
+    useEffect(() => { performanceModeRef.current = performanceMode; localStorage.setItem('visus_perf_mode', performanceMode); }, [performanceMode]);
+    useEffect(() => { uiFpsLimitRef.current = uiFpsLimit; localStorage.setItem('visus_ui_fps', String(uiFpsLimit)); }, [uiFpsLimit]);
+    useEffect(() => { frameCapRef.current = frameCap; localStorage.setItem('visus_framecap', String(frameCap)); }, [frameCap]);
+    useEffect(() => { frameCapModeRef.current = frameCapMode; localStorage.setItem('visus_framecap_mode', frameCapMode); }, [frameCapMode]);
+    useEffect(() => { localStorage.setItem('visus_lock_res', lockResolution ? '1' : '0'); }, [lockResolution]);
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
     useEffect(() => {
         setRenderPreference(getRenderPreference());
@@ -297,6 +348,17 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             handleResize();
         }
     }, [quality, handleResize]);
+
+    useEffect(() => {
+        if (lockResolution) {
+            if (quality !== 'low') setQuality('low');
+            if (renderScaleRef.current !== QUALITY_SCALE.low) {
+                setRenderScale(QUALITY_SCALE.low);
+                renderScaleRef.current = QUALITY_SCALE.low;
+                handleResize();
+            }
+        }
+    }, [lockResolution, quality, handleResize]);
 
     useEffect(() => {
         if (!canvasRef.current) return;
@@ -498,27 +560,42 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
     useEffect(() => {
         let mounted = true;
-        const frameBudget = frameCap > 0 ? (1000 / frameCap) : 0;
 
         const loop = (t: number) => {
             if (!mounted) return;
+
+            const capTarget = frameCapRef.current;
+            const frameBudget = capTarget > 0 ? (1000 / capTarget) : 0;
             if (frameBudget && (t - lastFrameRef.current) < frameBudget) {
                 rafRef.current = requestAnimationFrame(loop);
                 return;
             }
+
             const now = t;
             const dt = now - lastFrameRef.current;
             lastFrameRef.current = now;
+            lastDtRef.current = dt;
+            frameIndexRef.current += 1;
 
             const ae = audioRef.current;
-            ae.update();
+            const isSlowFrame = dt > 40;
+            if (isSlowFrame) {
+                slowFrameStreakRef.current += 1;
+            } else {
+                slowFrameStreakRef.current = 0;
+            }
+            const skipHeavy = slowFrameStreakRef.current >= 2 && (frameIndexRef.current % 2 === 1);
+
+            if (!skipHeavy) {
+                ae.update();
+            }
             const vu = ae.getLevelsFast(0.08); // channel RMS (video, music, mic)
-            const shouldUpdateUi = (now - lastUiUpdateRef.current) > 30;
+            const uiBudget = 1000 / Math.max(1, uiFpsLimitRef.current);
+            const shouldUpdateUi = (now - lastUiUpdateRef.current) > uiBudget;
 
             const currentSyncParams = syncParamsRef.current;
             const currentFxState = fxStateRef.current;
             const currentTransform = transformRef.current;
-            const currentMixer = mixerRef.current;
 
             const bpm = currentSyncParams[0].bpm;
             const offset = currentSyncParams[0].offset;
@@ -526,48 +603,67 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const adjustedTime = now - offset;
             const phase = (adjustedTime % beatMs) / beatMs;
 
-            // Fresh band values per frame (no extra gating) + FFT fallback
-            let bandLevels = {
-                sync1: Math.max(0, ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1)),
-                sync2: Math.max(0, ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1)),
-                sync3: Math.max(0, ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1)),
-            };
+            const fxSlots = [currentFxState.main, currentFxState.fx1, currentFxState.fx2, currentFxState.fx3, currentFxState.fx4, currentFxState.fx5];
+            const needsSpectrum = fxSlots.some(fx => fx.routing === 'sync1' || fx.routing === 'sync2' || fx.routing === 'sync3');
 
-            const fftData = (ae as any).getFFTData ? (ae as any).getFFTData() : null;
-            if (fftData && fftData.length > 0) {
-                const nyquist = ((ae as any).ctx?.sampleRate || 48000) / 2;
-                const sampleBand = (freq: number, width: number, gain: number) => {
-                    const minF = Math.max(20, freq * Math.max(0.1, 1 - width / 100));
-                    const maxF = Math.min(nyquist, freq * (1 + width / 100));
-                    const minBin = Math.max(0, Math.floor((minF / nyquist) * fftData.length));
-                    const maxBin = Math.min(fftData.length - 1, Math.ceil((maxF / nyquist) * fftData.length));
-                    let sum = 0;
-                    let count = 0;
-                    for (let i = minBin; i <= maxBin; i++) {
-                        sum += fftData[i];
-                        count++;
+            let bandLevels = lastBandLevelsRef.current;
+            if (!bandLevels) {
+                bandLevels = { sync1: 0, sync2: 0, sync3: 0 };
+                lastBandLevelsRef.current = bandLevels;
+            }
+            if (!skipHeavy) {
+                bandLevels.sync1 = Math.max(0, ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1));
+                bandLevels.sync2 = Math.max(0, ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1));
+                bandLevels.sync3 = Math.max(0, ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1));
+
+                const sampleStride = performanceModeRef.current === 'high' ? 1 : performanceModeRef.current === 'medium' ? 2 : 3;
+                const shouldSampleFft = needsSpectrum && (frameIndexRef.current % sampleStride === 0);
+                let fftData: Uint8Array | null = null;
+                if (shouldSampleFft && (ae as any).getFFTData) {
+                    fftData = (ae as any).getFFTData();
+                    if (fftData && fftData.length > 0) {
+                        lastFftDataRef.current = fftData;
                     }
-                    const avg = count > 0 ? sum / count : 0;
-                    const norm = Math.min(1, avg / 255);
-                    return Math.min(1, norm * gain);
-                };
-
-                const fftBands = {
-                    sync1: sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1),
-                    sync2: sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1),
-                    sync3: sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1),
-                };
-
-                const anyBand = bandLevels.sync1 + bandLevels.sync2 + bandLevels.sync3;
-                if (anyBand < 0.001) {
-                    bandLevels = fftBands;
-                } else {
-                    bandLevels = {
-                        sync1: Math.max(bandLevels.sync1, fftBands.sync1),
-                        sync2: Math.max(bandLevels.sync2, fftBands.sync2),
-                        sync3: Math.max(bandLevels.sync3, fftBands.sync3),
-                    };
+                } else if (needsSpectrum) {
+                    fftData = lastFftDataRef.current;
                 }
+
+                if (fftData && fftData.length > 0) {
+                    const nyquist = ((ae as any).ctx?.sampleRate || 48000) / 2;
+                    const sampleBand = (freq: number, width: number, gain: number) => {
+                        const minF = Math.max(20, freq * Math.max(0.1, 1 - width / 100));
+                        const maxF = Math.min(nyquist, freq * (1 + width / 100));
+                        const minBin = Math.max(0, Math.floor((minF / nyquist) * fftData.length));
+                        const maxBin = Math.min(fftData.length - 1, Math.ceil((maxF / nyquist) * fftData.length));
+                        let sum = 0;
+                        let count = 0;
+                        for (let i = minBin; i <= maxBin; i++) {
+                            sum += fftData[i];
+                            count++;
+                        }
+                        const avg = count > 0 ? sum / count : 0;
+                        const norm = Math.min(1, avg / 255);
+                        return Math.min(1, norm * gain);
+                    };
+
+                    const fftBands = {
+                        sync1: sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1),
+                        sync2: sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1),
+                        sync3: sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1),
+                    };
+
+                    const anyBand = bandLevels.sync1 + bandLevels.sync2 + bandLevels.sync3;
+                    if (anyBand < 0.001) {
+                        bandLevels.sync1 = fftBands.sync1;
+                        bandLevels.sync2 = fftBands.sync2;
+                        bandLevels.sync3 = fftBands.sync3;
+                    } else {
+                        bandLevels.sync1 = Math.max(bandLevels.sync1, fftBands.sync1);
+                        bandLevels.sync2 = Math.max(bandLevels.sync2, fftBands.sync2);
+                        bandLevels.sync3 = Math.max(bandLevels.sync3, fftBands.sync3);
+                    }
+                }
+                lastBandLevelsRef.current = bandLevels;
             }
 
             const getLevel = (routing: string, forVu = false) => {
@@ -601,43 +697,35 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 return lerp(prev, target, vuAlpha);
             };
 
-            const lvls = {
-                main: computeFxVal(currentFxState.main, visualLevelsRef.current.main),
-                fx1: computeFxVal(currentFxState.fx1, visualLevelsRef.current.fx1),
-                fx2: computeFxVal(currentFxState.fx2, visualLevelsRef.current.fx2),
-                fx3: computeFxVal(currentFxState.fx3, visualLevelsRef.current.fx3),
-                fx4: computeFxVal(currentFxState.fx4, visualLevelsRef.current.fx4),
-                fx5: computeFxVal(currentFxState.fx5, visualLevelsRef.current.fx5),
-            };
+            visualLevelsRef.current.main = computeFxVal(currentFxState.main, visualLevelsRef.current.main);
+            visualLevelsRef.current.fx1 = computeFxVal(currentFxState.fx1, visualLevelsRef.current.fx1);
+            visualLevelsRef.current.fx2 = computeFxVal(currentFxState.fx2, visualLevelsRef.current.fx2);
+            visualLevelsRef.current.fx3 = computeFxVal(currentFxState.fx3, visualLevelsRef.current.fx3);
+            visualLevelsRef.current.fx4 = computeFxVal(currentFxState.fx4, visualLevelsRef.current.fx4);
+            visualLevelsRef.current.fx5 = computeFxVal(currentFxState.fx5, visualLevelsRef.current.fx5);
 
-            const vuPacket = {
-                main: computeFxVu(currentFxState.main, fxVuLevelsRef.current.main),
-                fx1: computeFxVu(currentFxState.fx1, fxVuLevelsRef.current.fx1),
-                fx2: computeFxVu(currentFxState.fx2, fxVuLevelsRef.current.fx2),
-                fx3: computeFxVu(currentFxState.fx3, fxVuLevelsRef.current.fx3),
-                fx4: computeFxVu(currentFxState.fx4, fxVuLevelsRef.current.fx4),
-                fx5: computeFxVu(currentFxState.fx5, fxVuLevelsRef.current.fx5),
-            };
-
-            // Aktualizuj FX VU / visualLevels na ka?dej klatce z lekkim smoothingiem
-            setVisualLevels(lvls);
-            setFxVuLevels(vuPacket);
-            visualLevelsRef.current = lvls;
-            fxVuLevelsRef.current = vuPacket;
+            fxVuLevelsRef.current.main = computeFxVu(currentFxState.main, fxVuLevelsRef.current.main);
+            fxVuLevelsRef.current.fx1 = computeFxVu(currentFxState.fx1, fxVuLevelsRef.current.fx1);
+            fxVuLevelsRef.current.fx2 = computeFxVu(currentFxState.fx2, fxVuLevelsRef.current.fx2);
+            fxVuLevelsRef.current.fx3 = computeFxVu(currentFxState.fx3, fxVuLevelsRef.current.fx3);
+            fxVuLevelsRef.current.fx4 = computeFxVu(currentFxState.fx4, fxVuLevelsRef.current.fx4);
+            fxVuLevelsRef.current.fx5 = computeFxVu(currentFxState.fx5, fxVuLevelsRef.current.fx5);
 
             if (shouldUpdateUi) {
+                setVisualLevels({ ...visualLevelsRef.current });
+                setFxVuLevels({ ...fxVuLevelsRef.current });
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
                 lastUiUpdateRef.current = now;
             }
 
             const computedFx: ExperimentalFxPacket = {
-                mainFXGain: lvls.main,
+                mainFXGain: visualLevelsRef.current.main,
                 main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
                 mainMix: (currentFxState.main.mix ?? 100) / 100,
                 additiveMasterGain: additiveGainRef.current / 100,
                 transform: currentTransform,
                 isMirrored: isMirroredRef.current,
-                fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5,
+                fx1: visualLevelsRef.current.fx1, fx2: visualLevelsRef.current.fx2, fx3: visualLevelsRef.current.fx3, fx4: visualLevelsRef.current.fx4, fx5: visualLevelsRef.current.fx5,
                 fx1Mix: (currentFxState.fx1.mix ?? 100) / 100,
                 fx2Mix: (currentFxState.fx2.mix ?? 100) / 100,
                 fx3Mix: (currentFxState.fx3.mix ?? 100) / 100,
@@ -682,19 +770,35 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 }
             }
 
-            if (now - lastFpsTickRef.current > 400 && dt > 0) {
-                const instFps = 1000 / dt;
+            if (hasVideoReady && dt > 0) {
+                const instFps = 1000 / Math.max(1, dt);
                 fpsSmoothRef.current = fpsSmoothRef.current * 0.7 + instFps * 0.3;
                 setFps(Math.round(fpsSmoothRef.current));
 
-                if (autoScale) {
+                if (frameCapModeRef.current === 'dynamic') {
+                    let nextCap = frameCapRef.current;
+                    if (fpsSmoothRef.current < 27 && frameCapRef.current > 24) {
+                        nextCap = 24;
+                    } else if (fpsSmoothRef.current < 33 && frameCapRef.current > 30) {
+                        nextCap = 30;
+                    } else if (fpsSmoothRef.current > 50 && frameCapRef.current < 60) {
+                        nextCap = 60;
+                    }
+                    if (nextCap !== frameCapRef.current) {
+                        frameCapRef.current = nextCap;
+                        setFrameCap(nextCap);
+                    }
+                }
+
+                if (autoScale && !lockResolution) {
                     const targets: Array<{ label: QualityMode, scale: number }> = [
                         { label: 'high', scale: QUALITY_SCALE.high },
                         { label: 'medium', scale: QUALITY_SCALE.medium },
                         { label: 'low', scale: QUALITY_SCALE.low },
+                        { label: 'ultraLow', scale: QUALITY_SCALE.ultraLow },
                     ];
                     const currentIdx = Math.max(0, targets.findIndex(t => t.scale === renderScaleRef.current));
-                    const targetFps = frameCap || 60;
+                    const targetFps = capTarget || 60;
                     if (fpsSmoothRef.current < targetFps - 8 && currentIdx < targets.length - 1) {
                         const next = targets[currentIdx + 1];
                         setQuality(next.label);
@@ -721,7 +825,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             mounted = false;
             cancelAnimationFrame(rafRef.current);
         };
-    }, [frameCap]);
+    }, [autoScale, handleResize, lockResolution]);
 
     const toggleMic = async (isActive: boolean) => {
         setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: isActive } }));
@@ -1092,10 +1196,13 @@ const toggleRecording = async () => {
                 </div>
             )}
 
-            <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-3 bg-black/60 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
+            <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-200 flex gap-3 bg-black/70 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
-                <span className="hidden md:inline">RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
+                <span className="hidden md:inline">dt: {lastDtRef.current.toFixed(1)}ms</span>
                 <span className="hidden md:inline">Scale: {Math.round(renderScale * 100)}%</span>
+                <span className="hidden md:inline">Cap: {frameCapMode === 'dynamic' ? `${frameCap} auto` : frameCap}</span>
+                <span className="hidden md:inline">Mode: {renderMode}</span>
+                <span className="hidden md:inline">Perf: {performanceMode}</span>
                 {mixer.mic.active && <span className="text-red-400 font-black tracking-widest">MIC</span>}
                 {isRecording && <span className="text-red-400 font-black tracking-widest">REC</span>}
             </div>
@@ -1176,18 +1283,48 @@ const toggleRecording = async () => {
                                     <option value="high">High (100%)</option>
                                     <option value="medium">Medium (75%)</option>
                                     <option value="low">Low (50%)</option>
+                                    <option value="ultraLow">Ultra Low (35%)</option>
                                 </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Low/Medium/High render scale for GPU headroom.</p>
+                                <label className="flex items-center gap-2 text-[11px] text-slate-300 mt-2">
+                                    <input type="checkbox" checked={lockResolution} onChange={(e) => setLockResolution(e.target.checked)} />
+                                    Lock resolution 0.5x (no auto up-scale)
+                                </label>
+                                <p className="text-[10px] text-slate-500 mt-1">Low/Medium/High/Ultra-Low render scale for GPU headroom.</p>
                             </div>
                             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Frame Cap</div>
-                                <select value={frameCap} onChange={(e) => setFrameCap(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="text-[10px] text-slate-400">Frame Cap</div>
+                                    <label className="flex items-center gap-1 text-[10px] text-slate-300">
+                                        <input type="checkbox" checked={frameCapMode === 'dynamic'} onChange={(e) => setFrameCapMode(e.target.checked ? 'dynamic' : 'manual')} />
+                                        Auto
+                                    </label>
+                                </div>
+                                <select value={frameCap} disabled={frameCapMode === 'dynamic'} onChange={(e) => setFrameCap(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none disabled:opacity-50">
                                     <option value={75}>75</option>
                                     <option value={60}>60</option>
                                     <option value={45}>45</option>
                                     <option value={30}>30</option>
+                                    <option value={24}>24</option>
                                 </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Skips draws when frame budget is exceeded.</p>
+                                <p className="text-[10px] text-slate-500 mt-1">{frameCapMode === 'dynamic' ? 'Dynamic cap auto-drops to 30/24 FPS on slow frames.' : 'Skips draws when frame budget is exceeded.'}</p>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">Performance Mode</div>
+                                <select value={performanceMode} onChange={(e) => setPerformanceMode(e.target.value as PerformanceMode)} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value="high">High (FFT every frame)</option>
+                                    <option value="medium">Medium (FFT every 2nd frame)</option>
+                                    <option value="low">Low (FFT every 3rd frame)</option>
+                                </select>
+                                <p className="text-[10px] text-slate-500 mt-1">Throttle FFT/FX analysis on slower CPUs.</p>
+                            </div>
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                                <div className="text-[10px] text-slate-400 mb-1">UI Update Limit</div>
+                                <select value={uiFpsLimit} onChange={(e) => setUiFpsLimit(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value={30}>30 FPS</option>
+                                    <option value={20}>20 FPS</option>
+                                    <option value={15}>15 FPS</option>
+                                </select>
+                                <p className="text-[10px] text-slate-500 mt-1">Throttles UI/VU state updates to reduce GC.</p>
                             </div>
                             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
                                 <div className="text-[10px] text-slate-400 mb-1">Recording FPS</div>
@@ -1222,7 +1359,7 @@ const toggleRecording = async () => {
                                 <div className="text-[10px] text-slate-400 mb-1">Auto Scale (LOD)</div>
                                 <label className="flex items-center gap-2 text-[11px] text-slate-300">
                                     <input type="checkbox" checked={autoScale} onChange={(e) => setAutoScale(e.target.checked)} />
-                                    Adjust render scale based on FPS
+                                    Adjust render scale based on FPS (disabled when locked)
                                 </label>
                             </div>
                         </div>

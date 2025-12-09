@@ -15,9 +15,9 @@ VISUS to przeglądarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (pli
 
 ## Wersjonowanie (bieżący stan)
 - **Branch:** `main`
-- **Wersja:** 0.2.3 (patrz `CHANGELOG.md`)
-- **Ostatnie zmiany:** mobile canvas nad panelem (FX widoczne podczas strojenia), usunięty mini-podgląd; poprawione skalowanie canvasu; preferencje audio nagrywania (jeden żywy tor, WebM/Opus).
-- **Znane problemy:** wymaga testu live czułości Bass/Mid/High (ew. korekta mnożników/smoothing), potwierdzenia nagrywania i wydajności po zmianach.
+- **Wersja:** 0.2.4 (patrz `CHANGELOG.md`)
+- **Ostatnie zmiany:** dynamiczny frame cap (auto 60→30→24), tryb Performance (FFT co 1/2/3 klatki), limiter UI (20 FPS), nowy poziom Ultra Low (35%) + blokada rozdzielczości 0.5x, HUD z dt/mode/cap. Nagrywanie korzysta wyłącznie z miksu master (VIDEO/MUSIC/MIC).
+- **Znane problemy:** do potwierdzenia live: czułość Bass/Mid/High po throttlingu, wydajność na słabszych GPU (test 1080p + FX), optymalizacja batchowania uniformów WebGL.
 
 ## Uruchomienie lokalne
 **Wymagania:** Node.js 18+

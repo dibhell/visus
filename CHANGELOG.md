@@ -3,6 +3,13 @@
 ## [Unreleased]
 - Playlist UX/backlog: np. playlista z klipami video (do rozważenia).
 
+## [0.2.4] - 2025-12-09
+- Performance: dynamic frame cap (auto 60→30→24), FFT sampling stride per performance mode (high/medium/low), UI/VU update limiter (domyślnie 20 FPS), pomijanie ciężkich FFT przy długich klatkach.
+- Quality: nowy poziom Ultra Low (35%) oraz blokada rozdzielczości 0.5x dla słabych GPU; auto LOD respektuje blokadę.
+- HUD: pasek statusu pokazuje dt, render scale, tryb renderu, cap mode i profil performance.
+- Audio/recording: nagrywanie zawsze z miksu master; abort gdy brak aktywnego VIDEO/MUSIC/MIC.
+- UI: Performance Lab zyskał przełącznik trybu performance, limit UI FPS oraz przełącznik automatycznego capu.
+
 ## [0.2.3] - 2025-12-03
 - Mobile: canvas widoczny nad panelem (FX podczas strojenia), usunięty mini-podgląd.
 - UI/mobile: pełna szerokość canvasu, wysokość ~45% ekranu przy otwartym panelu.

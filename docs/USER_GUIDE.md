@@ -1,4 +1,4 @@
-﻿# VISUS — Podręcznik Użytkownika (v0.2.3)
+﻿# VISUS — Podręcznik Użytkownika (v0.2.4)
 
 Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
@@ -29,14 +29,16 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 6. Nagrywanie
 - Przycisk **REC VIDEO (WEBM/MP4)**: zapisuje canvas + miks audio.
-- Audio w pliku: wybierany jest jeden żywy tor audio (priorytet: `captureStream` audio elementu → miks AudioContext → `captureStream` wideo).
-- MIME: preferencja WebM/Opus; MP4 tylko jeśli wspierane.
+- Audio w pliku: nagrywany jest miks master (VIDEO/MUSIC/MIC). Je?li miks nie ma ?ywych tor?w ? nagrywanie zostaje przerwane z alertem.
+- MIME: preferencja WebM/Opus; MP4 tylko je?li wspierane. WebCodecs mo?e by? wideo-only gdy audio niewspierane.
 - Wydajność nagrywania: Recording FPS domyślnie 45 (clamp do 30 przy capture), bitrate wideo domyślnie 8 Mbps; audio 192 kbps.
 
 ## 7. Performance Lab
-- **Render Scale**: 55% domyślnie; zmniejsz przy dropach FPS.
-- **Frame Cap**: limituje pętlę renderu (np. 60/45/30).
-- **Auto Scale (LOD)**: adaptuje renderScale do FPS (on domyślnie).
+- **Render Scale**: Low/Medium/High/Ultra Low (35%) + blokada rozdzielczo?ci 0.5x dla s?abych GPU.
+- **Frame Cap**: manualne warto?ci lub tryb Auto (60?30?24 gdy FPS spada).
+- **Performance Mode**: High (FFT co klatk?) / Medium (co 2) / Low (co 3) ? obni?a koszt audio/FX.
+- **UI Limit**: ogranicza od?wie?anie UI/VU (domy?lnie 20 FPS) dla mniejszej presji GC.
+- **Auto Scale (LOD)**: adaptuje renderScale do FPS (wygaszane przy lock resolution).
 - **WebCodecs**: preferuj wideo hardware (gdy audio unsupported).
 
 ## 8. Mobile
@@ -62,7 +64,7 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 12. Kontakt
 - Autor: Studio Popłoch / Pan Grzyb — ptr@o2.pl
-- Wersja: 0.2.3
+- Wersja: 0.2.4
 
 ---
 

@@ -13,4 +13,8 @@
    - Przed releasem: `npm run build` + kr?tki smoke (nagrywanie/FX na pasmach).
 
 4) Nagrywanie WebM
-   - Brak ?cie?ki audio w nagraniach `REC VIDEO` dla niekt?rych ?r?de?. Sprawdzi? strumienie audio (recDest/captureStream fallback) i potwierdzi? obecno?? audio track?w w output.
+   - Potwierdzi?, ?e nagrywanie master mix (VIDEO/MUSIC/MIC) dzia?a stabilnie; brak miksu powinien przerwa? nagranie z alertem.
+
+5) Test obci??eniowy
+   - Klip 1080p + kilka FX, Performance Mode medium/low, Auto Scale on, HUD: FPS/dt/renderScale/cap.
+   - Rejestrowa? FPS/scale 30?60 s; sprawdzi? lock resolution 0.5x i auto frame cap (60?30?24).

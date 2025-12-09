@@ -126,10 +126,11 @@ export interface MusicTrack {
 
 }
 
-export type QualityMode = 'low' | 'medium' | 'high';
+export type QualityMode = 'ultraLow' | 'low' | 'medium' | 'high';
 export type FallbackReason = 'NONE' | 'NO_CONTEXT' | 'INIT_ERROR' | 'SHADER_FAIL' | 'USER_FORCE' | 'CONTEXT_LOST';
 
 export const QUALITY_SCALE: Record<QualityMode, number> = {
+  ultraLow: 0.35,
   low: 0.5,
   medium: 0.75,
   high: 1,
