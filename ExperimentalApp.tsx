@@ -170,7 +170,7 @@ const PerformanceHUD: React.FC<{
 const ExperimentalAppMock: React.FC<ExperimentalProps> = ({ onExit }) => (
     <div className="w-full h-screen flex items-center justify-center bg-slate-900 text-slate-100 flex-col gap-4">
         <div className="text-3xl font-black">VISUS STUDIO MOCK</div>
-        <div className="text-sm text-slate-400">debug_init=mock – bez WebGL/Audio/FX</div>
+        <div className="text-sm text-slate-400">debug_init=mock - bez WebGL/Audio/FX</div>
         <button className="px-4 py-2 bg-accent text-black rounded-lg" onClick={onExit}>Exit</button>
     </div>
 );
@@ -212,7 +212,7 @@ const ExperimentalAppLayout: React.FC<ExperimentalProps> = ({ onExit }) => (
                         <div className="text-[9px] text-accent font-mono tracking-[0.3em] opacity-80">LAYOUT ONLY</div>
                     </div>
                 </div>
-                <button onClick={onExit} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">✕</button>
+                <button onClick={onExit} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">X</button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
@@ -385,6 +385,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const debugNoAudio = getDebugFlag('debug_no_audio');
     const debugNoGL = getDebugFlag('debug_no_gl');
     const debugNoLoop = getDebugFlag('debug_no_loop');
+    useEffect(() => {
+        console.info('[VISUS] debug flags', { debugNoAudio, debugNoGL, debugNoLoop });
+    }, [debugNoAudio, debugNoGL, debugNoLoop]);
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
@@ -513,7 +516,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { frameCapRef.current = frameCap; localStorage.setItem('visus_framecap', String(frameCap)); }, [frameCap]);
     useEffect(() => { frameCapModeRef.current = frameCapMode; localStorage.setItem('visus_framecap_mode', frameCapMode); }, [frameCapMode]);
     useEffect(() => { localStorage.setItem('visus_lock_res', lockResolution ? '1' : '0'); }, [lockResolution]);
-    useEffect(() => { useWorkletFFTRef.current = useWorkletFFT; localStorage.setItem('visus_worklet_fft', useWorkletFFT ? '1' : '0'); audioRef.current.setUseWorkletFFT(useWorkletFFT); }, [useWorkletFFT]);
+    useEffect(() => {
+        useWorkletFFTRef.current = useWorkletFFT;
+        localStorage.setItem('visus_worklet_fft', useWorkletFFT ? '1' : '0');
+        if (!debugNoAudio) {
+            audioRef.current.setUseWorkletFFT(useWorkletFFT);
+        }
+    }, [useWorkletFFT, debugNoAudio]);
     useEffect(() => { useVideoFrameCbRef.current = useVideoFrameCb; localStorage.setItem('visus_vfc', useVideoFrameCb ? '1' : '0'); }, [useVideoFrameCb]);
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
     useEffect(() => {
@@ -652,6 +661,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         if (!canvasRef.current) return;
         if (debugNoGL && debugNoAudio) {
+            console.info('[VISUS] debug_no_gl=1 & debug_no_audio=1 -> init skipped');
             setIsBooting(false);
             return;
         }
@@ -784,6 +794,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 });
             } else {
                 setIsBooting(false);
+                console.info('[VISUS] debug_no_audio=1 -> audio init skipped');
             }
             handleResize();
         };
@@ -803,6 +814,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             setFallbackReason('USER_FORCE');
             setLastShaderError('debug_no_gl');
             setIsBooting(false);
+            console.info('[VISUS] debug_no_gl=1 -> WebGL init skipped, forcing Canvas2D');
         }
 
         return () => {
@@ -865,7 +877,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
     useEffect(() => {
         if (debugNoLoop) {
-            console.info('[VISUS] debug_no_loop=1 → render loop skipped');
+            console.info('[VISUS] debug_no_loop=1 -> render loop skipped');
             return;
         }
         let mounted = true;
@@ -1171,6 +1183,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [autoScale, handleResize, lockResolution, useVideoFrameCb]);
 
     const toggleMic = useCallback(async (isActive: boolean) => {
+        if (debugNoAudio) {
+            console.info('[VISUS] debug_no_audio=1 -> mic init skipped');
+            setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: false, hasSource: false } }));
+            return;
+        }
         setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: isActive } }));
 
         if (isActive) {
@@ -1192,7 +1209,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         } else {
             audioRef.current.disconnectMic();
         }
-    }, []);
+    }, [debugNoAudio]);
 
     const updateMixer = useCallback((channel: 'video' | 'music' | 'mic', changes: any) => {
         setMixer(prev => ({
@@ -1248,6 +1265,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const stopMusic = useCallback(() => stopTransport('music'), [stopTransport]);
 
     const loadMusicTrack = useCallback((url: string, name: string) => {
+        if (debugNoAudio) {
+            console.info('[VISUS] debug_no_audio=1 -> music load skipped');
+            return;
+        }
         if (audioElRef.current) {
             audioElRef.current.pause();
         }
@@ -1269,7 +1290,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         }).catch(e => console.log('Auto-play prevented', e));
 
         setShowCatalog(false);
-    }, []);
+    }, [debugNoAudio]);
 
     const handleFile = (type: 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -1285,13 +1306,19 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         videoRef.current.muted = false;
                         videoRef.current.loop = true;
                         videoRef.current.play().catch(() => {});
-                        audioRef.current.connectVideo(videoRef.current);
-                        audioRef.current.setupFilters(syncParamsRef.current);
+                        if (!debugNoAudio) {
+                            audioRef.current.connectVideo(videoRef.current);
+                            audioRef.current.setupFilters(syncParamsRef.current);
+                        }
                         setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
                     } catch (err) {
                         console.error('Video load failed', err);
                     }
                 } else if (type === 'audio') {
+                    if (debugNoAudio) {
+                        console.info('[VISUS] debug_no_audio=1 -> audio file load skipped');
+                        return;
+                    }
                     loadMusicTrack(url, file.name);
                 }
             } catch (err) {
@@ -1307,10 +1334,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             video: deviceId ? { deviceId: { exact: deviceId } } : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: { ideal: cameraFacing } },
             audio: false
         };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
             videoRef.current.srcObject = stream;
             videoRef.current.play();
-            audioRef.current.connectVideo(videoRef.current);
+            if (!debugNoAudio) {
+                audioRef.current.connectVideo(videoRef.current);
+            }
             setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
             setShowCameraSelector(false);
         } catch (err) {
@@ -1365,30 +1394,37 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             alert('Canvas not ready yet.');
             return false;
         }
-        try {
-            await audioRef.current.initContext();
-            if (audioRef.current.ctx?.state === 'suspended') {
-                await audioRef.current.ctx.resume();
-            }
-        } catch (e) {
-            console.warn('Audio context resume failed before recording', e);
-        }
-
         const canvasStream = canvasRef.current.captureStream(Math.min(recordFps, 30));
         const videoTracks = canvasStream.getVideoTracks();
 
-        const buildRecordingAudio = () => {
-            const streamFactory = (audioRef.current as any).createRecordingStream;
-            if (typeof streamFactory === 'function') {
-                return streamFactory.call(audioRef.current);
+        let recordingAudio: { stream?: MediaStream | null; cleanup?: () => void } = { cleanup: () => {} };
+        let mixTracks: MediaStreamTrack[] = [];
+
+        if (!debugNoAudio) {
+            try {
+                await audioRef.current.initContext();
+                if (audioRef.current.ctx?.state === 'suspended') {
+                    await audioRef.current.ctx.resume();
+                }
+            } catch (e) {
+                console.warn('Audio context resume failed before recording', e);
             }
-            const stream = audioRef.current.getAudioStream();
-            return { stream, cleanup: () => {} };
-        };
-        const recordingAudio = buildRecordingAudio();
-        const mixTracks: MediaStreamTrack[] = (recordingAudio.stream?.getAudioTracks() || [])
-            .filter((t: MediaStreamTrack): t is MediaStreamTrack => t.readyState === 'live');
-        mixTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
+
+            const buildRecordingAudio = () => {
+                const streamFactory = (audioRef.current as any).createRecordingStream;
+                if (typeof streamFactory === 'function') {
+                    return streamFactory.call(audioRef.current);
+                }
+                const stream = audioRef.current.getAudioStream();
+                return { stream, cleanup: () => {} };
+            };
+            recordingAudio = buildRecordingAudio();
+            mixTracks = (recordingAudio.stream?.getAudioTracks() || [])
+                .filter((t: MediaStreamTrack): t is MediaStreamTrack => t.readyState === 'live');
+            mixTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
+        } else {
+            console.info('[VISUS] debug_no_audio=1 -> recording video-only (no audio tracks)');
+        }
 
         const channelActive = (audioRef.current as any).channelActive || {};
         const hasActiveAudioSource =
@@ -1404,17 +1440,18 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 hasSource: mixerRef.current.video.hasSource,
                 playing: mixerRef.current.video.playing,
                 attached: !!videoRef.current?.srcObject || !!videoRef.current?.src
-            }
+            },
+            debugNoAudio
         });
 
-        if (!hasActiveAudioSource) {
+        if (!debugNoAudio && !hasActiveAudioSource) {
             console.warn('[VISUS] record aborted: no active VIDEO/MUSIC/MIC source armed for mix');
             recordingAudio.cleanup?.();
             alert('Brak aktywnego zrodla audio (VIDEO/MUSIC/MIC). Wlacz kanal i sprobuj ponownie.');
             return false;
         }
 
-        if (mixTracks.length === 0) {
+        if (!debugNoAudio && mixTracks.length === 0) {
             console.warn('[VISUS] record aborted: master mix has 0 audio tracks');
             recordingAudio.cleanup?.();
             const msg = preferWebCodecs
@@ -1446,7 +1483,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
             const fileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
             console.debug('[VISUS] MediaRecorder mime selected:', mimeType);
-            if (combinedStream.getAudioTracks().length === 0) {
+            if (!debugNoAudio && combinedStream.getAudioTracks().length === 0) {
                 console.warn('[VISUS] combined stream missing audio track');
                 recordingAudio.cleanup?.();
                 alert('Nagrywanie przerwane: brak aktywnej sciezki audio w strumieniu.');
@@ -1508,12 +1545,14 @@ const toggleRecording = async () => {
         const newParams = [...syncParams];
         newParams[index] = { ...newParams[index], ...changes };
         setSyncParams(newParams);
+        if (debugNoAudio) return;
         audioRef.current.updateFilters(newParams);
-    }, [syncParams]);
+    }, [syncParams, debugNoAudio]);
 
     const handleUpdateFilters = useCallback((params: SyncParam[]) => {
+        if (debugNoAudio) return;
         audioRef.current.updateFilters(params);
-    }, []);
+    }, [debugNoAudio]);
 
     const updateTransform = (key: keyof TransformConfig, value: number) => {
         setTransform(prev => ({ ...prev, [key]: value }));
@@ -1567,7 +1606,7 @@ const toggleRecording = async () => {
             {devMode && (
                 <div className="fixed top-4 left-4 z-50 font-mono text-[10px] text-slate-300 bg-black/70 p-3 rounded-xl border border-white/10 shadow-xl space-y-1">
                     <div>render: {renderMode} (pref: {renderPreference}, worker: {workerPreference ? 'on' : 'off'})</div>
-                    <div>probe webgl2/webgl: {webglProbe.webgl2 ? '✓' : '×'} / {webglProbe.webgl ? '✓' : '×'}</div>
+                    <div>probe webgl2/webgl: {webglProbe.webgl2 ? 'Y' : 'N'} / {webglProbe.webgl ? 'Y' : 'N'}</div>
                     <div>fallback: {fallbackReason}</div>
                     <div>shader: {lastShaderError || 'none'}</div>
                 </div>
@@ -1779,7 +1818,7 @@ const toggleRecording = async () => {
                         </button>
                         {useWebCodecsRecord && webCodecsSupported && (
                             <div className="mt-2 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-md px-3 py-2">
-                                WebCodecs może nagrywać tylko wideo jeśli brak żywej ścieżki audio. Wyłącz WebCodecs, aby wymusić nagranie z dźwiękiem.
+                                WebCodecs can record video-only when no live audio track is present. Disable WebCodecs to force recording with audio.
                             </div>
                         )}
                     </section>
