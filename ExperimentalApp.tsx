@@ -321,61 +321,172 @@ const PanelSettings: React.FC<{
     setUseWorkletFFT: (v: boolean) => void;
     useVideoFrameCb: boolean;
     setUseVideoFrameCb: (v: boolean) => void;
-}> = memo(({
-    quality,
-    setQuality,
-    lockResolution,
-    setLockResolution,
-    frameCap,
-    frameCapMode,
-    setFrameCap,
-    setFrameCapMode,
-    performanceMode,
-    setPerformanceMode,
-    uiFpsLimit,
-    setUiFpsLimit,
-    recordFps,
-    setRecordFps,
-    recordBitrate,
-    setRecordBitrate,
-    webCodecsSupported,
-    useWebCodecsRecord,
-    setUseWebCodecsRecord,
-    autoScale,
-    setAutoScale,
-    useWorkletFFT,
-    setUseWorkletFFT,
-    useVideoFrameCb,
-    setUseVideoFrameCb
-}) => (
-                    <PanelSettings
-                        quality={quality}
-                        setQuality={setQuality}
-                        lockResolution={lockResolution}
-                        setLockResolution={setLockResolution}
-                        frameCap={frameCap}
-                        frameCapMode={frameCapMode}
-                        setFrameCap={setFrameCap}
-                        setFrameCapMode={setFrameCapMode}
-                        performanceMode={performanceMode}
-                        setPerformanceMode={setPerformanceMode}
-                        uiFpsLimit={uiFpsLimit}
-                        setUiFpsLimit={setUiFpsLimit}
-                        recordFps={recordFps}
-                        setRecordFps={setRecordFps}
-                        recordBitrate={recordBitrate}
-                        setRecordBitrate={setRecordBitrate}
-                        webCodecsSupported={webCodecsSupported}
-                        useWebCodecsRecord={useWebCodecsRecord}
-                        setUseWebCodecsRecord={setUseWebCodecsRecord}
-                        autoScale={autoScale}
-                        setAutoScale={setAutoScale}
-                        useWorkletFFT={useWorkletFFT}
-                        setUseWorkletFFT={setUseWorkletFFT}
-                        useVideoFrameCb={useVideoFrameCb}
-                        setUseVideoFrameCb={setUseVideoFrameCb}
-                    />
-));
+}> = memo((props) => {
+    const {
+        quality, setQuality,
+        lockResolution, setLockResolution,
+        frameCap, frameCapMode, setFrameCap, setFrameCapMode,
+        performanceMode, setPerformanceMode,
+        uiFpsLimit, setUiFpsLimit,
+        recordFps, setRecordFps,
+        recordBitrate, setRecordBitrate,
+        webCodecsSupported, useWebCodecsRecord, setUseWebCodecsRecord,
+        autoScale, setAutoScale,
+        useWorkletFFT, setUseWorkletFFT,
+        useVideoFrameCb, setUseVideoFrameCb,
+    } = props;
+
+    const qualityOptions: { key: QualityMode; label: string }[] = [
+        { key: 'ultraLow', label: 'ULow' },
+        { key: 'low', label: 'Low' },
+        { key: 'medium', label: 'Med' },
+        { key: 'high', label: 'High' },
+    ];
+
+    const perfOptions: { key: PerformanceMode; label: string }[] = [
+        { key: 'high', label: 'High' },
+        { key: 'medium', label: 'Medium' },
+        { key: 'low', label: 'Low' },
+    ];
+
+    const uiFpsOptions = [15, 20, 30];
+
+    const toggleClass = (active: boolean) => active ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10';
+
+    return (
+        <section className="bg-black/20 border border-white/10 rounded-2xl p-4 space-y-4">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Performance Lab</div>
+
+            <div className="grid grid-cols-4 gap-2">
+                {qualityOptions.map((q) => (
+                    <button
+                        key={q.key}
+                        onClick={() => setQuality(q.key)}
+                        className={`px-2 py-2 rounded text-[10px] font-bold border ${toggleClass(quality === q.key)}`}
+                    >
+                        {q.label}
+                    </button>
+                ))}
+            </div>
+
+            <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                <input type="checkbox" checked={lockResolution} onChange={(e) => setLockResolution(e.target.checked)} />
+                Lock resolution (force 0.5x)
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Frame cap mode</div>
+                    <div className="flex gap-2">
+                        {['dynamic', 'manual'].map((m) => (
+                            <button
+                                key={m}
+                                onClick={() => setFrameCapMode(m as 'dynamic' | 'manual')}
+                                className={`flex-1 px-2 py-2 rounded text-[10px] font-bold border ${toggleClass(frameCapMode === m)}`}
+                            >
+                                {m}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <input
+                            type="range"
+                            min={15}
+                            max={120}
+                            step={1}
+                            value={frameCap}
+                            onChange={(e) => setFrameCap(parseInt(e.target.value, 10))}
+                            disabled={frameCapMode === 'dynamic'}
+                            className="flex-1"
+                        />
+                        <span className="w-10 text-right text-[11px]">{frameCap}</span>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Performance mode</div>
+                    <div className="grid grid-cols-3 gap-2">
+                        {perfOptions.map((p) => (
+                            <button
+                                key={p.key}
+                                onClick={() => setPerformanceMode(p.key)}
+                                className={`px-2 py-2 rounded text-[10px] font-bold border ${toggleClass(performanceMode === p.key)}`}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">UI FPS limit</div>
+                    <div className="flex gap-2">
+                        {uiFpsOptions.map((fps) => (
+                            <button
+                                key={fps}
+                                onClick={() => setUiFpsLimit(fps)}
+                                className={`flex-1 px-2 py-2 rounded text-[10px] font-bold border ${toggleClass(uiFpsLimit === fps)}`}
+                            >
+                                {fps}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Recording</div>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <span className="w-24">FPS</span>
+                        <input
+                            type="number"
+                            min={15}
+                            max={60}
+                            value={recordFps}
+                            onChange={(e) => setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))))}
+                            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                        />
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <span className="w-24">Bitrate kbps</span>
+                        <input
+                            type="number"
+                            min={500}
+                            max={20000}
+                            step={100}
+                            value={recordBitrate}
+                            onChange={(e) => setRecordBitrate(Math.max(500, Math.min(20000, parseInt(e.target.value || '0', 10))))}
+                            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                        />
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <input
+                            type="checkbox"
+                            checked={useWebCodecsRecord}
+                            onChange={(e) => setUseWebCodecsRecord(e.target.checked)}
+                            disabled={!webCodecsSupported}
+                        />
+                        WebCodecs (HW preferred){!webCodecsSupported && <span className="text-amber-400"> (n/a)</span>}
+                    </label>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="text-[10px] text-slate-500 font-bold uppercase">Pipeline</div>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <input type="checkbox" checked={autoScale} onChange={(e) => setAutoScale(e.target.checked)} />
+                        Auto scale quality
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <input type="checkbox" checked={useWorkletFFT} onChange={(e) => setUseWorkletFFT(e.target.checked)} />
+                        Use worklet FFT
+                    </label>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <input type="checkbox" checked={useVideoFrameCb} onChange={(e) => setUseVideoFrameCb(e.target.checked)} />
+                        requestVideoFrameCallback
+                    </label>
+                </div>
+            </div>
+        </section>
+    );
+});
 
 const getDebugFlags = () => {
     const p = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
