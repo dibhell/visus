@@ -11,6 +11,7 @@ let tex: WebGLTexture | null = null;
 let canvas: OffscreenCanvas | null = null;
 let uniformCache: Record<string, WebGLUniformLocation | null> = {};
 let lastVideoSize = { w: 0, h: 0 };
+let lastShaderError: string | null = null;
 
 const cacheUniforms = (names: string[]) => {
     if (!gl || !program) return;
@@ -30,6 +31,7 @@ const compileShader = (type: number, source: string, label: 'main' | 'safe') => 
         const typeName = type === gl.VERTEX_SHADER ? 'VERTEX' : 'FRAGMENT';
         const snippet = source.slice(0, 200);
         console.error(`[VISUS] shader compile error (${label}/${typeName}):`, info, 'src:', snippet);
+        lastShaderError = `${label}/${typeName}: ${info}`;
         return null;
     }
     return sh;
@@ -48,6 +50,7 @@ const loadShader = (fragSrc: string) => {
         gl!.linkProgram(prog);
         if (!gl!.getProgramParameter(prog, gl!.LINK_STATUS)) {
             console.error(`[VISUS] shader link error (${label}):`, gl!.getProgramInfoLog(prog));
+            lastShaderError = `${label}/LINK: ${gl!.getProgramInfoLog(prog)}`;
             return null;
         }
         return prog;
@@ -62,6 +65,7 @@ const loadShader = (fragSrc: string) => {
         program = null;
         return false;
     }
+    lastShaderError = null;
 
     program = prog;
     gl.useProgram(program);
@@ -188,11 +192,13 @@ self.onmessage = (e: MessageEvent) => {
     const { type } = e.data;
     if (type === 'init') {
         const { canvas: c, fragSrc } = e.data;
+        let success = false;
+        let mode: 'webgl' | 'none' = 'none';
         if (initGL(c)) {
-            if (!loadShader(fragSrc)) {
-                console.warn('[VISUS] worker shader init failed');
-            }
+            success = loadShader(fragSrc);
+            mode = success ? 'webgl' : 'none';
         }
+        (self as any).postMessage({ type: 'init-result', success, mode, lastShaderError });
     } else if (type === 'loadShader') {
         if (!loadShader(e.data.fragSrc)) {
             console.warn('[VISUS] worker shader reload failed');

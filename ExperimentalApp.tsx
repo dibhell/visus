@@ -301,7 +301,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         if (!canvasRef.current) return;
 
-        const initWork = () => {
+        const initWork = async () => {
             const canvas = canvasRef.current as HTMLCanvasElement;
             const ensureCanvas2D = () => {
                 const ctx = canvas.getContext('2d');
@@ -315,7 +315,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             const probe = detectWebGLSupport();
             setWebglProbe(probe);
 
-            const tryWorker = () => {
+            const tryWorker = async () => {
                 if (!workerAllowed) return false;
                 if (!(canvas as any).transferControlToOffscreen) return false;
                 try {
@@ -323,7 +323,33 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     workerRef.current = worker;
                     const offscreen = (canvas as any).transferControlToOffscreen();
                     const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                    const initPromise = new Promise<boolean>((resolve) => {
+                        worker.onmessage = (ev: MessageEvent) => {
+                            if (ev.data?.type === 'frame-done') {
+                                bitmapInFlightRef.current = false;
+                                return;
+                            }
+                            if (ev.data?.type === 'init-result') {
+                                const ok = !!ev.data.success && ev.data.mode === 'webgl';
+                                if (!ok) {
+                                    console.warn('[VISUS] worker init failed', ev.data?.lastShaderError);
+                                } else {
+                                    console.info('[VISUS] worker init ok');
+                                }
+                                resolve(ok);
+                            }
+                        };
+                    });
                     worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
+                    const ok = await initPromise;
+                    if (!ok) {
+                        workerRef.current?.terminate();
+                        workerRef.current = null;
+                        workerReadyRef.current = false;
+                        useWorkerRenderRef.current = false;
+                        return false;
+                    }
+                    // Reattach handler for regular frame completion
                     worker.onmessage = (ev: MessageEvent) => {
                         if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
                     };
@@ -331,6 +357,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     useWorkerRenderRef.current = true;
                     setRenderMode('webgl-worker');
                     setFallbackReason('NONE');
+                    setLastShaderError('');
                     console.info('[VISUS] start FX (worker):', fxStateRef.current.main.shader);
                     return true;
                 } catch (err) {
@@ -362,7 +389,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     workerReadyRef.current = false;
                     console.warn('[VISUS] fallback Canvas2D (WebGL probe failed: no context)');
                 } else {
-                    const workerUsed = tryWorker();
+                    const workerUsed = await tryWorker();
                     if (!workerUsed) {
                         useWorkerRenderRef.current = false;
                         workerReadyRef.current = false;

@@ -17,7 +17,17 @@
 2) Ewentualne korekty mapowania (multiplier/alpha/clamp) i band analyser?w po testach.
 3) Build + smoke nagrywania.
 
-## Zadania do patcha (skr?t)
-- Zestroi? czu?o?? po testach live (FX/VU smoothing, clamp 24/10).
-- Zweryfikowa? bandpass vs. FFT fallback na r??nych freq/width.
+## Zadania do patcha (skrót)
+- Zestroić czułość po testach live (FX/VU smoothing, clamp 24/10).
+- Zweryfikować bandpass vs. FFT fallback na różnych freq/width.
 - `npm run build` po finalnym strojeniu.
+
+## Tryby renderowania (diagnostyka)
+- `webgl-worker` – preferowany w trybie auto; OffscreenCanvas + worker, gdy host pozwala.
+- `webgl-fastgl` – główny wątek z FastGLService, używany gdy worker jest wyłączony (`render=webgl` lub `worker=0`) albo worker init się nie powiedzie.
+- `canvas2d` – fallback lub wymuszenie (`render=canvas` albo `fx=0`/`visus_fx=off`); żadnych prób WebGL.
+- Parametry:
+  - `render=auto|webgl|canvas` (URL lub `localStorage.visus_render`),
+  - `worker=0/1` (URL lub `localStorage.visus_worker`) – wyłącza worker w trybie auto,
+  - `fx=0/1` lub `localStorage.visus_fx=off/on` – wymusza Canvas2D lub WebGL/FX.
+- Dev overlay (`dev=1` lub `localStorage.visus_dev=1`) pokazuje renderMode, wynik probe webgl2/webgl, przyczynę fallbacku i ostatni błąd shadera.

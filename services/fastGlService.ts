@@ -48,18 +48,33 @@ export class FastGLService {
         }
         this.canvas = canvas;
         this.videoSize = { w: 0, h: 0 };
+        const sizeInfo = { w: canvas.width, h: canvas.height };
+        let twoDProbe = false;
         try {
-            this.gl = canvas.getContext('webgl', {
-                preserveDrawingBuffer: false,
-                alpha: false,
-                powerPreference: 'high-performance'
-            });
+            twoDProbe = !!canvas.getContext('2d', { willReadFrequently: false } as any);
+        } catch (err) {
+            console.warn('[VISUS] 2d probe exception (ignored):', err);
+        }
+        const options: WebGLContextAttributes = {
+            preserveDrawingBuffer: false,
+            alpha: false,
+            powerPreference: 'high-performance'
+        };
+        let glCtx: WebGLRenderingContext | null = null;
+        try {
+            glCtx = (canvas.getContext('webgl2', options) as unknown as WebGLRenderingContext | null);
+            console.info('[VISUS] getContext(webgl2):', glCtx ? 'ok' : 'null', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
+            if (!glCtx) {
+                glCtx = canvas.getContext('webgl', options);
+                console.info('[VISUS] getContext(webgl):', glCtx ? 'ok' : 'null', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
+            }
         } catch (err) {
             console.error('[VISUS] WebGL init error (exception):', err);
             return false;
         }
+        this.gl = glCtx;
         if (!this.gl) {
-            console.warn('[VISUS] WebGL support: unavailable (getContext returned null)');
+            console.warn('[VISUS] WebGL support: unavailable (getContext returned null)', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
             return false;
         }
         console.info('[VISUS] WebGL support: ok');
