@@ -12,6 +12,11 @@ let canvas: OffscreenCanvas | null = null;
 let uniformCache: Record<string, WebGLUniformLocation | null> = {};
 let lastVideoSize = { w: 0, h: 0 };
 let lastShaderError: string | null = null;
+let fxGain = new Float32Array(6);
+let fxMix = new Float32Array(6);
+let fxId = new Int32Array(6);
+let currentProgram: WebGLProgram | null = null;
+let currentTexture: WebGLTexture | null = null;
 
 const cacheUniforms = (names: string[]) => {
     if (!gl || !program) return;
@@ -68,6 +73,7 @@ const loadShader = (fragSrc: string) => {
     lastShaderError = null;
 
     program = prog;
+    currentProgram = prog;
     gl.useProgram(program);
 
     uniformCache = {};
@@ -80,28 +86,13 @@ const loadShader = (fragSrc: string) => {
         'iResolution',
         'iVideoResolution',
         'iChannel0',
-        'uMainFXGain',
-        'uMainFX_ID',
-        'uMainMix',
+        'uFXGain',
+        'uFXMix',
+        'uFX_ID',
         'uAdditiveMasterGain',
         'uTranslate',
         'uScale',
-        'uMirror',
-        'uFX1',
-        'uFX2',
-        'uFX3',
-        'uFX4',
-        'uFX5',
-        'uFX1Mix',
-        'uFX2Mix',
-        'uFX3Mix',
-        'uFX4Mix',
-        'uFX5Mix',
-        'uFX1_ID',
-        'uFX2_ID',
-        'uFX3_ID',
-        'uFX4_ID',
-        'uFX5_ID'
+        'uMirror'
     ]);
     const sampler = gl.getUniformLocation(program, 'iChannel0');
     if (sampler) gl.uniform1i(sampler, 0);
@@ -143,9 +134,15 @@ const drawFrame = (bitmap: ImageBitmap, time: number, fx: FxPacket, videoSize: {
     const u = uniformCache;
     if (!u['iTime']) return;
 
-    gl.useProgram(program);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (currentProgram !== program) {
+        gl.useProgram(program);
+        currentProgram = program;
+    }
+    if (currentTexture !== tex) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        currentTexture = tex;
+    }
     const needsResize = videoSize.w !== lastVideoSize.w || videoSize.h !== lastVideoSize.h;
     if (needsResize) {
         lastVideoSize = videoSize;
@@ -158,32 +155,33 @@ const drawFrame = (bitmap: ImageBitmap, time: number, fx: FxPacket, videoSize: {
     gl.uniform2f(u['iResolution']!, canvas.width, canvas.height);
     gl.uniform2f(u['iVideoResolution']!, videoSize.w, videoSize.h);
 
-    gl.uniform1f(u['uMainFXGain']!, fx.mainFXGain);
-    gl.uniform1i(u['uMainFX_ID']!, fx.main_id);
-    gl.uniform1f(u['uMainMix']!, fx.mainMix);
+    fxGain[0] = fx.mainFXGain;
+    fxMix[0] = fx.mainMix;
+    fxId[0] = fx.main_id;
+    fxGain[1] = fx.fx1;
+    fxGain[2] = fx.fx2;
+    fxGain[3] = fx.fx3;
+    fxGain[4] = fx.fx4;
+    fxGain[5] = fx.fx5;
+    fxMix[1] = fx.fx1Mix;
+    fxMix[2] = fx.fx2Mix;
+    fxMix[3] = fx.fx3Mix;
+    fxMix[4] = fx.fx4Mix;
+    fxMix[5] = fx.fx5Mix;
+    fxId[1] = fx.fx1_id;
+    fxId[2] = fx.fx2_id;
+    fxId[3] = fx.fx3_id;
+    fxId[4] = fx.fx4_id;
+    fxId[5] = fx.fx5_id;
+
+    gl.uniform1fv(u['uFXGain']!, fxGain);
+    gl.uniform1fv(u['uFXMix']!, fxMix);
+    gl.uniform1iv(u['uFX_ID']!, fxId);
     gl.uniform1f(u['uAdditiveMasterGain']!, fx.additiveMasterGain);
 
     gl.uniform2f(u['uTranslate']!, fx.transform.x, fx.transform.y);
     gl.uniform1f(u['uScale']!, fx.transform.scale);
     gl.uniform1f(u['uMirror']!, fx.isMirrored ? 1.0 : 0.0);
-
-    gl.uniform1f(u['uFX1']!, fx.fx1);
-    gl.uniform1f(u['uFX2']!, fx.fx2);
-    gl.uniform1f(u['uFX3']!, fx.fx3);
-    gl.uniform1f(u['uFX4']!, fx.fx4);
-    gl.uniform1f(u['uFX5']!, fx.fx5);
-
-    gl.uniform1f(u['uFX1Mix']!, fx.fx1Mix);
-    gl.uniform1f(u['uFX2Mix']!, fx.fx2Mix);
-    gl.uniform1f(u['uFX3Mix']!, fx.fx3Mix);
-    gl.uniform1f(u['uFX4Mix']!, fx.fx4Mix);
-    gl.uniform1f(u['uFX5Mix']!, fx.fx5Mix);
-
-    gl.uniform1i(u['uFX1_ID']!, fx.fx1_id);
-    gl.uniform1i(u['uFX2_ID']!, fx.fx2_id);
-    gl.uniform1i(u['uFX3_ID']!, fx.fx3_id);
-    gl.uniform1i(u['uFX4_ID']!, fx.fx4_id);
-    gl.uniform1i(u['uFX5_ID']!, fx.fx5_id);
 
     gl.drawArrays(gl.TRIANGLES, 0, 6);
 };

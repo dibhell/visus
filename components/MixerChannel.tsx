@@ -157,4 +157,4 @@ const MixerChannel: React.FC<Props> = ({
     );
 };
 
-export default MixerChannel;
+export default React.memo(MixerChannel);

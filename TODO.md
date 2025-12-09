@@ -18,3 +18,8 @@
 5) Test obci??eniowy
    - Klip 1080p + kilka FX, Performance Mode medium/low, Auto Scale on, HUD: FPS/dt/renderScale/cap.
    - Rejestrowa? FPS/scale 30?60 s; sprawdzi? lock resolution 0.5x i auto frame cap (60?30?24).
+
+6) Memory leak watch (10 min)
+   - Klip 1080p, Performance Mode=medium, Auto Scale ON, rVFC ON.
+   - Monitor: usedJSHeapSize, liczba AudioNode/WebGLTexture, kolejka worker?w.
+   - Je?li ro?nie liniowo: sprawdzi? czy MediaStream/AudioSource s? zwalniane (stop tracks + disconnect), ewentualnie WeakRef/cleanup na listenerach.

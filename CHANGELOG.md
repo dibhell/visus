@@ -1,7 +1,15 @@
 # Changelog
 
 ## [Unreleased]
-- Playlist UX/backlog: np. playlista z klipami video (do rozwaÅ¼enia).
+- Playlist UX/backlog: np. playlista z klipami video (do rozwa¿enia).
+
+## [0.2.5] - 2025-12-10
+- Audio: worklet (RMS/bands/buckets) jako g³ówny FFT z prze³¹cznikiem fallback; mniej getByteFrequencyData na g³ównym w¹tku.
+- Render: scheduler requestVideoFrameCallback (toggle), histereza Auto Scale (10 klatek <25 FPS down, 20 klatek >50 FPS up, cool-down).
+- WebGL: batched uniformy FX (float/int arrays) + cache program/texture; HUD w memo.
+- UI: Performance Lab w memo PanelSettings, memo SpectrumVisualizer/FxSlot/MixerChannel/HUD, stabilne propsy (useCallback).
+- Dev: devtools/benchmark.js (runVisusBenchmark) do logowania FPS/dt/scale; TODO z testem memory-leak 10 min.
+
 
 ## [0.2.4] - 2025-12-09
 - Performance: dynamic frame cap (auto 60â†’30â†’24), FFT sampling stride per performance mode (high/medium/low), UI/VU update limiter (domyÅ›lnie 20 FPS), pomijanie ciÄ™Å¼kich FFT przy dÅ‚ugich klatkach.

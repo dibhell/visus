@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { FxState, RoutingType, SHADER_LIST } from '../constants';
 import Knob from './Knob';
 
@@ -13,9 +13,11 @@ interface FxSlotProps {
     vuLevel?: number;      // Source/routing meter level (for meter)
 }
 
-const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, category, activeLevel = 0, vuLevel = 0 }) => {
+const FxSlot: React.FC<FxSlotProps> = React.memo(({ slotName, fxState, setFxState, title, category, activeLevel = 0, vuLevel = 0 }) => {
     const isMain = slotName === 'main';
     const config = fxState[slotName];
+    const pendingRef = useRef<Record<string, any>>({});
+    const flushTimer = useRef<number | null>(null);
     const routingColor = (() => {
         if (config.routing === 'sync1') return '#f472b6';
         if (config.routing === 'sync2') return '#38bdf8';
@@ -25,10 +27,17 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
     })();
 
     const handleChange = (key: string, value: any) => {
-        setFxState(prev => ({
-            ...prev,
-            [slotName]: { ...prev[slotName], [key]: value }
-        }));
+        pendingRef.current[key] = value;
+        if (flushTimer.current) return;
+        flushTimer.current = window.setTimeout(() => {
+            const payload = { ...pendingRef.current };
+            pendingRef.current = {};
+            flushTimer.current = null;
+            setFxState(prev => ({
+                ...prev,
+                [slotName]: { ...prev[slotName], ...payload }
+            }));
+        }, 40);
     };
 
     // Memoize and Sort options
@@ -140,6 +149,6 @@ const FxSlot: React.FC<FxSlotProps> = ({ slotName, fxState, setFxState, title, c
             </div>
         </div>
     );
-};
+});
 
 export default FxSlot;

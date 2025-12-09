@@ -1,6 +1,6 @@
 
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import { AudioEngine } from '../services/audioService';
 import { SyncParam } from '../constants';
 
@@ -356,4 +356,4 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     );
 };
 
-export default SpectrumVisualizer;
+export default memo(SpectrumVisualizer);

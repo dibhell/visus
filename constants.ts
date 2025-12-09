@@ -162,21 +162,34 @@ export const GLSL_HEADER = `
 
     
 
-    // Uniforms for FX slots
+    const int NUM_FX = 6; // 0 = main, 1..5 = additives
 
-    uniform float uMainFXGain; // Gain for Main (Layer 0)
+    uniform float uFXGain[NUM_FX];
+    uniform float uFXMix[NUM_FX];
+    uniform int   uFX_ID[NUM_FX];
 
-    uniform int uMainFX_ID;    // ID for Main (Layer 0)
+    // Macros for legacy shader code compatibility
+    #define uMainFXGain uFXGain[0]
+    #define uMainFX_ID  uFX_ID[0]
+    #define uMainMix    uFXMix[0]
 
-    uniform float uMainMix;    // Wet/Dry for Main
+    #define uFX1 uFXGain[1]
+    #define uFX2 uFXGain[2]
+    #define uFX3 uFXGain[3]
+    #define uFX4 uFXGain[4]
+    #define uFX5 uFXGain[5]
 
+    #define uFX1Mix uFXMix[1]
+    #define uFX2Mix uFXMix[2]
+    #define uFX3Mix uFXMix[3]
+    #define uFX4Mix uFXMix[4]
+    #define uFX5Mix uFXMix[5]
 
-
-    uniform float uFX1; uniform float uFX2; uniform float uFX3; uniform float uFX4; uniform float uFX5;
-
-    uniform int uFX1_ID; uniform int uFX2_ID; uniform int uFX3_ID; uniform int uFX4_ID; uniform int uFX5_ID;
-
-    uniform float uFX1Mix; uniform float uFX2Mix; uniform float uFX3Mix; uniform float uFX4Mix; uniform float uFX5Mix;
+    #define uFX1_ID uFX_ID[1]
+    #define uFX2_ID uFX_ID[2]
+    #define uFX3_ID uFX_ID[3]
+    #define uFX4_ID uFX_ID[4]
+    #define uFX5_ID uFX_ID[5]
 
     
 

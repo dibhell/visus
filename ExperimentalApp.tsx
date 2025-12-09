@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
 import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE, FallbackReason } from './constants';
@@ -49,6 +49,18 @@ const getWorkerPreference = (): boolean => {
     const ls = localStorage.getItem('visus_worker');
     if (workerParam === '0' || workerParam === 'false' || ls === 'off') return false;
     return true;
+};
+
+const getUseWorkletFFT = (): boolean => {
+    if (typeof window === 'undefined') return true;
+    const ls = localStorage.getItem('visus_worklet_fft');
+    return ls === '0' || ls === 'off' ? false : true;
+};
+
+const getUseVideoFrameCallback = (): boolean => {
+    if (typeof window === 'undefined') return true;
+    const ls = localStorage.getItem('visus_vfc');
+    return ls === '0' || ls === 'off' ? false : true;
 };
 
 type PerformanceMode = 'high' | 'medium' | 'low';
@@ -111,11 +123,116 @@ interface ExperimentalProps {
 
 const Credits: React.FC = () => (
     <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-200 bg-black/70 border border-white/10 px-4 py-2 rounded-full backdrop-blur pointer-events-none flex items-center gap-2">
-        <span className="opacity-90">Studio Popłoch © 2025 • Pan Grzyb •</span>
+        <span className="opacity-90">Studio Popech (c) 2025 * Pan Grzyb *</span>
         <a className="underline pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
-        <span className="opacity-90">• v0.2.4</span>
+        <span className="opacity-90">* v0.2.5</span>
     </div>
 );
+
+const PerformanceHUD: React.FC<{
+    fps: number;
+    dt: number;
+    renderScale: number;
+    frameCap: number;
+    frameCapMode: 'dynamic' | 'manual';
+    renderMode: RenderMode;
+    performanceMode: PerformanceMode;
+    micActive: boolean;
+    isRecording: boolean;
+}> = memo(({ fps, dt, renderScale, frameCap, frameCapMode, renderMode, performanceMode, micActive, isRecording }) => (
+    <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-200 flex gap-3 bg-black/70 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
+        <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
+        <span className="hidden md:inline">dt: {dt.toFixed(1)}ms</span>
+        <span className="hidden md:inline">Scale: {Math.round(renderScale * 100)}%</span>
+        <span className="hidden md:inline">Cap: {frameCapMode === 'dynamic' ? `${frameCap} auto` : frameCap}</span>
+        <span className="hidden md:inline">Mode: {renderMode}</span>
+        <span className="hidden md:inline">Perf: {performanceMode}</span>
+        {micActive && <span className="text-red-400 font-black tracking-widest">MIC</span>}
+        {isRecording && <span className="text-red-400 font-black tracking-widest">REC</span>}
+    </div>
+));
+
+const PanelSettings: React.FC<{
+    quality: QualityMode;
+    setQuality: (q: QualityMode) => void;
+    lockResolution: boolean;
+    setLockResolution: (v: boolean) => void;
+    frameCap: number;
+    frameCapMode: 'dynamic' | 'manual';
+    setFrameCap: (v: number) => void;
+    setFrameCapMode: (m: 'dynamic' | 'manual') => void;
+    performanceMode: PerformanceMode;
+    setPerformanceMode: (m: PerformanceMode) => void;
+    uiFpsLimit: number;
+    setUiFpsLimit: (v: number) => void;
+    recordFps: number;
+    setRecordFps: (v: number) => void;
+    recordBitrate: number;
+    setRecordBitrate: (v: number) => void;
+    webCodecsSupported: boolean;
+    useWebCodecsRecord: boolean;
+    setUseWebCodecsRecord: (v: boolean) => void;
+    autoScale: boolean;
+    setAutoScale: (v: boolean) => void;
+    useWorkletFFT: boolean;
+    setUseWorkletFFT: (v: boolean) => void;
+    useVideoFrameCb: boolean;
+    setUseVideoFrameCb: (v: boolean) => void;
+}> = memo(({
+    quality,
+    setQuality,
+    lockResolution,
+    setLockResolution,
+    frameCap,
+    frameCapMode,
+    setFrameCap,
+    setFrameCapMode,
+    performanceMode,
+    setPerformanceMode,
+    uiFpsLimit,
+    setUiFpsLimit,
+    recordFps,
+    setRecordFps,
+    recordBitrate,
+    setRecordBitrate,
+    webCodecsSupported,
+    useWebCodecsRecord,
+    setUseWebCodecsRecord,
+    autoScale,
+    setAutoScale,
+    useWorkletFFT,
+    setUseWorkletFFT,
+    useVideoFrameCb,
+    setUseVideoFrameCb
+}) => (
+                    <PanelSettings
+                        quality={quality}
+                        setQuality={setQuality}
+                        lockResolution={lockResolution}
+                        setLockResolution={setLockResolution}
+                        frameCap={frameCap}
+                        frameCapMode={frameCapMode}
+                        setFrameCap={setFrameCap}
+                        setFrameCapMode={setFrameCapMode}
+                        performanceMode={performanceMode}
+                        setPerformanceMode={setPerformanceMode}
+                        uiFpsLimit={uiFpsLimit}
+                        setUiFpsLimit={setUiFpsLimit}
+                        recordFps={recordFps}
+                        setRecordFps={setRecordFps}
+                        recordBitrate={recordBitrate}
+                        setRecordBitrate={setRecordBitrate}
+                        webCodecsSupported={webCodecsSupported}
+                        useWebCodecsRecord={useWebCodecsRecord}
+                        setUseWebCodecsRecord={setUseWebCodecsRecord}
+                        autoScale={autoScale}
+                        setAutoScale={setAutoScale}
+                        useWorkletFFT={useWorkletFFT}
+                        setUseWorkletFFT={setUseWorkletFFT}
+                        useVideoFrameCb={useVideoFrameCb}
+                        setUseVideoFrameCb={setUseVideoFrameCb}
+                    />
+));
 
 const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const rendererRef = useRef<FastGLService>(new FastGLService());
@@ -138,9 +255,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const fpsSmoothRef = useRef<number>(60);
     const frameIndexRef = useRef<number>(0);
     const slowFrameStreakRef = useRef<number>(0);
+    const autoScaleLowStreakRef = useRef<number>(0);
+    const autoScaleHighStreakRef = useRef<number>(0);
+    const lastAutoScaleChangeRef = useRef<number>(0);
     const lastBandLevelsRef = useRef<{ sync1: number; sync2: number; sync3: number }>({ sync1: 0, sync2: 0, sync3: 0 });
     const lastFftDataRef = useRef<Uint8Array | null>(null);
     const lastDtRef = useRef<number>(0);
+    const videoFrameRequestRef = useRef<number | null>(null);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -166,10 +287,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(getPerformanceMode());
     const [uiFpsLimit, setUiFpsLimit] = useState<number>(getUiFpsLimit());
     const [lockResolution, setLockResolution] = useState<boolean>(getLockResolution());
+    const [useWorkletFFT, setUseWorkletFFT] = useState<boolean>(getUseWorkletFFT());
+    const [useVideoFrameCb, setUseVideoFrameCb] = useState<boolean>(getUseVideoFrameCallback());
     const frameCapRef = useRef<number>(frameCap);
     const uiFpsLimitRef = useRef<number>(uiFpsLimit);
     const performanceModeRef = useRef<PerformanceMode>(performanceMode);
     const frameCapModeRef = useRef<'dynamic' | 'manual'>(frameCapMode);
+    const useWorkletFFTRef = useRef<boolean>(useWorkletFFT);
+    const useVideoFrameCbRef = useRef<boolean>(useVideoFrameCb);
     const [webglProbe, setWebglProbe] = useState<{ webgl2: boolean; webgl: boolean }>({ webgl2: false, webgl: false });
     const [fallbackReason, setFallbackReason] = useState<FallbackReason>('NONE');
     const [lastShaderError, setLastShaderError] = useState<string>('');
@@ -238,11 +363,25 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { frameCapRef.current = frameCap; localStorage.setItem('visus_framecap', String(frameCap)); }, [frameCap]);
     useEffect(() => { frameCapModeRef.current = frameCapMode; localStorage.setItem('visus_framecap_mode', frameCapMode); }, [frameCapMode]);
     useEffect(() => { localStorage.setItem('visus_lock_res', lockResolution ? '1' : '0'); }, [lockResolution]);
+    useEffect(() => { useWorkletFFTRef.current = useWorkletFFT; localStorage.setItem('visus_worklet_fft', useWorkletFFT ? '1' : '0'); audioRef.current.setUseWorkletFFT(useWorkletFFT); }, [useWorkletFFT]);
+    useEffect(() => { useVideoFrameCbRef.current = useVideoFrameCb; localStorage.setItem('visus_vfc', useVideoFrameCb ? '1' : '0'); }, [useVideoFrameCb]);
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
     useEffect(() => {
         setRenderPreference(getRenderPreference());
         setWorkerPreference(getWorkerPreference());
     }, []);
+    useEffect(() => {
+        (window as any).__VISUS_METRICS__ = {
+            renderScaleRef,
+            performanceModeRef,
+            renderModeRef,
+            fpsRef: fpsSmoothRef,
+            autoScaleRef: { current: autoScale },
+            qualityRef: { current: quality },
+            lastDtRef
+        };
+        return () => { delete (window as any).__VISUS_METRICS__; };
+    }, [autoScale, quality]);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -561,18 +700,32 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => {
         let mounted = true;
 
+        const scheduleNext = () => {
+            if (!mounted) return;
+            const videoEl: any = videoRef.current;
+            if (useVideoFrameCbRef.current && videoEl && typeof videoEl.requestVideoFrameCallback === 'function') {
+                videoFrameRequestRef.current = videoEl.requestVideoFrameCallback(loop);
+            } else {
+                rafRef.current = requestAnimationFrame(loop);
+            }
+        };
+
         const loop = (t: number) => {
             if (!mounted) return;
+
+            if (lastFrameRef.current === 0) {
+                lastFrameRef.current = t;
+            }
 
             const capTarget = frameCapRef.current;
             const frameBudget = capTarget > 0 ? (1000 / capTarget) : 0;
             if (frameBudget && (t - lastFrameRef.current) < frameBudget) {
-                rafRef.current = requestAnimationFrame(loop);
+                scheduleNext();
                 return;
             }
 
             const now = t;
-            const dt = now - lastFrameRef.current;
+            const dt = lastFrameRef.current === 0 ? 0 : now - lastFrameRef.current;
             lastFrameRef.current = now;
             lastDtRef.current = dt;
             frameIndexRef.current += 1;
@@ -798,36 +951,56 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         { label: 'ultraLow', scale: QUALITY_SCALE.ultraLow },
                     ];
                     const currentIdx = Math.max(0, targets.findIndex(t => t.scale === renderScaleRef.current));
-                    const targetFps = capTarget || 60;
-                    if (fpsSmoothRef.current < targetFps - 8 && currentIdx < targets.length - 1) {
+                    const cooldownMs = 1400;
+                    const canChange = (now - lastAutoScaleChangeRef.current) > cooldownMs;
+                    if (fpsSmoothRef.current < 25) {
+                        autoScaleLowStreakRef.current += 1;
+                    } else {
+                        autoScaleLowStreakRef.current = 0;
+                    }
+                    if (fpsSmoothRef.current > 50) {
+                        autoScaleHighStreakRef.current += 1;
+                    } else {
+                        autoScaleHighStreakRef.current = 0;
+                    }
+                    if (canChange && autoScaleLowStreakRef.current >= 10 && currentIdx < targets.length - 1) {
                         const next = targets[currentIdx + 1];
                         setQuality(next.label);
                         setRenderScale(next.scale);
                         renderScaleRef.current = next.scale;
                         handleResize();
-                    } else if (fpsSmoothRef.current > targetFps + 5 && currentIdx > 0) {
+                        lastAutoScaleChangeRef.current = now;
+                        autoScaleLowStreakRef.current = 0;
+                        autoScaleHighStreakRef.current = 0;
+                    } else if (canChange && autoScaleHighStreakRef.current >= 20 && currentIdx > 0) {
                         const next = targets[currentIdx - 1];
                         setQuality(next.label);
                         setRenderScale(next.scale);
                         renderScaleRef.current = next.scale;
                         handleResize();
+                        lastAutoScaleChangeRef.current = now;
+                        autoScaleLowStreakRef.current = 0;
+                        autoScaleHighStreakRef.current = 0;
                     }
                 }
 
                 lastFpsTickRef.current = now;
             }
 
-            rafRef.current = requestAnimationFrame(loop);
+            scheduleNext();
         };
 
-        rafRef.current = requestAnimationFrame(loop);
+        scheduleNext();
         return () => {
             mounted = false;
             cancelAnimationFrame(rafRef.current);
+            if (videoRef.current && videoFrameRequestRef.current !== null && typeof (videoRef.current as any).cancelVideoFrameCallback === 'function') {
+                (videoRef.current as any).cancelVideoFrameCallback(videoFrameRequestRef.current);
+            }
         };
-    }, [autoScale, handleResize, lockResolution]);
+    }, [autoScale, handleResize, lockResolution, useVideoFrameCb]);
 
-    const toggleMic = async (isActive: boolean) => {
+    const toggleMic = useCallback(async (isActive: boolean) => {
         setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: isActive } }));
 
         if (isActive) {
@@ -849,16 +1022,16 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         } else {
             audioRef.current.disconnectMic();
         }
-    };
+    }, []);
 
-    const updateMixer = (channel: 'video' | 'music' | 'mic', changes: any) => {
+    const updateMixer = useCallback((channel: 'video' | 'music' | 'mic', changes: any) => {
         setMixer(prev => ({
             ...prev,
             [channel]: { ...prev[channel], ...changes }
         }));
-    };
+    }, []);
 
-    const toggleTransport = async (channel: 'video' | 'music') => {
+    const toggleTransport = useCallback(async (channel: 'video' | 'music') => {
         if (audioRef.current.ctx?.state === 'suspended') {
             await audioRef.current.ctx.resume();
         }
@@ -880,9 +1053,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 updateMixer('music', { playing: false });
             }
         }
-    };
+    }, [updateMixer]);
 
-    const stopTransport = (channel: 'video' | 'music') => {
+    const stopTransport = useCallback((channel: 'video' | 'music') => {
         if (channel === 'video' && videoRef.current) {
             videoRef.current.pause();
             videoRef.current.currentTime = 0;
@@ -892,9 +1065,19 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             audioElRef.current.currentTime = 0;
             updateMixer('music', { playing: false });
         }
-    };
+    }, [updateMixer]);
 
-    const loadMusicTrack = (url: string, name: string) => {
+    const handleVideoToggle = useCallback((active: boolean) => updateMixer('video', { active }), [updateMixer]);
+    const handleVideoVolume = useCallback((val: number) => updateMixer('video', { volume: val }), [updateMixer]);
+    const handleMusicToggle = useCallback((active: boolean) => updateMixer('music', { active }), [updateMixer]);
+    const handleMusicVolume = useCallback((val: number) => updateMixer('music', { volume: val }), [updateMixer]);
+    const handleMicVolume = useCallback((val: number) => updateMixer('mic', { volume: val }), [updateMixer]);
+    const playPauseVideo = useCallback(() => toggleTransport('video'), [toggleTransport]);
+    const playPauseMusic = useCallback(() => toggleTransport('music'), [toggleTransport]);
+    const stopVideo = useCallback(() => stopTransport('video'), [stopTransport]);
+    const stopMusic = useCallback(() => stopTransport('music'), [stopTransport]);
+
+    const loadMusicTrack = useCallback((url: string, name: string) => {
         if (audioElRef.current) {
             audioElRef.current.pause();
         }
@@ -916,7 +1099,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         }).catch(e => console.log('Auto-play prevented', e));
 
         setShowCatalog(false);
-    };
+    }, []);
 
     const handleFile = (type: 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -1151,12 +1334,16 @@ const toggleRecording = async () => {
         await startMediaRecorderRecording(false);
     };
 
-    const updateSyncParams = (index: number, changes: Partial<SyncParam>) => {
+    const updateSyncParams = useCallback((index: number, changes: Partial<SyncParam>) => {
         const newParams = [...syncParams];
         newParams[index] = { ...newParams[index], ...changes };
         setSyncParams(newParams);
         audioRef.current.updateFilters(newParams);
-    };
+    }, [syncParams]);
+
+    const handleUpdateFilters = useCallback((params: SyncParam[]) => {
+        audioRef.current.updateFilters(params);
+    }, []);
 
     const updateTransform = (key: keyof TransformConfig, value: number) => {
         setTransform(prev => ({ ...prev, [key]: value }));
@@ -1196,16 +1383,17 @@ const toggleRecording = async () => {
                 </div>
             )}
 
-            <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-200 flex gap-3 bg-black/70 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
-                <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
-                <span className="hidden md:inline">dt: {lastDtRef.current.toFixed(1)}ms</span>
-                <span className="hidden md:inline">Scale: {Math.round(renderScale * 100)}%</span>
-                <span className="hidden md:inline">Cap: {frameCapMode === 'dynamic' ? `${frameCap} auto` : frameCap}</span>
-                <span className="hidden md:inline">Mode: {renderMode}</span>
-                <span className="hidden md:inline">Perf: {performanceMode}</span>
-                {mixer.mic.active && <span className="text-red-400 font-black tracking-widest">MIC</span>}
-                {isRecording && <span className="text-red-400 font-black tracking-widest">REC</span>}
-            </div>
+            <PerformanceHUD
+                fps={fps}
+                dt={lastDtRef.current}
+                renderScale={renderScale}
+                frameCap={frameCap}
+                frameCapMode={frameCapMode}
+                renderMode={renderMode}
+                performanceMode={performanceMode}
+                micActive={mixer.mic.active}
+                isRecording={isRecording}
+            />
             {devMode && (
                 <div className="fixed top-4 left-4 z-50 font-mono text-[10px] text-slate-300 bg-black/70 p-3 rounded-xl border border-white/10 shadow-xl space-y-1">
                     <div>render: {renderMode} (pref: {renderPreference}, worker: {workerPreference ? 'on' : 'off'})</div>
@@ -1271,101 +1459,36 @@ const toggleRecording = async () => {
 
                 <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
 
-                    <section>
-                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
-                            Performance Lab
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Quality</div>
-                                <select value={quality} onChange={(e) => setQuality(e.target.value as QualityMode)} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
-                                    <option value="high">High (100%)</option>
-                                    <option value="medium">Medium (75%)</option>
-                                    <option value="low">Low (50%)</option>
-                                    <option value="ultraLow">Ultra Low (35%)</option>
-                                </select>
-                                <label className="flex items-center gap-2 text-[11px] text-slate-300 mt-2">
-                                    <input type="checkbox" checked={lockResolution} onChange={(e) => setLockResolution(e.target.checked)} />
-                                    Lock resolution 0.5x (no auto up-scale)
-                                </label>
-                                <p className="text-[10px] text-slate-500 mt-1">Low/Medium/High/Ultra-Low render scale for GPU headroom.</p>
-                            </div>
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="flex items-center justify-between mb-1">
-                                    <div className="text-[10px] text-slate-400">Frame Cap</div>
-                                    <label className="flex items-center gap-1 text-[10px] text-slate-300">
-                                        <input type="checkbox" checked={frameCapMode === 'dynamic'} onChange={(e) => setFrameCapMode(e.target.checked ? 'dynamic' : 'manual')} />
-                                        Auto
-                                    </label>
-                                </div>
-                                <select value={frameCap} disabled={frameCapMode === 'dynamic'} onChange={(e) => setFrameCap(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none disabled:opacity-50">
-                                    <option value={75}>75</option>
-                                    <option value={60}>60</option>
-                                    <option value={45}>45</option>
-                                    <option value={30}>30</option>
-                                    <option value={24}>24</option>
-                                </select>
-                                <p className="text-[10px] text-slate-500 mt-1">{frameCapMode === 'dynamic' ? 'Dynamic cap auto-drops to 30/24 FPS on slow frames.' : 'Skips draws when frame budget is exceeded.'}</p>
-                            </div>
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Performance Mode</div>
-                                <select value={performanceMode} onChange={(e) => setPerformanceMode(e.target.value as PerformanceMode)} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
-                                    <option value="high">High (FFT every frame)</option>
-                                    <option value="medium">Medium (FFT every 2nd frame)</option>
-                                    <option value="low">Low (FFT every 3rd frame)</option>
-                                </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Throttle FFT/FX analysis on slower CPUs.</p>
-                            </div>
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">UI Update Limit</div>
-                                <select value={uiFpsLimit} onChange={(e) => setUiFpsLimit(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
-                                    <option value={30}>30 FPS</option>
-                                    <option value={20}>20 FPS</option>
-                                    <option value={15}>15 FPS</option>
-                                </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Throttles UI/VU state updates to reduce GC.</p>
-                            </div>
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Recording FPS</div>
-                                <select value={recordFps} onChange={(e) => setRecordFps(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
-                                    <option value={60}>60</option>
-                                    <option value={50}>50</option>
-                                    <option value={45}>45</option>
-                                    <option value={30}>30</option>
-                                </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Lower FPS reduces recorder overhead.</p>
-                            </div>
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Recorder Bitrate</div>
-                                <select value={recordBitrate} onChange={(e) => setRecordBitrate(parseInt(e.target.value, 10))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
-                                    <option value={12000000}>12 Mbps</option>
-                                    <option value={9000000}>9 Mbps</option>
-                                    <option value={8000000}>8 Mbps</option>
-                                    <option value={6000000}>6 Mbps</option>
-                                </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Tune for speed vs quality when exporting.</p>
-                            </div>
-                            {webCodecsSupported && (
-                                <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                    <div className="text-[10px] text-slate-400 mb-1">WebCodecs (video)</div>
-                                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                                        <input type="checkbox" checked={useWebCodecsRecord} onChange={(e) => setUseWebCodecsRecord(e.target.checked)} />
-                                        Prefer WebCodecs encoder (video-only if audio unsupported)
-                                    </label>
-                                </div>
-                            )}
-                            <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Auto Scale (LOD)</div>
-                                <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                                    <input type="checkbox" checked={autoScale} onChange={(e) => setAutoScale(e.target.checked)} />
-                                    Adjust render scale based on FPS (disabled when locked)
-                                </label>
-                            </div>
-                        </div>
-                    </section>
+                    
+                    <PanelSettings
+                        quality={quality}
+                        setQuality={setQuality}
+                        lockResolution={lockResolution}
+                        setLockResolution={setLockResolution}
+                        frameCap={frameCap}
+                        frameCapMode={frameCapMode}
+                        setFrameCap={setFrameCap}
+                        setFrameCapMode={setFrameCapMode}
+                        performanceMode={performanceMode}
+                        setPerformanceMode={setPerformanceMode}
+                        uiFpsLimit={uiFpsLimit}
+                        setUiFpsLimit={setUiFpsLimit}
+                        recordFps={recordFps}
+                        setRecordFps={setRecordFps}
+                        recordBitrate={recordBitrate}
+                        setRecordBitrate={setRecordBitrate}
+                        webCodecsSupported={webCodecsSupported}
+                        useWebCodecsRecord={useWebCodecsRecord}
+                        setUseWebCodecsRecord={setUseWebCodecsRecord}
+                        autoScale={autoScale}
+                        setAutoScale={setAutoScale}
+                        useWorkletFFT={useWorkletFFT}
+                        setUseWorkletFFT={setUseWorkletFFT}
+                        useVideoFrameCb={useVideoFrameCb}
+                        setUseVideoFrameCb={setUseVideoFrameCb}
+                    />
 
-                    <section>
+<section>
                         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
                             Source Mixer
@@ -1378,10 +1501,10 @@ const toggleRecording = async () => {
                                 volume={mixer.video.volume}
                                 vuLevel={vuLevels.video}
                                 isPlaying={mixer.video.playing}
-                                onToggle={(val) => updateMixer('video', { active: val })}
-                                onVolumeChange={(val) => updateMixer('video', { volume: val })}
-                                onPlayPause={() => toggleTransport('video')}
-                                onStop={() => stopTransport('video')}
+                                onToggle={handleVideoToggle}
+                                onVolumeChange={handleVideoVolume}
+                                onPlayPause={playPauseVideo}
+                                onStop={stopVideo}
                                 color="#38bdf8"
                             >
                                 <div className="flex gap-1 w-full justify-between">
@@ -1401,10 +1524,10 @@ const toggleRecording = async () => {
                                 volume={mixer.music.volume}
                                 vuLevel={vuLevels.music}
                                 isPlaying={mixer.music.playing}
-                                onToggle={(val) => updateMixer('music', { active: val })}
-                                onVolumeChange={(val) => updateMixer('music', { volume: val })}
-                                onPlayPause={() => toggleTransport('music')}
-                                onStop={() => stopTransport('music')}
+                                onToggle={handleMusicToggle}
+                                onVolumeChange={handleMusicVolume}
+                                onPlayPause={playPauseMusic}
+                                onStop={stopMusic}
                                 color="#f472b6"
                             >
                                 <div className="flex gap-1 w-full justify-between">
@@ -1424,7 +1547,7 @@ const toggleRecording = async () => {
                                 volume={mixer.mic.volume}
                                 vuLevel={vuLevels.mic}
                                 onToggle={toggleMic}
-                                onVolumeChange={(val) => updateMixer('mic', { volume: val })}
+                                onVolumeChange={handleMicVolume}
                                 color="#ef4444"
                             />
                         </div>
@@ -1498,7 +1621,7 @@ const toggleRecording = async () => {
                             onParamChange={updateSyncParams}
                             enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
                         />
-                        <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={(p) => audioRef.current.updateFilters(p)} />
+                        <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={handleUpdateFilters} />
                     </section>
 
                     <section>

@@ -41,7 +41,10 @@ export class AudioEngine {
     bands: BandsData = { sync1: 0, sync2: 0, sync3: 0 };
     filters: FilterBand[] = [];
     vuWorkletLevels = { video: 0, music: 0, mic: 0 };
+    vuWorkletBands = { video: new Float32Array(3), music: new Float32Array(3), mic: new Float32Array(3) };
+    vuWorkletBuckets: Record<'video' | 'music' | 'mic', Float32Array | null> = { video: null, music: null, mic: null };
     vuWorkletReady = false;
+    useWorkletFFT = true;
     
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: Uint8Array = new Uint8Array(1024);
@@ -113,10 +116,25 @@ export class AudioEngine {
         }
     }
 
+    private handleVuMessage(channel: 'video' | 'music' | 'mic', payload: any) {
+        if (!payload) return;
+        const { rms = 0, bands, buckets } = payload;
+        this.vuWorkletLevels[channel] = (rms || 0) * 5;
+        if (bands && bands.length >= 3) {
+            const target = this.vuWorkletBands[channel];
+            target[0] = bands[0] || 0;
+            target[1] = bands[1] || 0;
+            target[2] = bands[2] || 0;
+        }
+        if (buckets && buckets.length) {
+            this.vuWorkletBuckets[channel] = buckets instanceof Float32Array ? buckets : new Float32Array(buckets);
+        }
+    }
+
     initChannelNodes() {
         if (!this.ctx || !this.masterMix) return;
 
-        const createChannel = () => {
+        const createChannel = (channel: 'video' | 'music' | 'mic') => {
             const gain = this.ctx!.createGain();
             const analyser = this.ctx!.createAnalyser();
             analyser.fftSize = 32; // Small for VU meter
@@ -130,7 +148,7 @@ export class AudioEngine {
             if (this.vuWorkletReady) {
                 try {
                     vuNode = new AudioWorkletNode(this.ctx!, 'vu-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
-                    vuNode.port.onmessage = () => { /* handler assigned per channel */ };
+                    vuNode.port.onmessage = (ev) => this.handleVuMessage(channel, ev.data);
                 } catch (e) {
                     vuNode = null;
                 }
@@ -159,25 +177,22 @@ export class AudioEngine {
         };
 
         // Video
-        const v = createChannel();
+        const v = createChannel('video');
         this.videoGain = v.gain;
         this.videoAnalyser = v.analyser;
         this.videoTapAnalyser = v.tap;
-        if (v.vuNode) v.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.video = ev.data.rms * 5; };
 
         // Music
-        const m = createChannel();
+        const m = createChannel('music');
         this.musicGain = m.gain;
         this.musicAnalyser = m.analyser;
         this.musicTapAnalyser = m.tap;
-        if (m.vuNode) m.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.music = ev.data.rms * 5; };
 
         // Mic
-        const mic = createChannel();
+        const mic = createChannel('mic');
         this.micGain = mic.gain;
         this.micAnalyser = mic.analyser;
         this.micTapAnalyser = mic.tap;
-        if (mic.vuNode) mic.vuNode.port.onmessage = (ev) => { this.vuWorkletLevels.mic = ev.data.rms * 5; };
     }
 
     // --- SOURCE CONNECTORS ---
@@ -283,6 +298,10 @@ export class AudioEngine {
         }
     }
 
+    setUseWorkletFFT(enabled: boolean) {
+        this.useWorkletFFT = enabled;
+    }
+
     // --- CONTROLS ---
 
     setVolume(channel: 'video' | 'music' | 'mic', val: number) {
@@ -302,7 +321,7 @@ export class AudioEngine {
     }
 
     getLevels() {
-        if (this.vuWorkletReady) {
+        if (this.vuWorkletReady && this.useWorkletFFT) {
             return {
                 video: this.vuWorkletLevels.video,
                 music: this.vuWorkletLevels.music,
@@ -396,6 +415,25 @@ export class AudioEngine {
         // Keep context alive to ensure analysers flow
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume().catch(() => {});
+        }
+
+        if (this.vuWorkletReady && this.useWorkletFFT) {
+            const chooseBuckets = (): Float32Array | null => {
+                const priority: Array<'music' | 'video' | 'mic'> = ['music', 'video', 'mic'];
+                for (const ch of priority) {
+                    if (this.channelActive[ch] && this.vuWorkletBuckets[ch]) return this.vuWorkletBuckets[ch];
+                }
+                return this.vuWorkletBuckets.music || this.vuWorkletBuckets.video || this.vuWorkletBuckets.mic || null;
+            };
+            const buckets = chooseBuckets();
+            if (buckets && buckets.length > 0) {
+                const buf = new Uint8Array(buckets.length);
+                for (let i = 0; i < buckets.length; i++) {
+                    const v = Math.max(0, Math.min(1, buckets[i] || 0));
+                    buf[i] = Math.min(255, Math.round(v * 255));
+                }
+                return buf;
+            }
         }
 
         // Prefer active sources only; if none active, return null (spectrum should be blank)
@@ -507,22 +545,24 @@ export class AudioEngine {
         }
 
         // 1. RAW FFT Data (Visualizer)
-        const analyser = this.vizAnalyser || this.mainAnalyser;
-        if (analyser) {
-            if (this.fftData.length !== analyser.frequencyBinCount) {
-                this.fftData = new Uint8Array(analyser.frequencyBinCount);
-            }
-            analyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
+        if (!this.vuWorkletReady || !this.useWorkletFFT) {
+            const analyser = this.vizAnalyser || this.mainAnalyser;
+            if (analyser) {
+                if (this.fftData.length !== analyser.frequencyBinCount) {
+                    this.fftData = new Uint8Array(analyser.frequencyBinCount);
+                }
+                analyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
 
-            // If still empty (possible if graph not yet flowing), try time-domain energy
-            let energy = 0;
-            for (let i = 0; i < this.fftData.length; i++) energy += this.fftData[i];
-            if (energy === 0) {
-                const timeBuf = new Uint8Array(analyser.fftSize);
-                analyser.getByteTimeDomainData(timeBuf as Uint8Array<ArrayBuffer>);
-                for (let i = 0; i < timeBuf.length && i < this.fftData.length; i++) {
-                    const v = Math.abs(timeBuf[i] - 128) * 2;
-                    this.fftData[i] = Math.min(255, v);
+                // If still empty (possible if graph not yet flowing), try time-domain energy
+                let energy = 0;
+                for (let i = 0; i < this.fftData.length; i++) energy += this.fftData[i];
+                if (energy === 0) {
+                    const timeBuf = new Uint8Array(analyser.fftSize);
+                    analyser.getByteTimeDomainData(timeBuf as Uint8Array<ArrayBuffer>);
+                    for (let i = 0; i < timeBuf.length && i < this.fftData.length; i++) {
+                        const v = Math.abs(timeBuf[i] - 128) * 2;
+                        this.fftData[i] = Math.min(255, v);
+                    }
                 }
             }
         }
@@ -540,5 +580,15 @@ export class AudioEngine {
             const prev = this.bands[f.name] ?? 0;
             this.bands[f.name] = (prev * 0.5) + (target * 0.5);
         });
+
+        // Blend in worklet-provided bands when available (use max across channels)
+        if (this.vuWorkletReady && this.useWorkletFFT) {
+            const low = Math.max(this.vuWorkletBands.video[0] || 0, this.vuWorkletBands.music[0] || 0, this.vuWorkletBands.mic[0] || 0);
+            const mid = Math.max(this.vuWorkletBands.video[1] || 0, this.vuWorkletBands.music[1] || 0, this.vuWorkletBands.mic[1] || 0);
+            const high = Math.max(this.vuWorkletBands.video[2] || 0, this.vuWorkletBands.music[2] || 0, this.vuWorkletBands.mic[2] || 0);
+            this.bands.sync1 = (this.bands.sync1 * 0.4) + (low * 0.6);
+            this.bands.sync2 = (this.bands.sync2 * 0.4) + (mid * 0.6);
+            this.bands.sync3 = (this.bands.sync3 * 0.4) + (high * 0.6);
+        }
     }
 }

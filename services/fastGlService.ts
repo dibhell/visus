@@ -36,6 +36,11 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
+    private fxGain = new Float32Array(6);
+    private fxMix = new Float32Array(6);
+    private fxId = new Int32Array(6);
+    private currentProgram: WebGLProgram | null = null;
+    private currentTexture: WebGLTexture | null = null;
     lastShaderError: string | null = null;
 
     init(canvas: HTMLCanvasElement): boolean {
@@ -162,6 +167,7 @@ export class FastGLService {
 
         this.lastShaderError = null;
         this.program = prog;
+        this.currentProgram = prog;
         this.gl.useProgram(prog);
         this.uniformCache = {};
 
@@ -175,28 +181,13 @@ export class FastGLService {
             'iResolution',
             'iVideoResolution',
             'iChannel0',
-            'uMainFXGain',
-            'uMainFX_ID',
-            'uMainMix',
+            'uFXGain',
+            'uFXMix',
+            'uFX_ID',
             'uAdditiveMasterGain',
             'uTranslate',
             'uScale',
-            'uMirror',
-            'uFX1',
-            'uFX2',
-            'uFX3',
-            'uFX4',
-            'uFX5',
-            'uFX1Mix',
-            'uFX2Mix',
-            'uFX3Mix',
-            'uFX4Mix',
-            'uFX5Mix',
-            'uFX1_ID',
-            'uFX2_ID',
-            'uFX3_ID',
-            'uFX4_ID',
-            'uFX5_ID'
+            'uMirror'
         ]);
         const sampler = this.gl.getUniformLocation(prog, 'iChannel0');
         if (sampler) this.gl.uniform1i(sampler, 0);
@@ -223,43 +214,51 @@ export class FastGLService {
         if (this.positionLoc === null || this.positionLoc < 0) return;
 
         const gl = this.gl;
-        gl.useProgram(this.program);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        if (this.currentProgram !== this.program) {
+            gl.useProgram(this.program);
+            this.currentProgram = this.program;
+        }
+        if (this.currentTexture !== this.tex) {
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, this.tex);
+            this.currentTexture = this.tex;
+        }
 
         const u = this.uniformCache;
-        const required = ['iTime', 'iResolution', 'iVideoResolution', 'iChannel0', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
+        const required = ['iTime', 'iResolution', 'iVideoResolution', 'iChannel0', 'uFXGain', 'uFXMix', 'uFX_ID', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror'];
         if (required.some(name => !u[name])) return;
 
         gl.uniform1f(u['iTime']!, time / 1000);
         gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
         gl.uniform2f(u['iVideoResolution']!, video?.videoWidth || 0, video?.videoHeight || 0);
 
-        gl.uniform1f(u['uMainFXGain']!, fx.mainFXGain);
-        gl.uniform1i(u['uMainFX_ID']!, fx.main_id);
-        gl.uniform1f(u['uMainMix']!, fx.mainMix);
+        this.fxGain[0] = fx.mainFXGain;
+        this.fxMix[0] = fx.mainMix;
+        this.fxId[0] = fx.main_id;
+        this.fxGain[1] = fx.fx1;
+        this.fxGain[2] = fx.fx2;
+        this.fxGain[3] = fx.fx3;
+        this.fxGain[4] = fx.fx4;
+        this.fxGain[5] = fx.fx5;
+        this.fxMix[1] = fx.fx1Mix;
+        this.fxMix[2] = fx.fx2Mix;
+        this.fxMix[3] = fx.fx3Mix;
+        this.fxMix[4] = fx.fx4Mix;
+        this.fxMix[5] = fx.fx5Mix;
+        this.fxId[1] = fx.fx1_id;
+        this.fxId[2] = fx.fx2_id;
+        this.fxId[3] = fx.fx3_id;
+        this.fxId[4] = fx.fx4_id;
+        this.fxId[5] = fx.fx5_id;
+
+        gl.uniform1fv(u['uFXGain']!, this.fxGain);
+        gl.uniform1fv(u['uFXMix']!, this.fxMix);
+        gl.uniform1iv(u['uFX_ID']!, this.fxId);
         gl.uniform1f(u['uAdditiveMasterGain']!, fx.additiveMasterGain);
 
         gl.uniform2f(u['uTranslate']!, fx.transform.x, fx.transform.y);
         gl.uniform1f(u['uScale']!, fx.transform.scale);
         gl.uniform1f(u['uMirror']!, fx.isMirrored ? 1.0 : 0.0);
-
-        gl.uniform1f(u['uFX1']!, fx.fx1);
-        gl.uniform1f(u['uFX2']!, fx.fx2);
-        gl.uniform1f(u['uFX3']!, fx.fx3);
-        gl.uniform1f(u['uFX4']!, fx.fx4);
-        gl.uniform1f(u['uFX5']!, fx.fx5);
-        gl.uniform1f(u['uFX1Mix']!, fx.fx1Mix);
-        gl.uniform1f(u['uFX2Mix']!, fx.fx2Mix);
-        gl.uniform1f(u['uFX3Mix']!, fx.fx3Mix);
-        gl.uniform1f(u['uFX4Mix']!, fx.fx4Mix);
-        gl.uniform1f(u['uFX5Mix']!, fx.fx5Mix);
-
-        gl.uniform1i(u['uFX1_ID']!, fx.fx1_id);
-        gl.uniform1i(u['uFX2_ID']!, fx.fx2_id);
-        gl.uniform1i(u['uFX3_ID']!, fx.fx3_id);
-        gl.uniform1i(u['uFX4_ID']!, fx.fx4_id);
-        gl.uniform1i(u['uFX5_ID']!, fx.fx5_id);
 
         gl.drawArrays(gl.TRIANGLES, 0, 6);
     }

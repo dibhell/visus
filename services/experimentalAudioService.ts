@@ -9,6 +9,18 @@ export class ExperimentalAudioEngine extends AudioEngine {
     private vuSmooth = new Float32Array(3);
 
     getLevelsFast(smoothing = 0.25): Float32Array {
+        const useWorklet = (this as any).vuWorkletReady && (this as any).useWorkletFFT && (this as any).vuWorkletLevels;
+        if (useWorklet) {
+            // If worklet is active, prefer its RMS values to avoid main-thread analyser work.
+            const w = (this as any).vuWorkletLevels;
+            for (let i = 0; i < 3; i++) {
+                const val = w[i === 0 ? 'video' : i === 1 ? 'music' : 'mic'] ?? 0;
+                this.vuSmooth[i] = (this.vuSmooth[i] * (1 - smoothing)) + (val * smoothing);
+                this.vuScratch[i] = this.vuSmooth[i];
+            }
+            return this.vuScratch;
+        }
+
         const calc = (analyser: AnalyserNode | null, idx: number) => {
             if (!analyser) {
                 this.vuSmooth[idx] *= 0.9;
