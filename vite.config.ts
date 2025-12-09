@@ -3,8 +3,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
-// Default to root; override VITE_BASE=/visus/ for GitHub Pages builds
-const base = process.env.VITE_BASE || '/'
+// Domyślnie budujemy pod GitHub Pages (/visus/). Można nadpisać VITE_BASE gdy trzeba.
+const base = process.env.VITE_BASE || '/visus/'
 
 export default defineConfig({
   plugins: [react()],

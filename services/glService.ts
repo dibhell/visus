@@ -5,55 +5,15 @@ export class GLService {
     program: WebGLProgram | null = null;
     tex: WebGLTexture | null = null;
     canvas: HTMLCanvasElement | null = null;
-    ctx2d: CanvasRenderingContext2D | null = null;
-    useCanvas2D = false;
-    allowWebGL = true;
-    hostIsStatic = (typeof location !== 'undefined') && (location.hostname.includes('github.io') || location.hostname.includes('netlify.app'));
-    isMinimal = false;
     texW = 0;
     texH = 0;
     uniformLocations: Record<string, WebGLUniformLocation | null> = {};
     attribLocations: Record<string, number> = {};
 
-    private static MINIMAL_FRAG = `
-precision mediump float;
-uniform vec2 iResolution;
-uniform sampler2D iChannel0;
-uniform float iTime;
-void main(){
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;
-    vec4 col = texture2D(iChannel0, uv);
-    float hue = sin(iTime*0.5 + uv.y*20.0)*0.05;
-    col.rgb = clamp(col.rgb + vec3(hue, -hue*0.5, hue*0.3), 0.0, 1.0);
-    gl_FragColor = col;
-}`;
-    private static PASSTHROUGH_FRAG = `
-precision mediump float;
-uniform vec2 iResolution;
-uniform sampler2D iChannel0;
-void main(){
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;
-    gl_FragColor = texture2D(iChannel0, uv);
-}`;
-
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
-        const forceFx = typeof location !== 'undefined' && (location.search.includes('fx=1') || localStorage.getItem('visus_fx') === 'on');
-        const forceCanvas = this.hostIsStatic && !forceFx;
-        this.allowWebGL = !forceCanvas;
-
-        if (!this.allowWebGL) {
-            this.ctx2d = canvas.getContext('2d');
-            this.useCanvas2D = !!this.ctx2d;
-            return this.useCanvas2D;
-        }
-
         this.gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false });
-        if (!this.gl) {
-            this.ctx2d = canvas.getContext('2d');
-            this.useCanvas2D = !!this.ctx2d;
-            return this.useCanvas2D;
-        }
+        if (!this.gl) return false;
 
         const b = this.gl.createBuffer();
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, b);
@@ -71,14 +31,8 @@ void main(){
         return true;
     }
 
-    loadShader(fragmentSrc: string, mode: 'normal' | 'minimal' | 'passthrough' = 'normal') {
-        if (this.useCanvas2D || !this.allowWebGL) return;
-        if (!this.gl) {
-            this.useCanvas2D = true;
-            this.ctx2d = this.canvas?.getContext('2d') || null;
-            return;
-        }
-        this.isMinimal = mode !== 'normal';
+    loadShader(fragmentSrc: string) {
+        if (!this.gl) return;
         
         const compile = (type: number, source: string) => {
             const sh = this.gl!.createShader(type);
@@ -92,19 +46,10 @@ void main(){
             return sh;
         };
 
-        const fsSource = mode === 'minimal' ? GLService.MINIMAL_FRAG : (mode === 'passthrough' ? GLService.PASSTHROUGH_FRAG : GLSL_HEADER + fragmentSrc);
         const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, fsSource);
+        const fs = compile(this.gl.FRAGMENT_SHADER, GLSL_HEADER + fragmentSrc);
 
-        if (!vs || !fs) {
-            if (mode === 'normal') this.loadShader(fragmentSrc, 'minimal');
-            else if (mode === 'minimal') this.loadShader(fragmentSrc, 'passthrough');
-            else {
-                this.useCanvas2D = true;
-                this.ctx2d = this.canvas?.getContext('2d') || null;
-            }
-            return;
-        }
+        if (!vs || !fs) return;
 
         const prog = this.gl.createProgram();
         if (!prog) return;
@@ -115,12 +60,6 @@ void main(){
         
         if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
            console.error("Program link error");
-           if (mode === 'normal') this.loadShader(fragmentSrc, 'minimal');
-           else if (mode === 'minimal') this.loadShader(fragmentSrc, 'passthrough');
-           else {
-             this.useCanvas2D = true;
-             this.ctx2d = this.canvas?.getContext('2d') || null;
-           }
            return;
         }
 
@@ -131,7 +70,6 @@ void main(){
             "iTime",
             "iResolution",
             "iVideoResolution",
-            "iChannel0",
             "uMainFXGain",
             "uMainFX_ID",
             "uMainMix",
@@ -180,13 +118,6 @@ void main(){
     }
 
     draw(time: number, video: HTMLVideoElement, computedFx: any) {
-        if (this.useCanvas2D && this.ctx2d && this.canvas) {
-            try {
-                this.ctx2d.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
-            } catch {}
-            return;
-        }
-
         if (!this.program || !this.gl || !this.canvas) return;
         
         this.gl.useProgram(this.program);
@@ -210,21 +141,9 @@ void main(){
             this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
         }
 
-        // bind sampler
-        const locCh = u("iChannel0");
-        if (locCh) this.gl.uniform1i(locCh, 0);
-
         set1f("iTime", time / 1000);
         set2f("iResolution", this.canvas.width, this.canvas.height);
         set2f("iVideoResolution", video?.videoWidth || 0, video?.videoHeight || 0);
-
-        // Minimal/passthrough shaders don't need FX uniforms; early draw
-        if (this.isMinimal) {
-            this.gl.activeTexture(this.gl.TEXTURE0);
-            this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
-            this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
-            return;
-        }
 
         // Main Layer Controls (Layer 0)
         set1f("uMainFXGain", computedFx.mainFXGain);

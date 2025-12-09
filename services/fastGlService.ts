@@ -37,11 +37,6 @@ export class FastGLService {
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
     private isPassthrough = false;
-    private useCanvas2D = false;
-    private ctx2d: CanvasRenderingContext2D | null = null;
-    private hostIsStatic = (typeof location !== 'undefined') && (location.hostname.includes('github.io') || location.hostname.includes('netlify.app'));
-    private allowWebGL = true;
-    private isMinimalShader = false;
     private static FALLBACK_FRAG = `
 precision mediump float;
 uniform vec2 iResolution;
@@ -50,176 +45,15 @@ void main() {
     vec2 uv = gl_FragCoord.xy / iResolution.xy;
     gl_FragColor = texture2D(iChannel0, uv);
 }`;
-    private static MINIMAL_FX_SHADER = `
-precision mediump float;
-uniform vec2 iResolution;
-uniform sampler2D iChannel0;
-uniform float iTime;
-void main(){
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;
-    vec4 col = texture2D(iChannel0, uv);
-    // proste falowanie barw dla namiastki FX
-    float hue = sin(iTime*0.5 + uv.y*20.0)*0.05;
-    col.rgb = clamp(col.rgb + vec3(hue, -hue*0.5, hue*0.3), 0.0, 1.0);
-    gl_FragColor = col;
-}`;
-    // Reduced FX shader (safe subset) to avoid driver limits on large monolithic shader
-    private static SAFE_FX_SHADER = `
-precision mediump float;
-uniform float iTime;
-uniform vec2 iResolution;
-uniform vec2 iVideoResolution;
-uniform sampler2D iChannel0;
-uniform vec2 uTranslate;
-uniform float uScale;
-uniform float uMirror;
-uniform float uMainFXGain;
-uniform int uMainFX_ID;
-uniform float uMainMix;
-uniform float uAdditiveMasterGain;
-uniform float uFX1;
-uniform float uFX2;
-uniform float uFX3;
-uniform float uFX4;
-uniform float uFX5;
-uniform float uFX1Mix;
-uniform float uFX2Mix;
-uniform float uFX3Mix;
-uniform float uFX4Mix;
-uniform float uFX5Mix;
-uniform int uFX1_ID;
-uniform int uFX2_ID;
-uniform int uFX3_ID;
-uniform int uFX4_ID;
-uniform int uFX5_ID;
-
-vec2 getUV(vec2 fragCoord) {
-    vec2 uv = fragCoord / iResolution.xy;
-    if (uMirror > 0.5) uv.x = 1.0 - uv.x;
-    if (iVideoResolution.x < 1.0) return uv;
-    float sR = iResolution.x / iResolution.y;
-    float vR = iVideoResolution.x / iVideoResolution.y;
-    vec2 scale = vec2(1.0);
-    vec2 offset = vec2(0.0);
-    if (sR > vR) { scale.x = sR / vR; offset.x = (1.0 - scale.x) * 0.5; }
-    else { scale.y = vR / sR; offset.y = (1.0 - scale.y) * 0.5; }
-    vec2 correctedUV = (uv - offset) / scale;
-    vec2 p = correctedUV - 0.5;
-    p /= max(0.1, uScale);
-    p -= uTranslate;
-    return p + 0.5;
-}
-vec4 getVideo(vec2 uv) {
-    vec2 p = abs(fract(uv * 0.5 + 0.5) * 2.0 - 1.0);
-    p.y = 1.0 - p.y;
-    if (iVideoResolution.x < 2.0) return vec4(0.0);
-    return texture2D(iChannel0, p);
-}
-vec4 applyLayer(vec4 bg, vec2 uv, float amt, int id) {
-    if (amt < 0.001 || id == 0) return bg;
-    if (id == 1) { // RGB shift
-        float off = amt * 0.05;
-        float r = getVideo(uv + vec2(off, 0.0)).r;
-        float b = getVideo(uv - vec2(off, 0.0)).b;
-        return mix(bg, vec4(r, bg.g, b, 1.0), amt);
-    } else if (id == 9) { // Scanlines
-        float lines = sin(uv.y * 800.0) * 0.5 + 0.5;
-        vec3 lined = bg.rgb * (1.0 - lines * clamp(amt, 0.0, 0.9));
-        return vec4(lined, 1.0);
-    } else if (id == 22) { // Fisheye
-        vec2 p = uv * 2.0 - 1.0;
-        float d = length(p);
-        float bind = max(0.0, amt * 0.5);
-        vec2 uv2 = uv + (p * pow(d, 2.0) * bind);
-        vec4 fishCol = getVideo(uv2);
-        fishCol.rgb *= 1.0 - (dot(p, p) * bind * 0.5);
-        return mix(bg, fishCol, amt);
-    } else if (id == 27) { // Halftone
-        float freq = 80.0;
-        vec2 nearest = 2.0 * fract(freq * uv) - 1.0;
-        float dist = length(nearest);
-        float gray = dot(bg.rgb, vec3(0.299, 0.587, 0.114));
-        float radius = sqrt(gray) * 1.0;
-        vec3 dotCol = vec3(step(dist, radius));
-        return mix(bg, vec4(dotCol, 1.0), amt);
-    } else if (id == 103) { // Color shift
-        vec4 c = getVideo(uv);
-        float hueShift = sin(iTime * 0.5) * amt * 2.0;
-        c.rgb = mod(c.rgb + hueShift, 1.0);
-        return mix(bg, c, amt);
-    } else if (id == 112) { // ASCII matrix (lighter)
-        float pixels = 80.0 - (amt * 40.0);
-        vec2 blockUV = floor(uv * pixels) / pixels;
-        vec4 c = getVideo(blockUV);
-        float gray = dot(c.rgb, vec3(0.3));
-        vec2 cellUV = fract(uv * pixels);
-        float char = 0.0;
-        float d = max(abs(cellUV.x-0.5), abs(cellUV.y-0.5));
-        if (gray > 0.8) char = step(d, 0.4);
-        else if (gray > 0.6) char = step(abs(cellUV.x-0.5), 0.1) + step(abs(cellUV.y-0.5), 0.1);
-        else if (gray > 0.4) char = step(abs(cellUV.x-cellUV.y), 0.1);
-        else if (gray > 0.2) char = step(length(cellUV-0.5), 0.2);
-        char = clamp(char, 0.0, 1.0);
-        vec3 matrixCol = vec3(0.2, 1.0, 0.4) * char;
-        return mix(bg, vec4(matrixCol, 1.0), amt);
-    }
-    return bg;
-}
-vec4 applyAdditiveFX(vec4 baseCol, vec2 uv) {
-    vec4 col = baseCol;
-    vec4 p1 = applyLayer(col, uv, uFX1 * uAdditiveMasterGain, uFX1_ID);
-    col = mix(col, p1, clamp(uFX1Mix, 0.0, 1.0));
-    vec4 p2 = applyLayer(col, uv, uFX2 * uAdditiveMasterGain, uFX2_ID);
-    col = mix(col, p2, clamp(uFX2Mix, 0.0, 1.0));
-    vec4 p3 = applyLayer(col, uv, uFX3 * uAdditiveMasterGain, uFX3_ID);
-    col = mix(col, p3, clamp(uFX3Mix, 0.0, 1.0));
-    vec4 p4 = applyLayer(col, uv, uFX4 * uAdditiveMasterGain, uFX4_ID);
-    col = mix(col, p4, clamp(uFX4Mix, 0.0, 1.0));
-    vec4 p5 = applyLayer(col, uv, uFX5 * uAdditiveMasterGain, uFX5_ID);
-    col = mix(col, p5, clamp(uFX5Mix, 0.0, 1.0));
-    return col;
-}
-void main(){
-    vec2 uv = getUV(gl_FragCoord.xy);
-    vec4 base = getVideo(uv);
-    vec4 processedMain = applyLayer(base, uv, uMainFXGain, uMainFX_ID);
-    base = mix(base, processedMain, clamp(uMainMix, 0.0, 1.0));
-    gl_FragColor = applyAdditiveFX(base, uv);
-}`;
-    private enableCanvasFallback() {
-        if (!this.canvas) return;
-        this.gl = null;
-        this.program = null;
-        this.tex = null;
-        this.useCanvas2D = true;
-        this.ctx2d = this.canvas.getContext('2d');
-    }
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
-        const forceFx = typeof location !== 'undefined' && (location.search.includes('fx=1') || localStorage.getItem('visus_fx') === 'on');
-        const forceCanvas = this.hostIsStatic && !forceFx;
-        this.allowWebGL = !forceCanvas;
-
-        // On static hosts (github.io / netlify.app) default to Canvas2D unless user forces fx
-        if (forceCanvas) {
-            this.ctx2d = canvas.getContext('2d');
-            this.useCanvas2D = !!this.ctx2d;
-            return this.useCanvas2D;
-        }
-        // Try WebGL first
         this.gl = canvas.getContext('webgl', {
             preserveDrawingBuffer: false,
             alpha: false,
             powerPreference: 'high-performance'
         });
-
-        if (!this.gl) {
-            // Fallback to Canvas2D renderer (no FX) if WebGL is unavailable
-            this.ctx2d = canvas.getContext('2d');
-            this.useCanvas2D = !!this.ctx2d;
-            return this.useCanvas2D;
-        }
+        if (!this.gl) return false;
 
         const gl = this.gl;
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -249,37 +83,24 @@ void main(){
         });
     }
 
-    loadShader(fragmentSrc: string, mode: 'normal' | 'passthrough' | 'safe' = 'normal') {
-        if (this.useCanvas2D || !this.allowWebGL) return; // Already in canvas fallback or WebGL disabled
-        if (!this.gl) {
-            this.enableCanvasFallback();
-            return;
-        }
-        if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) {
-            this.enableCanvasFallback();
-            return;
-        }
+    loadShader(fragmentSrc: string, isFallback = false) {
+        if (!this.gl) return;
         // Optional manual disable: ?fx=0 or localStorage visus_fx=off
         const disableFx = typeof location !== 'undefined' && (location.search.includes('fx=0') || localStorage.getItem('visus_fx') === 'off');
-        if (disableFx && mode === 'normal') {
+        if (disableFx && !isFallback) {
             console.warn('FX disabled by flag (?fx=0 or visus_fx=off); using passthrough shader.');
-            this.loadShader(FastGLService.FALLBACK_FRAG, 'passthrough');
+            this.loadShader(FastGLService.FALLBACK_FRAG, true);
             return;
         }
         if (!fragmentSrc) {
-            console.error('Shader source missing, using canvas fallback.');
-            this.enableCanvasFallback();
+            console.error('Shader source missing, using passthrough.');
+            this.loadShader(FastGLService.FALLBACK_FRAG, true);
             return;
         }
-        this.isPassthrough = mode === 'passthrough';
-        this.isMinimalShader = mode === 'safe';
+        this.isPassthrough = isFallback;
 
         const compile = (type: number, source: string) => {
-            if (!this.gl) return null;
-            if ((this.gl as any).isContextLost && (this.gl as any).isContextLost()) {
-                return null;
-            }
-            const sh = this.gl.createShader(type);
+            const sh = this.gl!.createShader(type);
             if (!sh) return null;
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
@@ -290,66 +111,43 @@ void main(){
             return sh;
         };
 
-        const prependHeader = mode === 'normal';
-        const fsSource = mode === 'safe' ? FastGLService.MINIMAL_FX_SHADER : (prependHeader ? GLSL_HEADER + fragmentSrc : fragmentSrc);
-        const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl!.FRAGMENT_SHADER, fsSource);
+        const fsSource = isFallback ? fragmentSrc : GLSL_HEADER + fragmentSrc;
+        const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
+        const fs = compile(this.gl.FRAGMENT_SHADER, fsSource);
         if (!vs || !fs) {
-            if (mode === 'normal') {
-                console.warn('Falling back to safe FX shader (compile failed). Source length:', fsSource.length);
-                this.loadShader(FastGLService.SAFE_FX_SHADER, 'safe');
-            } else if (mode === 'safe') {
-                console.warn('Safe FX shader failed; using passthrough.');
-                this.loadShader(FastGLService.FALLBACK_FRAG, 'passthrough');
-            } else {
-                console.warn('Fallback passthrough shader failed; enabling Canvas2D fallback.');
-                this.enableCanvasFallback();
+            if (!isFallback) {
+                console.warn('Falling back to passthrough shader (compile failed). Source length:', fsSource.length);
+                this.loadShader(FastGLService.FALLBACK_FRAG, true);
             }
             return;
         }
 
-        const prog = this.gl!.createProgram();
+        const prog = this.gl.createProgram();
         if (!prog) return;
 
-        this.gl!.attachShader(prog, vs);
-        this.gl!.attachShader(prog, fs);
-        this.gl!.linkProgram(prog);
+        this.gl.attachShader(prog, vs);
+        this.gl.attachShader(prog, fs);
+        this.gl.linkProgram(prog);
 
-        if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
-            console.error('Program link error', this.gl!.getProgramInfoLog(prog) || '');
-            if (mode === 'normal') {
-                console.warn('Falling back to safe FX shader (link failed).');
-                this.loadShader(FastGLService.SAFE_FX_SHADER, 'safe');
-            } else if (mode === 'safe') {
-                console.warn('Safe FX shader failed; using passthrough.');
-                this.loadShader(FastGLService.FALLBACK_FRAG, 'passthrough');
-            } else {
-                console.warn('Fallback passthrough shader failed; enabling Canvas2D fallback.');
-                this.enableCanvasFallback();
+        if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
+            console.error('Program link error', this.gl.getProgramInfoLog(prog) || '');
+            if (!isFallback) {
+                console.warn('Falling back to passthrough shader (video only)');
+                this.loadShader(FastGLService.FALLBACK_FRAG, true);
             }
             return;
         }
 
         this.program = prog;
-        if (!this.gl) {
-            this.enableCanvasFallback();
-            return;
-        }
-        const gl = this.gl;
-        gl.useProgram(prog);
+        this.gl.useProgram(prog);
 
-        const posLoc = gl.getAttribLocation(prog, 'position');
+        const posLoc = this.gl.getAttribLocation(prog, 'position');
         this.positionLoc = posLoc;
-        if (posLoc >= 0) {
-            gl.enableVertexAttribArray(posLoc);
-            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-        } else {
-            this.enableCanvasFallback();
-            return;
-        }
+        this.gl.enableVertexAttribArray(posLoc);
+        this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
 
         if (this.isPassthrough) {
-            this.cacheUniforms(['iResolution', 'iChannel0', 'iTime']);
+            this.cacheUniforms(['iResolution', 'iChannel0']);
         } else {
             this.cacheUniforms([
                 'iTime',
@@ -398,14 +196,6 @@ void main(){
     }
 
     draw(time: number, video: HTMLVideoElement, fx: ExperimentalFxPacket) {
-        // Canvas2D fallback: draw video frame without FX
-        if (this.useCanvas2D && this.ctx2d && this.canvas) {
-            try {
-                this.ctx2d.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
-            } catch {}
-            return;
-        }
-
         if (!this.program || !this.gl || !this.canvas || !this.tex) return;
         if (this.positionLoc === null || this.positionLoc < 0) return;
 
@@ -415,11 +205,10 @@ void main(){
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
         const u = this.uniformCache;
 
-        // Passthrough/minimal mode: only resolution + sampler (+ time) needed.
-        if (this.isPassthrough || this.isMinimalShader) {
+        // Passthrough mode: only resolution + sampler, no FX uniforms needed.
+        if (this.isPassthrough) {
             if (u['iChannel0']) gl.uniform1i(u['iChannel0']!, 0);
             if (u['iResolution']) gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
-            if (u['iTime']) gl.uniform1f(u['iTime']!, time / 1000);
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             return;
         }
@@ -462,18 +251,15 @@ void main(){
     }
 
     resize(w: number, h: number) {
-        if (!this.canvas) return;
+        if (!this.gl || !this.canvas) return;
         if (this.canvas.width !== w || this.canvas.height !== h) {
             this.canvas.width = w;
             this.canvas.height = h;
         }
-        if (this.gl) {
-            this.gl.viewport(0, 0, w, h);
-        }
+        this.gl.viewport(0, 0, w, h);
     }
 
     isReady() {
-        if (this.useCanvas2D && this.canvas && this.ctx2d) return true;
         return !!(this.gl && this.program && this.tex && this.canvas);
     }
 }

@@ -30,3 +30,7 @@ VISUS to przegladarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (plik
    `npm run build`
 
 > Uwaga: aplikacja korzysta wylacznie z zasobow lokalnych (brak zewnetrznych kluczy/API).
+
+## Deploy
+- Docelowo GitHub Pages z `base=/visus/` (ustawione w `vite.config.ts`).
+- Netlify wyłączone – plik `netlify.toml` usunięty, deploy GH wystarcza.
