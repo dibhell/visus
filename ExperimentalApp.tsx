@@ -235,6 +235,10 @@ const PanelSettings: React.FC<{
 ));
 
 const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
+    useEffect(() => {
+        console.log('[VISUS] ExperimentalApp mounted');
+        return () => console.log('[VISUS] ExperimentalApp unmounted');
+    }, []);
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
