@@ -1,4 +1,4 @@
-import { GLSL_HEADER, VERT_SRC, TransformConfig } from '../constants';
+import { GLSL_HEADER, SAFE_FX_SHADER, VERT_SRC, TransformConfig } from '../constants';
 
 export interface ExperimentalFxPacket {
     mainFXGain: number;
@@ -38,13 +38,26 @@ export class FastGLService {
     private videoSize = { w: 0, h: 0 };
 
     init(canvas: HTMLCanvasElement): boolean {
+        if (this.canvas && this.gl && this.canvas === canvas) {
+            return true;
+        }
+        if (this.canvas && this.canvas !== canvas) {
+            console.warn('[VISUS] WebGL init blocked: renderer already bound to another canvas');
+            return false;
+        }
         this.canvas = canvas;
+        this.videoSize = { w: 0, h: 0 };
         this.gl = canvas.getContext('webgl', {
             preserveDrawingBuffer: false,
             alpha: false,
             powerPreference: 'high-performance'
         });
-        if (!this.gl) return false;
+        if (!this.gl) {
+            console.warn('[VISUS] WebGL support: unavailable');
+            return false;
+        }
+        console.info('[VISUS] WebGL support: ok');
+        console.info('[VISUS] init renderer');
 
         const gl = this.gl;
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -74,8 +87,8 @@ export class FastGLService {
         });
     }
 
-    loadShader(fragmentSrc: string) {
-        if (!this.gl) return;
+    loadShader(fragmentSrc: string): boolean {
+        if (!this.gl) return false;
 
         const compile = (type: number, source: string) => {
             const sh = this.gl!.createShader(type);
@@ -83,30 +96,46 @@ export class FastGLService {
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
             if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh));
+                console.error('[VISUS] shader compile error:', this.gl!.getShaderInfoLog(sh));
                 return null;
             }
             return sh;
         };
 
-        const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, GLSL_HEADER + fragmentSrc);
-        if (!vs || !fs) return;
+        const buildProgram = (src: string) => {
+            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
+            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+            if (!vs || !fs) return null;
 
-        const prog = this.gl.createProgram();
-        if (!prog) return;
+            const prog = this.gl!.createProgram();
+            if (!prog) return null;
 
-        this.gl.attachShader(prog, vs);
-        this.gl.attachShader(prog, fs);
-        this.gl.linkProgram(prog);
+            this.gl!.attachShader(prog, vs);
+            this.gl!.attachShader(prog, fs);
+            this.gl!.linkProgram(prog);
 
-        if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
-            console.error('Program link error');
-            return;
+            if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
+                console.error('[VISUS] shader link error:', this.gl!.getProgramInfoLog(prog));
+                return null;
+            }
+            return prog;
+        };
+
+        let prog = buildProgram(fragmentSrc);
+        if (!prog) {
+            console.warn('[VISUS] shader failure -> SAFE_FX_SHADER fallback');
+            prog = buildProgram(SAFE_FX_SHADER);
+        }
+
+        if (!prog) {
+            console.error('[VISUS] fallback Canvas2D required (shader init failed)');
+            this.program = null;
+            return false;
         }
 
         this.program = prog;
         this.gl.useProgram(prog);
+        this.uniformCache = {};
 
         const posLoc = this.gl.getAttribLocation(prog, 'position');
         this.positionLoc = posLoc;
@@ -117,6 +146,7 @@ export class FastGLService {
             'iTime',
             'iResolution',
             'iVideoResolution',
+            'iChannel0',
             'uMainFXGain',
             'uMainFX_ID',
             'uMainMix',
@@ -140,6 +170,9 @@ export class FastGLService {
             'uFX4_ID',
             'uFX5_ID'
         ]);
+        const sampler = this.gl.getUniformLocation(prog, 'iChannel0');
+        if (sampler) this.gl.uniform1i(sampler, 0);
+        return true;
     }
 
     updateTexture(video: HTMLVideoElement) {
@@ -167,7 +200,7 @@ export class FastGLService {
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
 
         const u = this.uniformCache;
-        const required = ['iTime', 'iResolution', 'iVideoResolution', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
+        const required = ['iTime', 'iResolution', 'iVideoResolution', 'iChannel0', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
         if (required.some(name => !u[name])) return;
 
         gl.uniform1f(u['iTime']!, time / 1000);

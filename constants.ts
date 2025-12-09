@@ -126,6 +126,14 @@ export interface MusicTrack {
 
 }
 
+export type QualityMode = 'low' | 'medium' | 'high';
+
+export const QUALITY_SCALE: Record<QualityMode, number> = {
+  low: 0.5,
+  medium: 0.75,
+  high: 1,
+};
+
 
 
 export const GLSL_HEADER = `
@@ -1183,6 +1191,12 @@ export const GLSL_HEADER = `
 
 `;
 
+export const SAFE_FX_SHADER = `
+void main() {
+    vec2 uv = getUV(gl_FragCoord.xy);
+    gl_FragColor = getVideo(uv);
+}
+`;
 
 
 // Updated Body: Apply Main Layer (Layer 0) first, then additive chain

@@ -1,7 +1,7 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
-import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST } from './constants';
+import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE } from './constants';
 import RenderWorker from './services/renderWorker?worker';
 import FxSlot from './components/FxSlot';
 import BandControls from './components/BandControls';
@@ -23,6 +23,16 @@ const ICONS = {
     Settings: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 };
 
+const getFxPreference = (): 'auto' | 'forceOn' | 'forceOff' => {
+    if (typeof window === 'undefined') return 'auto';
+    const params = new URLSearchParams(window.location.search);
+    const fxParam = params.get('fx');
+    const ls = localStorage.getItem('visus_fx');
+    if (fxParam === '1' || ls === 'on') return 'forceOn';
+    if (fxParam === '0' || ls === 'off') return 'forceOff';
+    return 'auto';
+};
+
 interface ExperimentalProps {
     onExit: () => void;
 }
@@ -35,14 +45,13 @@ const Credits: React.FC = () => (
     </div>
 );
 
-;
-
 const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
     const bitmapInFlightRef = useRef(false);
     const useWorkerRenderRef = useRef(false);
+    const canvas2dRef = useRef<CanvasRenderingContext2D | null>(null);
     const webCodecsSupported = typeof (window as any).VideoEncoder !== 'undefined' && typeof (window as any).MediaStreamTrackProcessor !== 'undefined';
     const audioRef = useRef<ExperimentalAudioEngine>(new ExperimentalAudioEngine());
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,17 +68,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
 
+    const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [panelVisible, setPanelVisible] = useState(true);
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [isBooting, setIsBooting] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
     const [fps, setFps] = useState(0);
+    const [renderMode, setRenderMode] = useState<'webgl' | 'canvas2d'>('webgl');
     const [frameCap, setFrameCap] = useState(60);
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(8000000);
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
     const [autoScale, setAutoScale] = useState(true);
-    const [renderScale, setRenderScale] = useState(1);
+    const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
+    const [quality, setQuality] = useState<QualityMode>('high');
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -111,6 +123,8 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
     const renderScaleRef = useRef(renderScale);
+    const renderModeRef = useRef(renderMode);
+    const fxPreferenceRef = useRef(fxPreference);
     const fxVuLevelsRef = useRef(fxVuLevels);
     const visualLevelsRef = useRef(visualLevels);
     const mixerRef = useRef(mixer);
@@ -121,9 +135,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
+    useEffect(() => { renderModeRef.current = renderMode; }, [renderMode]);
+    useEffect(() => { fxPreferenceRef.current = fxPreference; }, [fxPreference]);
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { visualLevelsRef.current = visualLevels; }, [visualLevels]);
+    useEffect(() => { setFxPreference(getFxPreference()); }, []);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -222,15 +239,34 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [handleResize, renderScale]);
 
     useEffect(() => {
+        const mapped = QUALITY_SCALE[quality];
+        if (renderScaleRef.current !== mapped) {
+            setRenderScale(mapped);
+            renderScaleRef.current = mapped;
+            handleResize();
+        }
+    }, [quality, handleResize]);
+
+    useEffect(() => {
         if (!canvasRef.current) return;
 
         const initWork = () => {
+            const canvas = canvasRef.current as HTMLCanvasElement;
+            let webglReady = fxPreferenceRef.current !== 'forceOff';
+
+            const ensureCanvas2D = () => {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    canvas2dRef.current = ctx;
+                }
+            };
+
             const tryWorker = () => {
-                if (!(canvasRef.current as any).transferControlToOffscreen) return false;
+                if (!(canvas as any).transferControlToOffscreen) return false;
                 try {
                     const worker = new (RenderWorker as any)();
                     workerRef.current = worker;
-                    const offscreen = (canvasRef.current as any).transferControlToOffscreen();
+                    const offscreen = (canvas as any).transferControlToOffscreen();
                     const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
                     worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
                     worker.onmessage = (ev: MessageEvent) => {
@@ -238,6 +274,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     };
                     workerReadyRef.current = true;
                     useWorkerRenderRef.current = true;
+                    console.info('[VISUS] start FX:', fxStateRef.current.main.shader);
                     return true;
                 } catch (err) {
                     workerReadyRef.current = false;
@@ -246,11 +283,47 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 }
             };
 
-            const workerUsed = tryWorker();
-            if (!workerUsed) {
-                rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
-                const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                rendererRef.current.loadShader(shaderDef.src);
+            if (fxPreferenceRef.current === 'forceOff') {
+                webglReady = false;
+                setRenderMode('canvas2d');
+                useWorkerRenderRef.current = false;
+                workerReadyRef.current = false;
+                if (workerRef.current) {
+                    workerRef.current.terminate();
+                    workerRef.current = null;
+                }
+                ensureCanvas2D();
+                console.info('[VISUS] fallback Canvas2D (fx disabled via flag)');
+            } else {
+                const workerUsed = tryWorker();
+                if (!workerUsed) {
+                    webglReady = rendererRef.current.init(canvas);
+                    if (webglReady) {
+                        const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                        const ok = rendererRef.current.loadShader(shaderDef.src);
+                        if (!ok) {
+                            webglReady = false;
+                        } else {
+                            console.info('[VISUS] start FX:', fxStateRef.current.main.shader);
+                        }
+                    }
+                } else {
+                    webglReady = true;
+                }
+
+                if (!webglReady) {
+                    workerReadyRef.current = false;
+                    useWorkerRenderRef.current = false;
+                    if (workerRef.current) {
+                        workerRef.current.terminate();
+                        workerRef.current = null;
+                    }
+                    setRenderMode('canvas2d');
+                    ensureCanvas2D();
+                    console.warn('[VISUS] fallback Canvas2D (WebGL init failed)');
+                } else {
+                    setRenderMode('webgl');
+                }
             }
 
             audioRef.current.initContext().then(() => {
@@ -280,13 +353,45 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, []);
 
     useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const onLost = (ev: Event) => {
+            if (typeof (ev as any).preventDefault === 'function') {
+                (ev as any).preventDefault();
+            }
+            if (workerRef.current) {
+                workerRef.current.terminate();
+                workerRef.current = null;
+            }
+            workerReadyRef.current = false;
+            useWorkerRenderRef.current = false;
+            setRenderMode('canvas2d');
+            const ctx = canvas.getContext('2d');
+            if (ctx) canvas2dRef.current = ctx;
+            console.warn('[VISUS] webglcontextlost -> fallback Canvas2D');
+        };
+        canvas.addEventListener('webglcontextlost', onLost as EventListener, { passive: false });
+        return () => canvas.removeEventListener('webglcontextlost', onLost as EventListener);
+    }, []);
+
+    useEffect(() => {
+        if (renderMode !== 'webgl') return;
         const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
         if (workerReadyRef.current && workerRef.current) {
             workerRef.current.postMessage({ type: 'loadShader', fragSrc: shaderDef.src });
+            console.info('[VISUS] start FX:', fxState.main.shader);
         } else {
-            rendererRef.current.loadShader(shaderDef.src);
+            const ok = rendererRef.current.loadShader(shaderDef.src);
+            if (!ok) {
+                setRenderMode('canvas2d');
+                const ctx = canvasRef.current?.getContext('2d') || null;
+                if (ctx) canvas2dRef.current = ctx;
+                console.warn('[VISUS] fallback Canvas2D (shader compile failure)');
+            } else {
+                console.info('[VISUS] start FX:', fxState.main.shader);
+            }
         }
-    }, [fxState.main.shader]);
+    }, [fxState.main.shader, renderMode]);
 
     useEffect(() => {
         let mounted = true;
@@ -442,8 +547,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
             };
 
-            if (useWorkerRenderRef.current && workerRef.current && videoRef.current && !bitmapInFlightRef.current) {
-                if (videoRef.current.readyState >= 2) {
+            const canUseWebGL = renderModeRef.current === 'webgl';
+            const hasVideoReady = !!videoRef.current && videoRef.current.readyState >= 2;
+
+            if (canUseWebGL && useWorkerRenderRef.current && workerRef.current && videoRef.current && !bitmapInFlightRef.current) {
+                if (hasVideoReady) {
                     bitmapInFlightRef.current = true;
                     const timeout = window.setTimeout(() => { bitmapInFlightRef.current = false; }, 80);
                     createImageBitmap(videoRef.current)
@@ -459,9 +567,16 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         })
                         .catch(() => { bitmapInFlightRef.current = false; window.clearTimeout(timeout); });
                 }
-            } else if (videoRef.current && rendererRef.current.isReady()) {
+            } else if (canUseWebGL && videoRef.current && rendererRef.current.isReady()) {
                 rendererRef.current.updateTexture(videoRef.current);
                 rendererRef.current.draw(now, videoRef.current, computedFx);
+            } else if (!canUseWebGL && videoRef.current && hasVideoReady && canvasRef.current) {
+                const ctx2d = canvas2dRef.current || canvasRef.current.getContext('2d');
+                if (ctx2d) {
+                    canvas2dRef.current = ctx2d;
+                    ctx2d.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    ctx2d.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+                }
             }
 
             if (now - lastFpsTickRef.current > 400 && dt > 0) {
@@ -470,18 +585,24 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 setFps(Math.round(fpsSmoothRef.current));
 
                 if (autoScale) {
-                    const targets = [1, 0.85, 0.7, 0.55];
-                    const currentIdx = targets.indexOf(renderScaleRef.current);
+                    const targets: Array<{ label: QualityMode, scale: number }> = [
+                        { label: 'high', scale: QUALITY_SCALE.high },
+                        { label: 'medium', scale: QUALITY_SCALE.medium },
+                        { label: 'low', scale: QUALITY_SCALE.low },
+                    ];
+                    const currentIdx = Math.max(0, targets.findIndex(t => t.scale === renderScaleRef.current));
                     const targetFps = frameCap || 60;
                     if (fpsSmoothRef.current < targetFps - 8 && currentIdx < targets.length - 1) {
-                        const nextScale = targets[currentIdx + 1];
-                        setRenderScale(nextScale);
-                        renderScaleRef.current = nextScale;
+                        const next = targets[currentIdx + 1];
+                        setQuality(next.label);
+                        setRenderScale(next.scale);
+                        renderScaleRef.current = next.scale;
                         handleResize();
                     } else if (fpsSmoothRef.current > targetFps + 5 && currentIdx > 0) {
-                        const nextScale = targets[currentIdx - 1];
-                        setRenderScale(nextScale);
-                        renderScaleRef.current = nextScale;
+                        const next = targets[currentIdx - 1];
+                        setQuality(next.label);
+                        setRenderScale(next.scale);
+                        renderScaleRef.current = next.scale;
                         handleResize();
                     }
                 }
@@ -830,7 +951,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             {isBooting && (
                 <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur flex items-center justify-center">
                     <div className="px-6 py-4 bg-black/80 border border-white/10 rounded-2xl text-center text-slate-200 shadow-2xl">
-                        <div className="text-sm font-semibold mb-2">Loading shaders & audio...</div>
+                        <div className="text-sm font-semibold mb-2">Loading shaders & audio</div>
                         <div className="text-[11px] text-slate-400">Initializing renderer and FX list</div>
                     </div>
                 </div>
@@ -907,14 +1028,13 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                                <div className="text-[10px] text-slate-400 mb-1">Render Scale</div>
-                                <select value={renderScale} onChange={(e) => setRenderScale(parseFloat(e.target.value))} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
-                                    <option value={1}>100% (Quality)</option>
-                                    <option value={0.85}>85% (Balanced)</option>
-                                    <option value={0.7}>70% (Performance)</option>
-                                    <option value={0.55}>55% (Max FPS)</option>
+                                <div className="text-[10px] text-slate-400 mb-1">Quality</div>
+                                <select value={quality} onChange={(e) => setQuality(e.target.value as QualityMode)} className="w-full bg-black/60 border border-white/10 text-[11px] p-2 rounded-lg focus:border-accent outline-none">
+                                    <option value="high">High (100%)</option>
+                                    <option value="medium">Medium (75%)</option>
+                                    <option value="low">Low (50%)</option>
                                 </select>
-                                <p className="text-[10px] text-slate-500 mt-1">Scales internal canvas to ease GPU load.</p>
+                                <p className="text-[10px] text-slate-500 mt-1">Low/Medium/High render scale for GPU headroom.</p>
                             </div>
                             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
                                 <div className="text-[10px] text-slate-400 mb-1">Frame Cap</div>

@@ -1,7 +1,7 @@
 // Render worker for ExperimentalApp using OffscreenCanvas and WebGL1
 // Receives: init (canvas, fragSrc), loadShader(fragSrc), resize(w,h), frame(bitmap, time, fx, videoSize)
 
-import { GLSL_HEADER, VERT_SRC } from '../constants';
+import { GLSL_HEADER, SAFE_FX_SHADER, VERT_SRC } from '../constants';
 
 type FxPacket = any;
 
@@ -10,6 +10,7 @@ let program: WebGLProgram | null = null;
 let tex: WebGLTexture | null = null;
 let canvas: OffscreenCanvas | null = null;
 let uniformCache: Record<string, WebGLUniformLocation | null> = {};
+let lastVideoSize = { w: 0, h: 0 };
 
 const cacheUniforms = (names: string[]) => {
     if (!gl || !program) return;
@@ -25,29 +26,44 @@ const compileShader = (type: number, source: string) => {
     gl.shaderSource(sh, source);
     gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        console.error('Shader compile error:', gl.getShaderInfoLog(sh));
+        console.error('[VISUS] shader compile error:', gl.getShaderInfoLog(sh));
         return null;
     }
     return sh;
 };
 
 const loadShader = (fragSrc: string) => {
-    if (!gl) return;
-    const vs = compileShader(gl.VERTEX_SHADER, VERT_SRC);
-    const fs = compileShader(gl.FRAGMENT_SHADER, GLSL_HEADER + fragSrc);
-    if (!vs || !fs) return;
-    const prog = gl.createProgram();
-    if (!prog) return;
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-        console.error('Program link error');
-        return;
+    if (!gl) return false;
+    const buildProgram = (src: string) => {
+        const vs = compileShader(gl!.VERTEX_SHADER, VERT_SRC);
+        const fs = compileShader(gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+        if (!vs || !fs) return null;
+        const prog = gl!.createProgram();
+        if (!prog) return null;
+        gl!.attachShader(prog, vs);
+        gl!.attachShader(prog, fs);
+        gl!.linkProgram(prog);
+        if (!gl!.getProgramParameter(prog, gl!.LINK_STATUS)) {
+            console.error('[VISUS] shader link error:', gl!.getProgramInfoLog(prog));
+            return null;
+        }
+        return prog;
+    };
+
+    let prog = buildProgram(fragSrc);
+    if (!prog) {
+        console.warn('[VISUS] shader failure -> SAFE_FX_SHADER fallback (worker)');
+        prog = buildProgram(SAFE_FX_SHADER);
     }
+    if (!prog) {
+        program = null;
+        return false;
+    }
+
     program = prog;
     gl.useProgram(program);
 
+    uniformCache = {};
     const posLoc = gl.getAttribLocation(program, 'position');
     gl.enableVertexAttribArray(posLoc);
     gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
@@ -56,6 +72,7 @@ const loadShader = (fragSrc: string) => {
         'iTime',
         'iResolution',
         'iVideoResolution',
+        'iChannel0',
         'uMainFXGain',
         'uMainFX_ID',
         'uMainMix',
@@ -79,12 +96,16 @@ const loadShader = (fragSrc: string) => {
         'uFX4_ID',
         'uFX5_ID'
     ]);
+    const sampler = gl.getUniformLocation(program, 'iChannel0');
+    if (sampler) gl.uniform1i(sampler, 0);
+    return true;
 };
 
 const initGL = (c: OffscreenCanvas) => {
     canvas = c;
     gl = canvas.getContext('webgl', { preserveDrawingBuffer: false, alpha: false });
     if (!gl) return false;
+    lastVideoSize = { w: 0, h: 0 };
     const b = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, b);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -98,6 +119,7 @@ const initGL = (c: OffscreenCanvas) => {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
     return true;
 };
@@ -117,7 +139,13 @@ const drawFrame = (bitmap: ImageBitmap, time: number, fx: FxPacket, videoSize: {
     gl.useProgram(program);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    const needsResize = videoSize.w !== lastVideoSize.w || videoSize.h !== lastVideoSize.h;
+    if (needsResize) {
+        lastVideoSize = videoSize;
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    } else {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    }
 
     gl.uniform1f(u['iTime']!, time / 1000);
     gl.uniform2f(u['iResolution']!, canvas.width, canvas.height);
@@ -158,10 +186,14 @@ self.onmessage = (e: MessageEvent) => {
     if (type === 'init') {
         const { canvas: c, fragSrc } = e.data;
         if (initGL(c)) {
-            loadShader(fragSrc);
+            if (!loadShader(fragSrc)) {
+                console.warn('[VISUS] worker shader init failed');
+            }
         }
     } else if (type === 'loadShader') {
-        loadShader(e.data.fragSrc);
+        if (!loadShader(e.data.fragSrc)) {
+            console.warn('[VISUS] worker shader reload failed');
+        }
     } else if (type === 'resize') {
         resize(e.data.width, e.data.height);
     } else if (type === 'frame') {
