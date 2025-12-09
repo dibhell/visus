@@ -5,8 +5,6 @@ export class GLService {
     program: WebGLProgram | null = null;
     tex: WebGLTexture | null = null;
     canvas: HTMLCanvasElement | null = null;
-    texW = 0;
-    texH = 0;
     uniformLocations: Record<string, WebGLUniformLocation | null> = {};
     attribLocations: Record<string, number> = {};
 
@@ -26,8 +24,6 @@ export class GLService {
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
         this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, 1, 1, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
-        this.texW = 1;
-        this.texH = 1;
         return true;
     }
 
@@ -105,16 +101,7 @@ export class GLService {
     updateTexture(video: HTMLVideoElement) {
         if (!this.gl || !this.tex || !video || video.readyState < 2) return;
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.tex);
-        const w = video.videoWidth || 0;
-        const h = video.videoHeight || 0;
-        // Avoid reallocating the texture every frame; only reallocate on size change.
-        if (w <= 0 || h <= 0) return;
-        if (w !== this.texW || h !== this.texH) {
-            this.texW = w; this.texH = h;
-            this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
-        } else {
-            this.gl.texSubImage2D(this.gl.TEXTURE_2D, 0, 0, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
-        }
+        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, video);
     }
 
     draw(time: number, video: HTMLVideoElement, computedFx: any) {

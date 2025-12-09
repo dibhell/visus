@@ -4,33 +4,29 @@
 
 # VISUS Experimental Engine
 
-VISUS to przegladarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (pliki, mic), naklada shadery WebGL jako efekty, reaguje na pasma audio i potrafi nagrywac output do WebM (MediaRecorder lub WebCodecs). UI umozliwia sterowanie geometria, proporcjami, lancuchem FX (Depth/Wet), routingiem FX na pasma (Bass/Mid/High) lub BPM, a takze adaptacyjne skalowanie jakosci pod FPS.
+VISUS to przeglądarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (pliki, mic), nakłada shadery WebGL jako efekty, reaguje na pasma audio i potrafi nagrywać output do WebM (MediaRecorder lub WebCodecs). UI umożliwia sterowanie geometrią, proporcjami, łańcuchem FX (Depth/Wet), routingiem FX na pasma (Bass/Mid/High) lub BPM, a także adaptacyjne skalowanie jakości pod FPS.
 
 ## Jak jest zbudowana
 - **Frontend:** React + TypeScript + Vite.
-- **Render:** WebGL (GLSL fragment shader) z OffscreenCanvas w workerze (`RenderWorker`) i fallbackiem na glowny watek; `FastGLService` zarzadza tekstura wideo i uniformami FX.
+- **Render:** WebGL (GLSL fragment shader) z OffscreenCanvas w workerze (`RenderWorker`) i fallbackiem na główny wątek; `FastGLService` zarządza teksturą wideo i uniformami FX.
 - **Audio:** Web Audio API (AnalyserNode, BiquadFilter) z dedykowanym `ExperimentalAudioEngine`, tap-analyserami prefader, filtrami pasm (sync1/2/3), FFT fallbackiem dla bandLevels oraz szybkim VU (`getLevelsFast`).
-- **Nagrywanie:** MediaRecorder oraz sciezka WebCodecs (`MediaStreamTrackProcessor + VideoEncoder`) z preferencja akceleracji HW; zapis do WebM.
-- **Adaptacja jakosci:** petla FPS zmienia `renderScale` (LOD) zalezne od wydajnosci.
+- **Nagrywanie:** MediaRecorder oraz ścieżka WebCodecs (`MediaStreamTrackProcessor + VideoEncoder`) z preferencją akceleracji HW; zapis do WebM.
+- **Adaptacja jakości:** pętla FPS zmienia `renderScale` (LOD) zależnie od wydajności.
 
-## Wersjonowanie (biezacy stan)
+## Wersjonowanie (bieżący stan)
 - **Branch:** `main`
 - **Wersja:** 0.2.3 (patrz `CHANGELOG.md`)
-- **Ostatnie zmiany:** clamp renderu do 1920x1080 (utrzymuje aspect, mniej obciazenia GPU na 4K/ultra-wide), rzadsze ticki UI (VU co ~200 ms, FPS/visual co ~250 ms) i kesz uniformow w `GLService` dla mniejszego CPU, nagrywanie `captureStream` na 24 fps (stabilniejsze WebM/MP4).
-- **Znane problemy:** wymaga testu live czulosci Bass/Mid/High (ew. korekta mnoznikow/smoothing), potwierdzenia nagrywania i wydajnosci po clampie 1080p i 24 fps capture.
+- **Ostatnie zmiany:** mobile canvas nad panelem (FX widoczne podczas strojenia), usunięty mini-podgląd; poprawione skalowanie canvasu; preferencje audio nagrywania (jeden żywy tor, WebM/Opus).
+- **Znane problemy:** wymaga testu live czułości Bass/Mid/High (ew. korekta mnożników/smoothing), potwierdzenia nagrywania i wydajności po zmianach.
 
 ## Uruchomienie lokalne
 **Wymagania:** Node.js 18+
 
-1. Instalacja zaleznosci:  
+1. Instalacja zależności:  
    `npm install`
 2. Dev server:  
    `npm run dev`
 3. Build produkcyjny (sprawdzenie przed push):  
    `npm run build`
 
-> Uwaga: aplikacja korzysta wylacznie z zasobow lokalnych (brak zewnetrznych kluczy/API).
-
-## Deploy
-- Docelowo GitHub Pages z `base=/visus/` (ustawione w `vite.config.ts`).
-- Netlify wyłączone – plik `netlify.toml` usunięty, deploy GH wystarcza.
+> Uwaga: aplikacja korzysta wyłącznie z zasobów lokalnych (brak zewnętrznych kluczy/API).

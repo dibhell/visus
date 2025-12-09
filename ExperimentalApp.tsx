@@ -10,7 +10,7 @@ import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
 
-const ICON_PNG = '/icon.png';
+const ICON_PNG = '/visus/icon.png';
 
 const ICONS = {
     Video: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>,
@@ -38,7 +38,6 @@ const Credits: React.FC = () => (
 ;
 
 const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
-    const ENABLE_WORKER_RENDER = false; // disable OffscreenCanvas worker (stability/perf on GH Pages)
     const rendererRef = useRef<FastGLService>(new FastGLService());
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
@@ -226,12 +225,33 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (!canvasRef.current) return;
 
         const initWork = () => {
-            // Worker rendering disabled (stability on GH Pages / avoid OffscreenCanvas issues)
-            workerReadyRef.current = false;
-            useWorkerRenderRef.current = false;
-            rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
-            const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-            rendererRef.current.loadShader(shaderDef.src);
+            const tryWorker = () => {
+                if (!(canvasRef.current as any).transferControlToOffscreen) return false;
+                try {
+                    const worker = new (RenderWorker as any)();
+                    workerRef.current = worker;
+                    const offscreen = (canvasRef.current as any).transferControlToOffscreen();
+                    const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                    worker.postMessage({ type: 'init', canvas: offscreen, fragSrc: shaderDef.src }, [offscreen]);
+                    worker.onmessage = (ev: MessageEvent) => {
+                        if (ev.data?.type === 'frame-done') bitmapInFlightRef.current = false;
+                    };
+                    workerReadyRef.current = true;
+                    useWorkerRenderRef.current = true;
+                    return true;
+                } catch (err) {
+                    workerReadyRef.current = false;
+                    useWorkerRenderRef.current = false;
+                    return false;
+                }
+            };
+
+            const workerUsed = tryWorker();
+            if (!workerUsed) {
+                rendererRef.current.init(canvasRef.current as HTMLCanvasElement);
+                const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                rendererRef.current.loadShader(shaderDef.src);
+            }
 
             audioRef.current.initContext().then(() => {
                 audioRef.current.setupFilters(syncParamsRef.current);

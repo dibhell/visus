@@ -9,7 +9,7 @@ import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
 import ExperimentalApp from './ExperimentalApp';
-const ICON_PNG = '/icon.png';
+const ICON_PNG = '/visus/icon.png';
 
 // --- ICONS (SVG) ---
 const ICONS = {
@@ -35,7 +35,6 @@ const App: React.FC = () => {
     const lastTimeRef = useRef<number>(0);
     const lastVuUpdateRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
-    const renderScaleRef = useRef<number>(0.7);
     
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
@@ -66,7 +65,6 @@ const App: React.FC = () => {
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
     const [isMirrored, setIsMirrored] = useState(false);
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
-    const [renderScale, setRenderScale] = useState(0.7);
 
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
@@ -86,7 +84,6 @@ const App: React.FC = () => {
         fx4: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
         fx5: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 }, 
     });
-    const renderScalePresets = [1, 0.85, 0.7, 0.55, 0.45, 0.35];
 
     const fxStateRef = useRef(fxState);
     const syncParamsRef = useRef(syncParams);
@@ -105,7 +102,6 @@ const App: React.FC = () => {
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
-    useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
 
     // Apply Mixer Volume Changes
     useEffect(() => {
@@ -169,20 +165,17 @@ const App: React.FC = () => {
              finalW = wWindow; finalH = hWindow;
         }
 
-        // Clamp render resolution to keep GPU load manageable, keep aspect ratio
+        // Clamp render resolution to keep GPU load manageable, preserve aspect ratio
         const clampScale = Math.min(1, MAX_W / finalW, MAX_H / finalH);
         if (clampScale < 1) {
             finalW = Math.round(finalW * clampScale);
             finalH = Math.round(finalH * clampScale);
         }
 
-        const renderW = Math.max(4, Math.round(finalW * renderScaleRef.current));
-        const renderH = Math.max(4, Math.round(finalH * renderScaleRef.current));
-
         const canvas = canvasRef.current;
-        if (canvas.width !== renderW || canvas.height !== renderH) {
-             canvas.width = renderW;
-             canvas.height = renderH;
+        if (canvas.width !== finalW || canvas.height !== finalH) {
+             canvas.width = finalW;
+             canvas.height = finalH;
         }
 
         const scale = Math.min(availableW / finalW, availableH / finalH);
@@ -195,7 +188,7 @@ const App: React.FC = () => {
         canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
         if (glService.current && typeof glService.current.resize === 'function') {
-            glService.current.resize(renderW, renderH);
+            glService.current.resize(finalW, finalH);
         }
     }, [aspectRatio, panelVisible]);
 
@@ -206,129 +199,121 @@ const App: React.FC = () => {
     }, [panelVisible, handleResize]);
 
     useEffect(() => {
-        handleResize();
-    }, [renderScale, handleResize]);
-
-    useEffect(() => {
         if (!isSystemActive) return;
 
-        const schedule = (fn: () => void) => {
-            const ric = (window as any).requestIdleCallback;
-            if (typeof ric === 'function') ric(fn);
-            else setTimeout(fn, 0);
-        };
+        if (canvasRef.current) {
+            const success = glService.current.init(canvasRef.current);
+            if (success) {
+                const currentShaderKey = fxStateRef.current.main.shader;
+                const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
+                glService.current.loadShader(shaderDef.src);
+            }
+        }
 
-        schedule(() => {
-            if (canvasRef.current) {
-                const success = glService.current.init(canvasRef.current);
-                if (success) {
-                    const currentShaderKey = fxStateRef.current.main.shader;
-                    const shaderDef = SHADER_LIST[currentShaderKey] || SHADER_LIST['00_NONE'];
-                    glService.current.loadShader(shaderDef.src);
-                }
+        // Init Audio Context early to allow setup
+        audioService.current.initContext().then(() => {
+             // Initial Filter Setup
+             audioService.current.setupFilters(syncParamsRef.current);
+        });
+
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        const v = videoRef.current;
+        if (v) v.addEventListener('loadedmetadata', handleResize);
+
+        const loop = (t: number) => {
+            if (!isSystemActiveRef.current) return;
+
+            const ae = audioService.current;
+            ae.update(); 
+            
+            // Read VU Meters (throttled)
+            if ((t - lastVuUpdateRef.current) > 200) {
+                const levels = ae.getLevels();
+                setVuLevels(levels);
+                lastVuUpdateRef.current = t;
             }
 
-            audioService.current.initContext().then(() => {
-                 audioService.current.setupFilters(syncParamsRef.current);
-            });
+            const currentSyncParams = syncParamsRef.current;
+            const currentFxState = fxStateRef.current;
+            const currentTransform = transformRef.current;
 
-            handleResize();
-            window.addEventListener('resize', handleResize);
-            const v = videoRef.current;
-            if (v) v.addEventListener('loadedmetadata', handleResize);
+            const bpm = currentSyncParams[0].bpm;
+            const offset = currentSyncParams[0].offset;
+            const beatMs = 60000 / bpm;
+            const adjustedTime = t - offset;
+            const phase = (adjustedTime % beatMs) / beatMs;
 
-            const loop = (t: number) => {
-                if (!isSystemActiveRef.current) return;
-
-                const ae = audioService.current;
-                ae.update(); 
-                
-                if ((t - lastVuUpdateRef.current) > 200) {
-                    const levels = ae.getLevels();
-                    setVuLevels(levels);
-                    lastVuUpdateRef.current = t;
-                }
-
-                const currentSyncParams = syncParamsRef.current;
-                const currentFxState = fxStateRef.current;
-                const currentTransform = transformRef.current;
-
-                const bpm = currentSyncParams[0].bpm;
-                const offset = currentSyncParams[0].offset;
-                const beatMs = 60000 / bpm;
-                const adjustedTime = t - offset;
-                const phase = (adjustedTime % beatMs) / beatMs;
-
-                const computeFxVal = (config: any) => {
-                    const sourceLevel = getActivationLevel(config.routing, phase);
-                    const gainMult = (config.gain ?? 100) / 100;
-                    const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
-                    return Math.min(18.0, boosted);
-                };
-
-                const computeFxVu = (config: any) => {
-                    const sourceLevel = getActivationLevel(config.routing, phase);
-                    const gainMult = (config.gain ?? 100) / 100;
-                    return Math.min(1.5, Math.pow(sourceLevel, 0.5) * gainMult);
-                };
-
-                const lvls = {
-                    main: computeFxVal(currentFxState.main),
-                    fx1: computeFxVal(currentFxState.fx1),
-                    fx2: computeFxVal(currentFxState.fx2),
-                    fx3: computeFxVal(currentFxState.fx3),
-                    fx4: computeFxVal(currentFxState.fx4),
-                    fx5: computeFxVal(currentFxState.fx5),
-                };
-
-                const computedFx = {
-                    mainFXGain: lvls.main, 
-                    main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
-                    mainMix: (currentFxState.main.mix ?? 100) / 100,
-                    mix: currentFxState.main.mix,
-                    additiveMasterGain: additiveGainRef.current / 100,
-                    transform: currentTransform,
-                    isMirrored: isMirroredRef.current,
-                    fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5,
-                    fx1Mix: (currentFxState.fx1.mix ?? 100) / 100,
-                    fx2Mix: (currentFxState.fx2.mix ?? 100) / 100,
-                    fx3Mix: (currentFxState.fx3.mix ?? 100) / 100,
-                    fx4Mix: (currentFxState.fx4.mix ?? 100) / 100,
-                    fx5Mix: (currentFxState.fx5.mix ?? 100) / 100,
-                    fx1_id: SHADER_LIST[currentFxState.fx1.shader]?.id || 0,
-                    fx2_id: SHADER_LIST[currentFxState.fx2.shader]?.id || 0,
-                    fx3_id: SHADER_LIST[currentFxState.fx3.shader]?.id || 0,
-                    fx4_id: SHADER_LIST[currentFxState.fx4.shader]?.id || 0,
-                    fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
-                };
-
-                if (videoRef.current) {
-                    glService.current.updateTexture(videoRef.current);
-                    glService.current.draw(t, videoRef.current, computedFx);
-                }
-
-                const dt = t - lastTimeRef.current;
-                const instFps = dt > 0 ? 1000 / dt : 0;
-                lastTimeRef.current = t;
-
-                if (t - lastUiUpdateRef.current > 250) {
-                    const smooth = (fps * 0.7) + (instFps * 0.3);
-                    setFps(Math.round(smooth));
-                    setVisualLevels(lvls);
-                    lastUiUpdateRef.current = t;
-                }
-
-                animationFrameRef.current = requestAnimationFrame(loop);
+            const computeFxVal = (config: any) => {
+                const sourceLevel = getActivationLevel(config.routing, phase);
+                const gainMult = (config.gain ?? 100) / 100;
+                const boosted = (Math.pow(sourceLevel, 0.4) * gainMult * 14.0) + (config.routing === 'off' ? 0 : 0.4);
+                return Math.min(18.0, boosted);
             };
+
+            const computeFxVu = (config: any) => {
+                const sourceLevel = getActivationLevel(config.routing, phase);
+                const gainMult = (config.gain ?? 100) / 100;
+                return Math.min(1.5, Math.pow(sourceLevel, 0.5) * gainMult);
+            };
+
+            const lvls = {
+                main: computeFxVal(currentFxState.main),
+                fx1: computeFxVal(currentFxState.fx1),
+                fx2: computeFxVal(currentFxState.fx2),
+                fx3: computeFxVal(currentFxState.fx3),
+                fx4: computeFxVal(currentFxState.fx4),
+                fx5: computeFxVal(currentFxState.fx5),
+            };
+
+            const computedFx = {
+                mainFXGain: lvls.main, 
+                main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
+                mainMix: (currentFxState.main.mix ?? 100) / 100,
+                mix: currentFxState.main.mix,
+                additiveMasterGain: additiveGainRef.current / 100,
+                transform: currentTransform,
+                isMirrored: isMirroredRef.current,
+                fx1: lvls.fx1, fx2: lvls.fx2, fx3: lvls.fx3, fx4: lvls.fx4, fx5: lvls.fx5,
+                fx1Mix: (currentFxState.fx1.mix ?? 100) / 100,
+                fx2Mix: (currentFxState.fx2.mix ?? 100) / 100,
+                fx3Mix: (currentFxState.fx3.mix ?? 100) / 100,
+                fx4Mix: (currentFxState.fx4.mix ?? 100) / 100,
+                fx5Mix: (currentFxState.fx5.mix ?? 100) / 100,
+                fx1_id: SHADER_LIST[currentFxState.fx1.shader]?.id || 0,
+                fx2_id: SHADER_LIST[currentFxState.fx2.shader]?.id || 0,
+                fx3_id: SHADER_LIST[currentFxState.fx3.shader]?.id || 0,
+                fx4_id: SHADER_LIST[currentFxState.fx4.shader]?.id || 0,
+                fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
+            };
+
+            if (videoRef.current) {
+                glService.current.updateTexture(videoRef.current);
+                glService.current.draw(t, videoRef.current, computedFx);
+
+            }
+
+            const dt = t - lastTimeRef.current;
+            const instFps = dt > 0 ? 1000 / dt : 0;
+            lastTimeRef.current = t;
+
+            if (t - lastUiUpdateRef.current > 250) {
+                const smooth = (fps * 0.7) + (instFps * 0.3);
+                setFps(Math.round(smooth));
+                setVisualLevels(lvls);
+                lastUiUpdateRef.current = t;
+            }
 
             animationFrameRef.current = requestAnimationFrame(loop);
+        };
 
-            return () => {
-                window.removeEventListener('resize', handleResize);
-                if (v) v.removeEventListener('loadedmetadata', handleResize);
-                cancelAnimationFrame(animationFrameRef.current);
-            };
-        });
+        animationFrameRef.current = requestAnimationFrame(loop);
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            if (v) v.removeEventListener('loadedmetadata', handleResize);
+            cancelAnimationFrame(animationFrameRef.current);
+        };
     }, [isSystemActive, handleResize]);
 
     // --- HANDLERS ---
@@ -669,12 +654,10 @@ const App: React.FC = () => {
             <div className="fixed top-4 right-4 z-50 font-mono text-[10px] text-slate-400 flex gap-4 bg-black/40 p-2 rounded-full backdrop-blur-xl border border-white/5 px-5 shadow-2xl pointer-events-none">
                 <span className={fps < 55 ? 'text-red-400' : 'text-accent'}>FPS: {fps}</span>
                 <span className="hidden md:inline">RES: {canvasRef.current?.width}x{canvasRef.current?.height}</span>
-                <span className="hidden md:inline">Scale: {Math.round(renderScaleRef.current * 100)}%</span>
-                {mixer.mic.active && <span className="text-red-500 animate-pulse font-black tracking-widest">MIC</span>}
-                {isRecording && <span className="text-red-500 animate-pulse font-black tracking-widest">REC</span>}
+                {mixer.mic.active && <span className="text-red-500 animate-pulse font-black tracking-widest">● MIC</span>}
+                {isRecording && <span className="text-red-500 animate-pulse font-black tracking-widest">● REC</span>}
             </div>
 
-            
             {/* MODALS */}
             {showCatalog && (
                 <MusicCatalog onSelect={loadMusicTrack} onClose={() => setShowCatalog(false)} />
@@ -815,26 +798,6 @@ const App: React.FC = () => {
                             {['native', '16:9', '9:16', '4:5', '1:1', 'fit'].map(r => (
                                 <button key={r} onClick={() => setAspectRatio(r as AspectRatioMode)} className={`p-2 text-[9px] font-bold rounded border ${aspectRatio === r ? 'bg-accent text-black border-transparent' : 'bg-white/5 border-white/5 text-slate-400'}`}>{r.toUpperCase()}</button>
                             ))}
-                        </div>
-
-                        {/* RENDER SCALE */}
-                        <div className="bg-black/20 p-3 rounded-xl border border-white/5 mb-3">
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="text-[9px] text-slate-500 font-bold tracking-wider">RENDER SCALE</div>
-                                <div className="text-[9px] text-slate-400">{Math.round(renderScale * 100)}%</div>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                {renderScalePresets.map(val => (
-                                    <button
-                                        key={val}
-                                        onClick={() => setRenderScale(val)}
-                                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border ${renderScale === val ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-300 border-white/5 hover:border-white/20'}`}
-                                    >
-                                        {Math.round(val * 100)}%
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="text-[10px] text-slate-500 mt-2">Lower = mniej obciazenia GPU (HD klipy).</div>
                         </div>
                         
                         {/* GEOMETRY CONTROLS */}

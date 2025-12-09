@@ -36,15 +36,6 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
-    private isPassthrough = false;
-    private static FALLBACK_FRAG = `
-precision mediump float;
-uniform vec2 iResolution;
-uniform sampler2D iChannel0;
-void main() {
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;
-    gl_FragColor = texture2D(iChannel0, uv);
-}`;
 
     init(canvas: HTMLCanvasElement): boolean {
         this.canvas = canvas;
@@ -83,21 +74,8 @@ void main() {
         });
     }
 
-    loadShader(fragmentSrc: string, isFallback = false) {
+    loadShader(fragmentSrc: string) {
         if (!this.gl) return;
-        // Optional manual disable: ?fx=0 or localStorage visus_fx=off
-        const disableFx = typeof location !== 'undefined' && (location.search.includes('fx=0') || localStorage.getItem('visus_fx') === 'off');
-        if (disableFx && !isFallback) {
-            console.warn('FX disabled by flag (?fx=0 or visus_fx=off); using passthrough shader.');
-            this.loadShader(FastGLService.FALLBACK_FRAG, true);
-            return;
-        }
-        if (!fragmentSrc) {
-            console.error('Shader source missing, using passthrough.');
-            this.loadShader(FastGLService.FALLBACK_FRAG, true);
-            return;
-        }
-        this.isPassthrough = isFallback;
 
         const compile = (type: number, source: string) => {
             const sh = this.gl!.createShader(type);
@@ -105,22 +83,15 @@ void main() {
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
             if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh) || '(empty log)');
+                console.error('Shader compile error:', this.gl!.getShaderInfoLog(sh));
                 return null;
             }
             return sh;
         };
 
-        const fsSource = isFallback ? fragmentSrc : GLSL_HEADER + fragmentSrc;
         const vs = compile(this.gl.VERTEX_SHADER, VERT_SRC);
-        const fs = compile(this.gl.FRAGMENT_SHADER, fsSource);
-        if (!vs || !fs) {
-            if (!isFallback) {
-                console.warn('Falling back to passthrough shader (compile failed). Source length:', fsSource.length);
-                this.loadShader(FastGLService.FALLBACK_FRAG, true);
-            }
-            return;
-        }
+        const fs = compile(this.gl.FRAGMENT_SHADER, GLSL_HEADER + fragmentSrc);
+        if (!vs || !fs) return;
 
         const prog = this.gl.createProgram();
         if (!prog) return;
@@ -130,11 +101,7 @@ void main() {
         this.gl.linkProgram(prog);
 
         if (!this.gl.getProgramParameter(prog, this.gl.LINK_STATUS)) {
-            console.error('Program link error', this.gl.getProgramInfoLog(prog) || '');
-            if (!isFallback) {
-                console.warn('Falling back to passthrough shader (video only)');
-                this.loadShader(FastGLService.FALLBACK_FRAG, true);
-            }
+            console.error('Program link error');
             return;
         }
 
@@ -146,38 +113,33 @@ void main() {
         this.gl.enableVertexAttribArray(posLoc);
         this.gl.vertexAttribPointer(posLoc, 2, this.gl.FLOAT, false, 0, 0);
 
-        if (this.isPassthrough) {
-            this.cacheUniforms(['iResolution', 'iChannel0']);
-        } else {
-            this.cacheUniforms([
-                'iTime',
-                'iResolution',
-                'iVideoResolution',
-                'iChannel0',
-                'uMainFXGain',
-                'uMainFX_ID',
-                'uMainMix',
-                'uAdditiveMasterGain',
-                'uTranslate',
-                'uScale',
-                'uMirror',
-                'uFX1',
-                'uFX2',
-                'uFX3',
-                'uFX4',
-                'uFX5',
-                'uFX1Mix',
-                'uFX2Mix',
-                'uFX3Mix',
-                'uFX4Mix',
-                'uFX5Mix',
-                'uFX1_ID',
-                'uFX2_ID',
-                'uFX3_ID',
-                'uFX4_ID',
-                'uFX5_ID'
-            ]);
-        }
+        this.cacheUniforms([
+            'iTime',
+            'iResolution',
+            'iVideoResolution',
+            'uMainFXGain',
+            'uMainFX_ID',
+            'uMainMix',
+            'uAdditiveMasterGain',
+            'uTranslate',
+            'uScale',
+            'uMirror',
+            'uFX1',
+            'uFX2',
+            'uFX3',
+            'uFX4',
+            'uFX5',
+            'uFX1Mix',
+            'uFX2Mix',
+            'uFX3Mix',
+            'uFX4Mix',
+            'uFX5Mix',
+            'uFX1_ID',
+            'uFX2_ID',
+            'uFX3_ID',
+            'uFX4_ID',
+            'uFX5_ID'
+        ]);
     }
 
     updateTexture(video: HTMLVideoElement) {
@@ -203,19 +165,10 @@ void main() {
         gl.useProgram(this.program);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
+
         const u = this.uniformCache;
-
-        // Passthrough mode: only resolution + sampler, no FX uniforms needed.
-        if (this.isPassthrough) {
-            if (u['iChannel0']) gl.uniform1i(u['iChannel0']!, 0);
-            if (u['iResolution']) gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);
-            gl.drawArrays(gl.TRIANGLES, 0, 6);
-            return;
-        }
-
         const required = ['iTime', 'iResolution', 'iVideoResolution', 'uMainFXGain', 'uMainFX_ID', 'uMainMix', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror', 'uFX1', 'uFX2', 'uFX3', 'uFX4', 'uFX5', 'uFX1Mix', 'uFX2Mix', 'uFX3Mix', 'uFX4Mix', 'uFX5Mix', 'uFX1_ID', 'uFX2_ID', 'uFX3_ID', 'uFX4_ID', 'uFX5_ID'];
         if (required.some(name => !u[name])) return;
-        if (u['iChannel0']) gl.uniform1i(u['iChannel0']!, 0);
 
         gl.uniform1f(u['iTime']!, time / 1000);
         gl.uniform2f(u['iResolution']!, this.canvas.width, this.canvas.height);

@@ -260,97 +260,6 @@ export const GLSL_HEADER = `
 
     
 
-    // Global helpers (GLSL disallows nested function defs)
-    float sdBox(vec2 p, vec2 b) {
-        vec2 d = abs(p) - b;
-        return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-    }
-
-    float lineSegment(vec2 p, vec2 a, vec2 b, float w) {
-        vec2 pa = p - a;
-        vec2 ba = b - a;
-        float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
-        return length(pa - ba * h) - w;
-    }
-
-    // --- TINY PIXEL FONT (7-seg + dot) ---
-    float segLine(vec2 p, vec2 a, vec2 b) {
-        vec2 pa = p - a;
-        vec2 ba = b - a;
-        float h = clamp(dot(pa, ba) / max(0.0001, dot(ba, ba)), 0.0, 1.0);
-        float d = length(pa - ba * h);
-        return 1.0 - smoothstep(0.06, 0.1, d);
-    }
-
-    float drawDigit(vec2 uv, int d) {
-        // uv in [0,1]x[0,1], 7-seg style
-        vec2 p = uv * vec2(1.0, 1.8) - vec2(0.0, 0.4);
-        bool s0 = d==0||d==2||d==3||d==5||d==6||d==7||d==8||d==9||d==10||d==12||d==14||d==15;
-        bool s1 = d==0||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==13||d==14||d==15;
-        bool s2 = d==0||d==1||d==2||d==3||d==4||d==7||d==8||d==9||d==10||d==13;
-        bool s3 = d==2||d==3||d==4||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==13||d==14;
-        bool s4 = d==0||d==2||d==6||d==8||d==10||d==11||d==12||d==14||d==15;
-        bool s5 = d==0||d==1||d==3||d==4||d==5||d==6||d==7||d==8||d==9||d==10||d==11||d==13;
-        bool s6 = d==0||d==2||d==3||d==5||d==6||d==8||d==9||d==10||d==11||d==12||d==14||d==15;
-        float a = 0.0;
-        if (s0) a = max(a, segLine(p, vec2(-0.45, 0.9), vec2(0.45, 0.9)));
-        if (s1) a = max(a, segLine(p, vec2(-0.55, 0.8), vec2(-0.55, 0.1)));
-        if (s2) a = max(a, segLine(p, vec2(0.55, 0.8), vec2(0.55, 0.1)));
-        if (s3) a = max(a, segLine(p, vec2(-0.45, 0.0), vec2(0.45, 0.0)));
-        if (s4) a = max(a, segLine(p, vec2(-0.55,-0.1), vec2(-0.55,-0.8)));
-        if (s5) a = max(a, segLine(p, vec2(0.55,-0.1), vec2(0.55,-0.8)));
-        if (s6) a = max(a, segLine(p, vec2(-0.45,-0.9), vec2(0.45,-0.9)));
-        return a;
-    }
-
-    float drawDotChar(vec2 uv) {
-        vec2 d = uv - vec2(0.0, -0.9);
-        float r = length(d);
-        return 1.0 - smoothstep(0.12, 0.18, r);
-    }
-
-    float drawChar(vec2 uv, int code) {
-        if (code < 0) return 0.0;
-        if (code == 16) return drawDotChar(uv);
-        int d = code;
-        return drawDigit(uv, d);
-    }
-
-    float renderHex(vec2 uv, vec2 origin, vec3 col, float scale) {
-        int r = int(clamp(col.r * 255.0 + 0.5, 0.0, 255.0));
-        int g = int(clamp(col.g * 255.0 + 0.5, 0.0, 255.0));
-        int b = int(clamp(col.b * 255.0 + 0.5, 0.0, 255.0));
-        int d0 = r / 16; int d1 = r - d0 * 16;
-        int d2 = g / 16; int d3 = g - d2 * 16;
-        int d4 = b / 16; int d5 = b - d4 * 16;
-        int digits[6];
-        digits[0] = d0; digits[1] = d1; digits[2] = d2; digits[3] = d3; digits[4] = d4; digits[5] = d5;
-        float a = 0.0;
-        vec2 p = (uv - origin) / scale;
-        for (int i = 0; i < 6; i++) {
-            a = max(a, drawChar(p - vec2(float(i) * 1.1, 0.0), digits[i]));
-        }
-        return a;
-    }
-
-    float renderCoord(vec2 uv, vec2 origin, float v, float scale) {
-        float clamped = clamp(v, 0.0, 0.999);
-        int scaled = int(clamped * 100.0 + 0.5); // two decimals
-        int tens = scaled / 10;
-        int ones = scaled - tens * 10;
-        int digits[4];
-        digits[0] = 0;      // leading zero since <1.0
-        digits[1] = 16;     // dot
-        digits[2] = tens;
-        digits[3] = ones;
-        float a = 0.0;
-        vec2 p = (uv - origin) / scale;
-        for (int i = 0; i < 4; i++) {
-            a = max(a, drawChar(p - vec2(float(i) * 1.1, 0.0), digits[i]));
-        }
-        return a;
-    }
-
     // --- UNIFIED LAYER LOGIC ---
 
     // Contains ALL effects (Main & Post) in one switch for maximum flexibility
@@ -1235,62 +1144,6 @@ export const GLSL_HEADER = `
             vec3 lit = c * (0.4 + 0.6 * diff) + vec3(spec);
             return mix(bg, vec4(lit, 1.0), amt);
         }
-        else if (id == 144) { // DESZYFRATOR
-            // Prostolinijne wykrycie jasnego i ciemnego punktu na siatce 8x8 (lekko, bez zmian w core)
-            const float N = 8.0;
-            float bestBright = -1.0;
-            float bestDark = 10.0;
-            vec2 posBright = vec2(0.5);
-            vec2 posDark = vec2(0.5);
-            for (float y = 0.0; y < N; y += 1.0) {
-                for (float x = 0.0; x < N; x += 1.0) {
-                    vec2 p = (vec2(x + 0.5, y + 0.5) / N);
-                    vec3 c = getVideo(p).rgb;
-                    float l = dot(c, vec3(0.299, 0.587, 0.114));
-                    if (l > bestBright) { bestBright = l; posBright = p; }
-                    if (l < bestDark) { bestDark = l; posDark = p; }
-                }
-            }
-            // Shape + line + label (helpers defined globally)
-            vec4 outCol = bg;
-            vec2 pts[2];
-            pts[0] = posBright;
-            pts[1] = posDark;
-            for (int i = 0; i < 2; i++) {
-                vec2 p = pts[i];
-                vec2 d = uv - p;
-
-                // Dot (thin white ring, small)
-                float r = 0.007;
-                float dot = smoothstep(r * 0.9, r, length(d)) - smoothstep(r, r * 1.12, length(d));
-
-                // Callout position and line (very thin)
-                vec2 labelPos = p + vec2(0.11 * (i == 0 ? 1.0 : -1.0), 0.04);
-                float seg = lineSegment(uv, p, labelPos, 0.00025);
-                float line = 1.0 - smoothstep(0.00035, 0.0007, seg);
-
-                // Rounded-ish box outline only (no fill)
-                vec2 boxSize = vec2(0.06, 0.03);
-                float boxDist = sdBox(uv - labelPos, boxSize);
-                float border = 0.0015;
-                float box = 1.0 - smoothstep(border, border + 0.001, abs(boxDist)); // outline only
-
-                // Sample color for HEX text only (text stays white)
-                vec3 sampleCol = getVideo(p).rgb;
-
-                // Text: 3 lines (HEX, X, Y)
-                float textScale = 0.0095;
-                float hex = renderHex(uv, labelPos + vec2(-0.055, 0.012), sampleCol, textScale);
-                float coordX = renderCoord(uv, labelPos + vec2(-0.055, -0.006), p.x, textScale);
-                float coordY = renderCoord(uv, labelPos + vec2(-0.055, -0.024), p.y, textScale);
-                float text = clamp(hex + coordX + coordY, 0.0, 1.0);
-
-                float alpha = clamp((dot * 0.7 + line * 0.6 + box * 0.8 + text) * amt, 0.0, 0.85);
-                outCol.rgb = mix(outCol.rgb, vec3(1.0), alpha);
-                outCol.a = 1.0;
-            }
-            return outCol;
-        }
 
 
 
@@ -1468,7 +1321,6 @@ export const SHADER_LIST: ShaderList = {
     '141_VOXELIZER_3D': { id: 141, src: BASE_SHADER_BODY },
     '142_TUNNEL_SDF': { id: 142, src: BASE_SHADER_BODY },
     '143_NORMAL_SPECULAR': { id: 143, src: BASE_SHADER_BODY },
-    '144_DESZYFRATOR': { id: 144, src: BASE_SHADER_BODY },
 
 };
 

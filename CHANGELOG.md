@@ -1,25 +1,22 @@
 # Changelog
 
 ## [Unreleased]
-- Render/perf: clamp canvas render resolution do 1920x1080 (zachowuje aspect), VU tick co ~200 ms, FPS/UI co ~250 ms zeby zmniejszyc ruch w React.
-- WebGL: kesz uniform/attrib w `GLService` + `UNPACK_FLIP_Y_WEBGL` ustawione w init (mniej `getUniformLocation` na kazdej klatce).
-- Nagrywanie: `canvas.captureStream` na 24 fps dla MediaRecorder (stabilniejsze bitrate).
-- Playlist UX/backlog: playlista z klipami video (do rozwazenia).
+- Playlist UX/backlog: np. playlista z klipami video (do rozważenia).
 
 ## [0.2.3] - 2025-12-03
-- Mobile: canvas widoczny nad panelem (FX podczas strojenia), usuniety mini-podglad.
-- UI/mobile: pelna szerokosc canvasu, wysokosc ~45% ekranu przy otwartym panelu.
-- Preview: usuniety dodatkowy overlay w Experimental, zostaje glowny canvas.
+- Mobile: canvas widoczny nad panelem (FX podczas strojenia), usunięty mini-podgląd.
+- UI/mobile: pełna szerokość canvasu, wysokość ~45% ekranu przy otwartym panelu.
+- Preview: usunięty dodatkowy overlay w Experimental, zostaje główny canvas.
 
 ## [0.2.2] - 2025-12-02
-- Nagrywanie: wybor pojedynczego zywego toru audio (prior: captureStream audio -> miks -> captureStream video), WebM/Opus preferowane; brak pustych trackow.
-- UI: throttling VU do ~25 Hz, render canvas uwzglednia szerokosc panelu bocznego przy skalowaniu.
+- Nagrywanie: wybór pojedynczego żywego toru audio (prior: captureStream audio -> miks -> captureStream video), WebM/Opus preferowane; brak pustych tracków.
+- UI: throttling VU do ~25 Hz, render canvas uwzględnia szerokość panelu bocznego przy skalowaniu.
 - WebGL: `powerPreference: high-performance`, antialias off dla mniejszego overheadu.
 - Audio: `AudioContext` z `latencyHint: 'playback'` (mniej CPU).
-- Build: Tailwind z lokalnego buildu (PostCSS), usunieto CDN.
+- Build: Tailwind z lokalnego buildu (PostCSS), usunięto CDN.
 
 ## [0.2.1] - 2025-12-01
-- Fallbacki nagrywania audio: miks + captureStream elementow, preferencja WebM/Opus, naprawione brak audio w plikach.
+- Fallbacki nagrywania audio: miks + captureStream elementów, preferencja WebM/Opus, naprawione brak audio w plikach.
 - Credits zaktualizowane do v0.2.1.
 
 ## [0.2.0] - 2025-11-28

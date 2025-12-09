@@ -1,13 +1,13 @@
-# Instructions - strojenie FX/VU (stan 0.2.3)
+# Instructions - strojenie FX/VU (stan 0.1.0)
 
-Cel: potwierdzic aktualne strojenie audio-reactive + nowe ticki UI/nagrywania; overlay/log wylaczony.
+Cel: potwierdzi? nowe strojenie audio-reactive; overlay/log wy??czony.
 
-1) Czulosc/mapowanie
-- FX: pow(0.4) * 14 + 0.4 (gdy routing != off), clamp 18; gain z UI (0-200). VU: pow(0.5), clamp 1.5. VU sample co ~200 ms, update UI (FPS/visual) co ~250 ms. Sprawdz Bass/Mid/High/BPM czy reakcja nie jest zbyt leniwa.
+1) Czu?o??/mapowanie
+- FX: pow(0.7) + smoothing 35%, sufit 24; VU: pow(0.8) + smoothing 45%, sufit 10. Sprawd? na Bass/Mid/High i ewentualnie skoryguj mno?nik/alpha/clamp.
 
 2) Filtry/FFT
-- Bandpass (sync1/2/3) z analyserem 256, smoothing 0.45 + wewnetrzne wygladzanie bandLevels ~50%. FFT/time-domain fallback gdy pasma sa puste. Przetestuj freq/width i blending bandow.
+- Bandpass (sync1/2/3) z analyserem 256, smoothing 0.45 + wewn?trzne wyg?adzanie (~50%). FFT fallback: ?rednia pasma z clamp do 1; fallback u?ywany gdy pasma z filtr?w s? puste albo dope?niaj? max(). Przetestuj r??ne freq/width.
 
 3) Testy
-- Manual: tryb Experimental, routing FX na Bass/Mid/High/BPM, obserwacja VU/Depth; upewnij sie, ze 200/250 ms tick nie laguje feedbacku.
-- Nagrywanie: MediaRecorder z `captureStream(24)`; sprawdz audio track (log `Recording tracks` i plik). Przed releasem: `npm run build` + krotki smoke WebM/Opus lub MP4 (jesli wspierane).
+- Manual: tryb Experimental, routing FX na Bass/Mid/High, obserwacja VU/Depth; upewnij si?, ?e smoothing nie laguje UI.
+- Przed releasem: `npm run build` + kr?tki smoke nagrywania (MediaRecorder/WebCodecs) z weryfikacj? ?cie?ki audio w WebM.

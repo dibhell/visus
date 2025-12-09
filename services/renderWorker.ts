@@ -10,14 +10,6 @@ let program: WebGLProgram | null = null;
 let tex: WebGLTexture | null = null;
 let canvas: OffscreenCanvas | null = null;
 let uniformCache: Record<string, WebGLUniformLocation | null> = {};
-const FALLBACK_FRAG = `
-precision mediump float;
-uniform vec2 iResolution;
-uniform sampler2D iChannel0;
-void main(){
-    vec2 uv = gl_FragCoord.xy / iResolution.xy;
-    gl_FragColor = texture2D(iChannel0, uv);
-}`;
 
 const cacheUniforms = (names: string[]) => {
     if (!gl || !program) return;
@@ -39,10 +31,10 @@ const compileShader = (type: number, source: string) => {
     return sh;
 };
 
-const loadShader = (fragSrc: string, isFallback = false) => {
+const loadShader = (fragSrc: string) => {
     if (!gl) return;
     const vs = compileShader(gl.VERTEX_SHADER, VERT_SRC);
-    const fs = compileShader(gl.FRAGMENT_SHADER, isFallback ? fragSrc : GLSL_HEADER + fragSrc);
+    const fs = compileShader(gl.FRAGMENT_SHADER, GLSL_HEADER + fragSrc);
     if (!vs || !fs) return;
     const prog = gl.createProgram();
     if (!prog) return;
@@ -50,12 +42,7 @@ const loadShader = (fragSrc: string, isFallback = false) => {
     gl.attachShader(prog, fs);
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-        console.error('Program link error', gl.getProgramInfoLog(prog) || '');
-        // Hard fallback: render plain video if custom shader cannot link
-        if (!isFallback) {
-            console.warn('Falling back to passthrough shader (video only)');
-            loadShader(FALLBACK_FRAG, true);
-        }
+        console.error('Program link error');
         return;
     }
     program = prog;
