@@ -30,10 +30,10 @@ export class GLService {
         const options: WebGLContextAttributes = { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false };
         try {
             this.gl = canvas.getContext("webgl2", options) as unknown as WebGLRenderingContext | null;
-            console.info('[VISUS] getContext(webgl2):', this.gl ? 'ok' : 'null', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
+            console.info(this.gl ? "[VISUS] getContext('webgl2') ok" : "[VISUS] getContext('webgl2') returned null", { sizeInfo, twoDProbe });
             if (!this.gl) {
                 this.gl = canvas.getContext("webgl", options);
-                console.info('[VISUS] getContext(webgl):', this.gl ? 'ok' : 'null', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
+                console.info(this.gl ? "[VISUS] getContext('webgl') ok" : "[VISUS] getContext('webgl') returned null", { sizeInfo, twoDProbe });
             }
         } catch (err) {
             console.error('[VISUS] WebGL init error (exception):', err);

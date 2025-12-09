@@ -4,7 +4,7 @@ const WebGLTest: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [status, setStatus] = useState<string>('waiting');
     const [probe, setProbe] = useState<{ webgl2: boolean; webgl: boolean }>({ webgl2: false, webgl: false });
-    const [useSameOptions, setUseSameOptions] = useState<boolean>(false);
+    const [useSameOptions, setUseSameOptions] = useState<boolean>(true);
     const [error, setError] = useState<string>('');
 
     useEffect(() => {

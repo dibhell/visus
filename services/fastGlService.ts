@@ -63,10 +63,10 @@ export class FastGLService {
         let glCtx: WebGLRenderingContext | null = null;
         try {
             glCtx = (canvas.getContext('webgl2', options) as unknown as WebGLRenderingContext | null);
-            console.info('[VISUS] getContext(webgl2):', glCtx ? 'ok' : 'null', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
+            console.info(glCtx ? "[VISUS] getContext('webgl2') ok" : "[VISUS] getContext('webgl2') returned null", { sizeInfo, twoDProbe });
             if (!glCtx) {
                 glCtx = canvas.getContext('webgl', options);
-                console.info('[VISUS] getContext(webgl):', glCtx ? 'ok' : 'null', 'canvas size:', sizeInfo, '2d probed:', twoDProbe);
+                console.info(glCtx ? "[VISUS] getContext('webgl') ok" : "[VISUS] getContext('webgl') returned null", { sizeInfo, twoDProbe });
             }
         } catch (err) {
             console.error('[VISUS] WebGL init error (exception):', err);

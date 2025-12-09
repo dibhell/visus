@@ -389,7 +389,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     workerReadyRef.current = false;
                     console.warn('[VISUS] fallback Canvas2D (WebGL probe failed: no context)');
                 } else {
-                    const workerUsed = await tryWorker();
+                    const workerUsed = forceWebgl ? false : await tryWorker();
                     if (!workerUsed) {
                         useWorkerRenderRef.current = false;
                         workerReadyRef.current = false;
@@ -902,12 +902,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         document.body.removeChild(a);
     };
 
-    const startWebCodecsRecording = async (): Promise<boolean> => {
+    
+    const startMediaRecorderRecording = async (preferWebCodecs = false): Promise<boolean> => {
         if (!canvasRef.current) {
             alert('Canvas not ready yet.');
             return false;
         }
-        // Ensure audio graph is alive
         try {
             await audioRef.current.initContext();
             if (audioRef.current.ctx?.state === 'suspended') {
@@ -919,9 +919,23 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const canvasStream = canvasRef.current.captureStream(Math.min(recordFps, 30));
         const videoTracks = canvasStream.getVideoTracks();
-        const recordingAudio = (audioRef.current as any).createRecordingStream ? (audioRef.current as any).createRecordingStream() : { stream: audioRef.current.getAudioStream(), cleanup: () => {} };
+
+        const buildRecordingAudio = () => {
+            const tapFactory = (audioRef.current as any).createRecordingTap;
+            if (typeof tapFactory === 'function') {
+                const tap = tapFactory.call(audioRef.current);
+                return { stream: tap?.stream ?? null, cleanup: () => (audioRef.current as any).releaseRecordingTap?.(tap) };
+            }
+            const stream = audioRef.current.getAudioStream();
+            return { stream, cleanup: () => {} };
+        };
+        const recordingAudio = buildRecordingAudio();
 
         const pickFirstLiveTrack = (streams: Array<{ stream: MediaStream | null, label: string }>) => {
+            streams.forEach(s => {
+                const tracks = s.stream?.getAudioTracks() || [];
+                console.debug('[VISUS] candidate stream', s.label, 'tracks:', tracks.length, tracks.map(t => ({ label: t.label, readyState: t.readyState })));
+            });
             for (const entry of streams) {
                 if (!entry.stream) continue;
                 const t = entry.stream.getAudioTracks().find(track => track.readyState === 'live');
@@ -943,31 +957,41 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
         const audioTrack = pickFirstLiveTrack(candidateStreams);
 
         if (!audioTrack) {
-            alert('Brak ścieżki audio w nagraniu (0 tracków). Upewnij się, że źródło audio jest włączone.');
+            if (preferWebCodecs) {
+                alert('WebCodecs: brak ?cie?ki audio ? nagranie by?oby tylko wideo. Wy??cz WebCodecs, aby nagra? audio.');
+                setUseWebCodecsRecord(false);
+            } else {
+                alert('Brak ?cie?ki audio w nagraniu (0 track?w). Upewnij si?, ?e ?r?d?o audio jest w??czone.');
+            }
             return false;
         }
 
         console.debug('Recording tracks', { videoTracks: videoTracks.length, audioTracks: 1, labels: [audioTrack.label] });
 
         const combinedStream = new MediaStream([...videoTracks, audioTrack]);
+        console.debug('[VISUS] combinedStream audio tracks:', combinedStream.getAudioTracks().length);
         try {
             const pickMimeType = () => {
-                // Prefer WebM/Opus (best supported for Web Audio mix); mp4 only as Safari fallback
                 const candidates = [
                     'video/webm;codecs=vp9,opus',
                     'video/webm;codecs=vp8,opus',
                     'video/webm',
-                    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+                    'video/mp4;codecs=h264,aac',
                     'video/mp4'
                 ];
                 return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
             };
             const mimeType = pickMimeType();
             if (!mimeType) {
-                alert('MediaRecorder: brak obsługiwanego formatu (mp4/webm).');
+                alert('MediaRecorder: brak obs?ugiwanego formatu (mp4/webm).');
                 return false;
             }
             const fileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
+            console.debug('[VISUS] MediaRecorder mime selected:', mimeType);
+            if (combinedStream.getAudioTracks().length === 0) {
+                alert('Nagrywanie przerwane: brak aktywnej ?cie?ki audio w strumieniu.');
+                return false;
+            }
             const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate, audioBitsPerSecond: 192000 });
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
@@ -992,8 +1016,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
     };
-
-    const toggleRecording = async () => {
+const toggleRecording = async () => {
         if (isRecording) {
             if (useWebCodecsRecord && encoderRef.current) {
                 await stopWebCodecsRecording();
@@ -1007,12 +1030,12 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         if (useWebCodecsRecord && webCodecsSupported) {
             encodedChunksRef.current = [];
-            const ok = await startWebCodecsRecording();
+            const ok = await startMediaRecorderRecording(true);
             if (!ok) return;
             return;
         }
 
-        await startWebCodecsRecording();
+        await startMediaRecorderRecording(false);
     };
 
     const updateSyncParams = (index: number, changes: Partial<SyncParam>) => {
@@ -1315,6 +1338,11 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         >
                             {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING (WEBM)</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC VIDEO (WEBM)</span>}
                         </button>
+                        {useWebCodecsRecord && webCodecsSupported && (
+                            <div className="mt-2 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-md px-3 py-2">
+                                WebCodecs może nagrywać tylko wideo jeśli brak żywej ścieżki audio. Wyłącz WebCodecs, aby wymusić nagranie z dźwiękiem.
+                            </div>
+                        )}
                     </section>
 
                     <section>
