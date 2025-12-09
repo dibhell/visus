@@ -8,6 +8,7 @@ export class GLService {
     uniformLocations: Record<string, WebGLUniformLocation | null> = {};
     attribLocations: Record<string, number> = {};
     private videoSize = { w: 0, h: 0 };
+    lastShaderError: string | null = null;
 
     init(canvas: HTMLCanvasElement): boolean {
         if (this.canvas && this.gl && this.canvas === canvas) {
@@ -19,9 +20,14 @@ export class GLService {
         }
         this.canvas = canvas;
         this.videoSize = { w: 0, h: 0 };
-        this.gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false });
+        try {
+            this.gl = canvas.getContext("webgl", { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false });
+        } catch (err) {
+            console.error('[VISUS] WebGL init error (exception):', err);
+            return false;
+        }
         if (!this.gl) {
-            console.warn('[VISUS] WebGL support: unavailable');
+            console.warn('[VISUS] WebGL support: unavailable (getContext returned null)');
             return false;
         }
         console.info('[VISUS] WebGL support: ok');
@@ -46,21 +52,25 @@ export class GLService {
     loadShader(fragmentSrc: string): boolean {
         if (!this.gl) return false;
         
-        const compile = (type: number, source: string) => {
+        const compile = (type: number, source: string, label: 'main' | 'safe') => {
             const sh = this.gl!.createShader(type);
             if (!sh) return null;
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
             if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error('[VISUS] shader compile error:', this.gl!.getShaderInfoLog(sh));
+                const info = this.gl!.getShaderInfoLog(sh);
+                const typeName = type === this.gl!.VERTEX_SHADER ? 'VERTEX' : 'FRAGMENT';
+                const snippet = source.slice(0, 200);
+                this.lastShaderError = `${label}/${typeName}: ${info}`;
+                console.error(`[VISUS] shader compile error (${label}/${typeName}):`, info, 'src:', snippet);
                 return null;
             }
             return sh;
         };
 
         const buildProgram = (source: string) => {
-            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
-            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + source);
+            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC, 'main');
+            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + source, 'main');
             if (!vs || !fs) return null;
             const prog = this.gl!.createProgram();
             if (!prog) return null;
@@ -69,7 +79,9 @@ export class GLService {
             this.gl!.linkProgram(prog);
             
             if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
-               console.error('[VISUS] shader link error:', this.gl!.getProgramInfoLog(prog));
+               const info = this.gl!.getProgramInfoLog(prog);
+               this.lastShaderError = `main/LINK: ${info}`;
+               console.error('[VISUS] shader link error (main):', info);
                return null;
             }
             return prog;
@@ -78,13 +90,31 @@ export class GLService {
         let prog = buildProgram(fragmentSrc);
         if (!prog) {
             console.warn('[VISUS] shader failure -> SAFE_FX_SHADER fallback');
-            prog = buildProgram(SAFE_FX_SHADER);
+            const safeProgBuilder = () => {
+                const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC, 'safe');
+                const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + SAFE_FX_SHADER, 'safe');
+                if (!vs || !fs) return null;
+                const p = this.gl!.createProgram();
+                if (!p) return null;
+                this.gl!.attachShader(p, vs);
+                this.gl!.attachShader(p, fs);
+                this.gl!.linkProgram(p);
+                if (!this.gl!.getProgramParameter(p, this.gl!.LINK_STATUS)) {
+                    const info = this.gl!.getProgramInfoLog(p);
+                    this.lastShaderError = `safe/LINK: ${info}`;
+                    console.error('[VISUS] shader link error (safe):', info);
+                    return null;
+                }
+                return p;
+            };
+            prog = safeProgBuilder();
         }
         if (!prog) {
             console.error('[VISUS] fallback Canvas2D required (shader init failed)');
             this.program = null;
             return false;
         }
+        this.lastShaderError = null;
 
         this.program = prog;
 

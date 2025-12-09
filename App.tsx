@@ -9,6 +9,7 @@ import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
 import ExperimentalApp from './ExperimentalApp';
+import WebGLTest from './WebGLTest';
 const ICON_PNG = '/visus/icon.png';
 
 // --- ICONS (SVG) ---
@@ -24,6 +25,10 @@ const ICONS = {
 };
 
 const App: React.FC = () => {
+    if (typeof window !== 'undefined' && window.location.pathname.includes('webgl-test')) {
+        return <WebGLTest />;
+    }
+
     // --- REFS ---
     const glService = useRef<GLService>(new GLService());
     const audioService = useRef<AudioEngine>(new AudioEngine());

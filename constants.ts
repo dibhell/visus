@@ -127,6 +127,7 @@ export interface MusicTrack {
 }
 
 export type QualityMode = 'low' | 'medium' | 'high';
+export type FallbackReason = 'NONE' | 'NO_CONTEXT' | 'INIT_ERROR' | 'SHADER_FAIL' | 'USER_FORCE' | 'CONTEXT_LOST';
 
 export const QUALITY_SCALE: Record<QualityMode, number> = {
   low: 0.5,

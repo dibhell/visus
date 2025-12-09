@@ -19,14 +19,17 @@ const cacheUniforms = (names: string[]) => {
     });
 };
 
-const compileShader = (type: number, source: string) => {
+const compileShader = (type: number, source: string, label: 'main' | 'safe') => {
     if (!gl) return null;
     const sh = gl.createShader(type);
     if (!sh) return null;
     gl.shaderSource(sh, source);
     gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        console.error('[VISUS] shader compile error:', gl.getShaderInfoLog(sh));
+        const info = gl.getShaderInfoLog(sh);
+        const typeName = type === gl.VERTEX_SHADER ? 'VERTEX' : 'FRAGMENT';
+        const snippet = source.slice(0, 200);
+        console.error(`[VISUS] shader compile error (${label}/${typeName}):`, info, 'src:', snippet);
         return null;
     }
     return sh;
@@ -34,9 +37,9 @@ const compileShader = (type: number, source: string) => {
 
 const loadShader = (fragSrc: string) => {
     if (!gl) return false;
-    const buildProgram = (src: string) => {
-        const vs = compileShader(gl!.VERTEX_SHADER, VERT_SRC);
-        const fs = compileShader(gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+    const buildProgram = (src: string, label: 'main' | 'safe') => {
+        const vs = compileShader(gl!.VERTEX_SHADER, VERT_SRC, label);
+        const fs = compileShader(gl!.FRAGMENT_SHADER, GLSL_HEADER + src, label);
         if (!vs || !fs) return null;
         const prog = gl!.createProgram();
         if (!prog) return null;
@@ -44,16 +47,16 @@ const loadShader = (fragSrc: string) => {
         gl!.attachShader(prog, fs);
         gl!.linkProgram(prog);
         if (!gl!.getProgramParameter(prog, gl!.LINK_STATUS)) {
-            console.error('[VISUS] shader link error:', gl!.getProgramInfoLog(prog));
+            console.error(`[VISUS] shader link error (${label}):`, gl!.getProgramInfoLog(prog));
             return null;
         }
         return prog;
     };
 
-    let prog = buildProgram(fragSrc);
+    let prog = buildProgram(fragSrc, 'main');
     if (!prog) {
         console.warn('[VISUS] shader failure -> SAFE_FX_SHADER fallback (worker)');
-        prog = buildProgram(SAFE_FX_SHADER);
+        prog = buildProgram(SAFE_FX_SHADER, 'safe');
     }
     if (!prog) {
         program = null;

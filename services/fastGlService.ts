@@ -36,6 +36,7 @@ export class FastGLService {
     private uniformCache: Record<string, WebGLUniformLocation | null> = {};
     private positionLoc: number | null = null;
     private videoSize = { w: 0, h: 0 };
+    lastShaderError: string | null = null;
 
     init(canvas: HTMLCanvasElement): boolean {
         if (this.canvas && this.gl && this.canvas === canvas) {
@@ -47,13 +48,18 @@ export class FastGLService {
         }
         this.canvas = canvas;
         this.videoSize = { w: 0, h: 0 };
-        this.gl = canvas.getContext('webgl', {
-            preserveDrawingBuffer: false,
-            alpha: false,
-            powerPreference: 'high-performance'
-        });
+        try {
+            this.gl = canvas.getContext('webgl', {
+                preserveDrawingBuffer: false,
+                alpha: false,
+                powerPreference: 'high-performance'
+            });
+        } catch (err) {
+            console.error('[VISUS] WebGL init error (exception):', err);
+            return false;
+        }
         if (!this.gl) {
-            console.warn('[VISUS] WebGL support: unavailable');
+            console.warn('[VISUS] WebGL support: unavailable (getContext returned null)');
             return false;
         }
         console.info('[VISUS] WebGL support: ok');
@@ -90,21 +96,25 @@ export class FastGLService {
     loadShader(fragmentSrc: string): boolean {
         if (!this.gl) return false;
 
-        const compile = (type: number, source: string) => {
+        const compile = (type: number, source: string, label: 'main' | 'safe') => {
             const sh = this.gl!.createShader(type);
             if (!sh) return null;
             this.gl!.shaderSource(sh, source);
             this.gl!.compileShader(sh);
             if (!this.gl!.getShaderParameter(sh, this.gl!.COMPILE_STATUS)) {
-                console.error('[VISUS] shader compile error:', this.gl!.getShaderInfoLog(sh));
+                const info = this.gl!.getShaderInfoLog(sh);
+                const typeName = type === this.gl!.VERTEX_SHADER ? 'VERTEX' : 'FRAGMENT';
+                const snippet = source.slice(0, 200);
+                this.lastShaderError = `${label}/${typeName}: ${info}`;
+                console.error(`[VISUS] shader compile error (${label}/${typeName}):`, info, 'src:', snippet);
                 return null;
             }
             return sh;
         };
 
-        const buildProgram = (src: string) => {
-            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC);
-            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src);
+        const buildProgram = (src: string, label: 'main' | 'safe') => {
+            const vs = compile(this.gl!.VERTEX_SHADER, VERT_SRC, label);
+            const fs = compile(this.gl!.FRAGMENT_SHADER, GLSL_HEADER + src, label);
             if (!vs || !fs) return null;
 
             const prog = this.gl!.createProgram();
@@ -115,16 +125,18 @@ export class FastGLService {
             this.gl!.linkProgram(prog);
 
             if (!this.gl!.getProgramParameter(prog, this.gl!.LINK_STATUS)) {
-                console.error('[VISUS] shader link error:', this.gl!.getProgramInfoLog(prog));
+                const info = this.gl!.getProgramInfoLog(prog);
+                this.lastShaderError = `${label}/LINK: ${info}`;
+                console.error(`[VISUS] shader link error (${label}):`, info);
                 return null;
             }
             return prog;
         };
 
-        let prog = buildProgram(fragmentSrc);
+        let prog = buildProgram(fragmentSrc, 'main');
         if (!prog) {
             console.warn('[VISUS] shader failure -> SAFE_FX_SHADER fallback');
-            prog = buildProgram(SAFE_FX_SHADER);
+            prog = buildProgram(SAFE_FX_SHADER, 'safe');
         }
 
         if (!prog) {
@@ -133,6 +145,7 @@ export class FastGLService {
             return false;
         }
 
+        this.lastShaderError = null;
         this.program = prog;
         this.gl.useProgram(prog);
         this.uniformCache = {};

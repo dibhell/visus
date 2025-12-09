@@ -1,7 +1,7 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
-import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE } from './constants';
+import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE, FallbackReason } from './constants';
 import RenderWorker from './services/renderWorker?worker';
 import FxSlot from './components/FxSlot';
 import BandControls from './components/BandControls';
@@ -32,6 +32,45 @@ const getFxPreference = (): 'auto' | 'forceOn' | 'forceOff' => {
     if (fxParam === '0' || ls === 'off') return 'forceOff';
     return 'auto';
 };
+
+const getRenderPreference = (): 'auto' | 'webgl' | 'canvas' => {
+    if (typeof window === 'undefined') return 'auto';
+    const params = new URLSearchParams(window.location.search);
+    const render = params.get('render') || localStorage.getItem('visus_render') || 'auto';
+    if (render === 'webgl') return 'webgl';
+    if (render === 'canvas') return 'canvas';
+    return 'auto';
+};
+
+const getWorkerPreference = (): boolean => {
+    if (typeof window === 'undefined') return true;
+    const params = new URLSearchParams(window.location.search);
+    const workerParam = params.get('worker');
+    const ls = localStorage.getItem('visus_worker');
+    if (workerParam === '0' || workerParam === 'false' || ls === 'off') return false;
+    return true;
+};
+
+const isDevMode = () => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('dev') === '1' || localStorage.getItem('visus_dev') === '1';
+};
+
+const detectWebGLSupport = () => {
+    const result = { webgl2: false, webgl: false };
+    try {
+        const probeCanvas = document.createElement('canvas');
+        result.webgl2 = !!probeCanvas.getContext('webgl2');
+        result.webgl = !!probeCanvas.getContext('webgl');
+    } catch (err) {
+        console.error('[VISUS] WebGL probe exception:', err);
+    }
+    console.info('[VISUS] WebGL probe webgl2:', result.webgl2, 'webgl:', result.webgl);
+    return result;
+};
+
+type RenderMode = 'webgl-worker' | 'webgl-fastgl' | 'canvas2d';
 
 interface ExperimentalProps {
     onExit: () => void;
@@ -69,12 +108,15 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const recordedChunksRef = useRef<Blob[]>([]);
 
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
+    const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
+    const [workerPreference, setWorkerPreference] = useState<boolean>(getWorkerPreference());
+    const devMode = isDevMode();
     const [panelVisible, setPanelVisible] = useState(true);
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [isBooting, setIsBooting] = useState(true);
     const [isRecording, setIsRecording] = useState(false);
     const [fps, setFps] = useState(0);
-    const [renderMode, setRenderMode] = useState<'webgl' | 'canvas2d'>('webgl');
+    const [renderMode, setRenderMode] = useState<RenderMode>('webgl-worker');
     const [frameCap, setFrameCap] = useState(60);
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(8000000);
@@ -82,6 +124,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
     const [quality, setQuality] = useState<QualityMode>('high');
+    const [webglProbe, setWebglProbe] = useState<{ webgl2: boolean; webgl: boolean }>({ webgl2: false, webgl: false });
+    const [fallbackReason, setFallbackReason] = useState<FallbackReason>('NONE');
+    const [lastShaderError, setLastShaderError] = useState<string>('');
 
     const [showCatalog, setShowCatalog] = useState(false);
     const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -123,8 +168,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
     const renderScaleRef = useRef(renderScale);
-    const renderModeRef = useRef(renderMode);
+    const renderModeRef = useRef<RenderMode>(renderMode);
     const fxPreferenceRef = useRef(fxPreference);
+    const fallbackReasonRef = useRef<FallbackReason>('NONE');
     const fxVuLevelsRef = useRef(fxVuLevels);
     const visualLevelsRef = useRef(visualLevels);
     const mixerRef = useRef(mixer);
@@ -137,10 +183,15 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
     useEffect(() => { renderModeRef.current = renderMode; }, [renderMode]);
     useEffect(() => { fxPreferenceRef.current = fxPreference; }, [fxPreference]);
+    useEffect(() => { fallbackReasonRef.current = fallbackReason; }, [fallbackReason]);
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { visualLevelsRef.current = visualLevels; }, [visualLevels]);
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
+    useEffect(() => {
+        setRenderPreference(getRenderPreference());
+        setWorkerPreference(getWorkerPreference());
+    }, []);
 
     useEffect(() => {
         const ae = audioRef.current;
@@ -252,16 +303,20 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const initWork = () => {
             const canvas = canvasRef.current as HTMLCanvasElement;
-            let webglReady = fxPreferenceRef.current !== 'forceOff';
-
             const ensureCanvas2D = () => {
                 const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    canvas2dRef.current = ctx;
-                }
+                if (ctx) canvas2dRef.current = ctx;
             };
 
+            const forceCanvas = renderPreference === 'canvas' || fxPreferenceRef.current === 'forceOff';
+            const forceWebgl = renderPreference === 'webgl';
+            const workerAllowed = workerPreference && !forceWebgl && renderPreference !== 'canvas';
+
+            const probe = detectWebGLSupport();
+            setWebglProbe(probe);
+
             const tryWorker = () => {
+                if (!workerAllowed) return false;
                 if (!(canvas as any).transferControlToOffscreen) return false;
                 try {
                     const worker = new (RenderWorker as any)();
@@ -274,7 +329,9 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                     };
                     workerReadyRef.current = true;
                     useWorkerRenderRef.current = true;
-                    console.info('[VISUS] start FX:', fxStateRef.current.main.shader);
+                    setRenderMode('webgl-worker');
+                    setFallbackReason('NONE');
+                    console.info('[VISUS] start FX (worker):', fxStateRef.current.main.shader);
                     return true;
                 } catch (err) {
                     workerReadyRef.current = false;
@@ -283,46 +340,58 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 }
             };
 
-            if (fxPreferenceRef.current === 'forceOff') {
-                webglReady = false;
+            if (forceCanvas) {
                 setRenderMode('canvas2d');
+                setFallbackReason('USER_FORCE');
+                setLastShaderError('');
+                ensureCanvas2D();
                 useWorkerRenderRef.current = false;
                 workerReadyRef.current = false;
                 if (workerRef.current) {
                     workerRef.current.terminate();
                     workerRef.current = null;
                 }
-                ensureCanvas2D();
-                console.info('[VISUS] fallback Canvas2D (fx disabled via flag)');
+                console.info('[VISUS] fallback Canvas2D (user forced render=canvas or fx=off)');
             } else {
-                const workerUsed = tryWorker();
-                if (!workerUsed) {
-                    webglReady = rendererRef.current.init(canvas);
-                    if (webglReady) {
-                        const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                        const ok = rendererRef.current.loadShader(shaderDef.src);
-                        if (!ok) {
-                            webglReady = false;
-                        } else {
-                            console.info('[VISUS] start FX:', fxStateRef.current.main.shader);
-                        }
-                    }
-                } else {
-                    webglReady = true;
-                }
-
-                if (!webglReady) {
-                    workerReadyRef.current = false;
-                    useWorkerRenderRef.current = false;
-                    if (workerRef.current) {
-                        workerRef.current.terminate();
-                        workerRef.current = null;
-                    }
+                if (!probe.webgl && !probe.webgl2) {
                     setRenderMode('canvas2d');
+                    setFallbackReason('NO_CONTEXT');
+                    setLastShaderError('');
                     ensureCanvas2D();
-                    console.warn('[VISUS] fallback Canvas2D (WebGL init failed)');
+                    useWorkerRenderRef.current = false;
+                    workerReadyRef.current = false;
+                    console.warn('[VISUS] fallback Canvas2D (WebGL probe failed: no context)');
                 } else {
-                    setRenderMode('webgl');
+                    const workerUsed = tryWorker();
+                    if (!workerUsed) {
+                        useWorkerRenderRef.current = false;
+                        workerReadyRef.current = false;
+                        const webglReady = rendererRef.current.init(canvas);
+                        if (webglReady) {
+                            const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
+                            const ok = rendererRef.current.loadShader(shaderDef.src);
+                            if (!ok) {
+                                setRenderMode('canvas2d');
+                                setFallbackReason('SHADER_FAIL');
+                                setLastShaderError(rendererRef.current.lastShaderError || 'shader init failed');
+                                ensureCanvas2D();
+                                console.warn('[VISUS] fallback Canvas2D (shader init failed)');
+                            } else {
+                                setRenderMode('webgl-fastgl');
+                                setFallbackReason('NONE');
+                                setLastShaderError('');
+                                console.info('[VISUS] start FX (fastgl):', fxStateRef.current.main.shader);
+                            }
+                        } else {
+                            setRenderMode('canvas2d');
+                            setFallbackReason('INIT_ERROR');
+                            setLastShaderError('');
+                            ensureCanvas2D();
+                            console.warn('[VISUS] fallback Canvas2D (WebGL init failed)');
+                        }
+                    } else {
+                        setLastShaderError('');
+                    }
                 }
             }
 
@@ -366,6 +435,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
             workerReadyRef.current = false;
             useWorkerRenderRef.current = false;
             setRenderMode('canvas2d');
+            setFallbackReason('CONTEXT_LOST');
             const ctx = canvas.getContext('2d');
             if (ctx) canvas2dRef.current = ctx;
             console.warn('[VISUS] webglcontextlost -> fallback Canvas2D');
@@ -375,20 +445,26 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, []);
 
     useEffect(() => {
-        if (renderMode !== 'webgl') return;
+        if (renderMode === 'canvas2d') return;
         const shaderDef = SHADER_LIST[fxState.main.shader] || SHADER_LIST['00_NONE'];
-        if (workerReadyRef.current && workerRef.current) {
+        if (renderMode === 'webgl-worker' && workerReadyRef.current && workerRef.current) {
             workerRef.current.postMessage({ type: 'loadShader', fragSrc: shaderDef.src });
-            console.info('[VISUS] start FX:', fxState.main.shader);
-        } else {
+            setFallbackReason('NONE');
+            setLastShaderError('');
+            console.info('[VISUS] start FX (worker):', fxState.main.shader);
+        } else if (renderMode === 'webgl-fastgl') {
             const ok = rendererRef.current.loadShader(shaderDef.src);
             if (!ok) {
                 setRenderMode('canvas2d');
+                setFallbackReason('SHADER_FAIL');
+                setLastShaderError(rendererRef.current.lastShaderError || 'shader init failed');
                 const ctx = canvasRef.current?.getContext('2d') || null;
                 if (ctx) canvas2dRef.current = ctx;
                 console.warn('[VISUS] fallback Canvas2D (shader compile failure)');
             } else {
-                console.info('[VISUS] start FX:', fxState.main.shader);
+                setFallbackReason('NONE');
+                setLastShaderError('');
+                console.info('[VISUS] start FX (fastgl):', fxState.main.shader);
             }
         }
     }, [fxState.main.shader, renderMode]);
@@ -547,10 +623,10 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 fx5_id: SHADER_LIST[currentFxState.fx5.shader]?.id || 0,
             };
 
-            const canUseWebGL = renderModeRef.current === 'webgl';
+            const canUseWebGL = renderModeRef.current !== 'canvas2d';
             const hasVideoReady = !!videoRef.current && videoRef.current.readyState >= 2;
 
-            if (canUseWebGL && useWorkerRenderRef.current && workerRef.current && videoRef.current && !bitmapInFlightRef.current) {
+            if (canUseWebGL && renderModeRef.current === 'webgl-worker' && useWorkerRenderRef.current && workerRef.current && videoRef.current && !bitmapInFlightRef.current) {
                 if (hasVideoReady) {
                     bitmapInFlightRef.current = true;
                     const timeout = window.setTimeout(() => { bitmapInFlightRef.current = false; }, 80);
@@ -567,7 +643,7 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                         })
                         .catch(() => { bitmapInFlightRef.current = false; window.clearTimeout(timeout); });
                 }
-            } else if (canUseWebGL && videoRef.current && rendererRef.current.isReady()) {
+            } else if (canUseWebGL && renderModeRef.current === 'webgl-fastgl' && videoRef.current && rendererRef.current.isReady()) {
                 rendererRef.current.updateTexture(videoRef.current);
                 rendererRef.current.draw(now, videoRef.current, computedFx);
             } else if (!canUseWebGL && videoRef.current && hasVideoReady && canvasRef.current) {
@@ -964,6 +1040,14 @@ const ExperimentalApp: React.FC<ExperimentalProps> = ({ onExit }) => {
                 {mixer.mic.active && <span className="text-red-400 font-black tracking-widest">MIC</span>}
                 {isRecording && <span className="text-red-400 font-black tracking-widest">REC</span>}
             </div>
+            {devMode && (
+                <div className="fixed top-4 left-4 z-50 font-mono text-[10px] text-slate-300 bg-black/70 p-3 rounded-xl border border-white/10 shadow-xl space-y-1">
+                    <div>render: {renderMode} (pref: {renderPreference}, worker: {workerPreference ? 'on' : 'off'})</div>
+                    <div>probe webgl2/webgl: {webglProbe.webgl2 ? '✓' : '×'} / {webglProbe.webgl ? '✓' : '×'}</div>
+                    <div>fallback: {fallbackReason}</div>
+                    <div>shader: {lastShaderError || 'none'}</div>
+                </div>
+            )}
 
             {showCatalog && (
                 <MusicCatalog onSelect={loadMusicTrack} onClose={() => setShowCatalog(false)} />
