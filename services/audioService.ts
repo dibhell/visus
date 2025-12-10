@@ -465,6 +465,8 @@ export class AudioEngine {
             this.musicTapAnalyser ||
             this.videoTapAnalyser ||
             this.micTapAnalyser ||
+            this.vizAnalyser ||
+            this.mainAnalyser ||
             null;
 
         if (!analyser) return null;
@@ -491,9 +493,9 @@ export class AudioEngine {
                     this.vizData[i] = Math.max(this.vizData[i], scratch[i]);
                 }
             };
-            mixInto(this.videoTapAnalyser || this.videoAnalyser);
-            mixInto(this.musicTapAnalyser || this.musicAnalyser);
-            mixInto(this.micTapAnalyser || this.micAnalyser);
+            mixInto(this.videoTapAnalyser || this.videoAnalyser || this.vizAnalyser || this.mainAnalyser);
+            mixInto(this.musicTapAnalyser || this.musicAnalyser || this.vizAnalyser || this.mainAnalyser);
+            mixInto(this.micTapAnalyser || this.micAnalyser || this.vizAnalyser || this.mainAnalyser);
 
             // Last resort: use time-domain energy to synthesize a floor so the UI shows activity.
             if (this.vizData.every(v => v === 0)) {

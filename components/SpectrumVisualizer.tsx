@@ -114,8 +114,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 for (let x = 0; x < W; x += step) {
                     const t = x / Math.max(1, W);
                     const energy = sampler(t);
-                    const boosted = Math.pow(Math.max(0, energy), 0.6);
-                    const barHeight = Math.max(H * 0.02, Math.min(H * 0.95, boosted * H * 1.5));
+                    const boosted = Math.pow(Math.max(0, energy), 0.5);
+                    const barHeight = Math.max(H * 0.08, Math.min(H * 0.95, boosted * H * 6));
                     const y = H - barHeight;
                     if (x === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
