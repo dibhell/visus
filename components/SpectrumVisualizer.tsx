@@ -17,12 +17,23 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const containerRef = useRef<HTMLDivElement>(null);
     const syncParamsRef = useRef<SyncParam[]>(syncParams);
     const hoveredBandRef = useRef<number | null>(null);
-    
+
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
+    const [spectrumDebug, setSpectrumDebug] = useState({
+        targetPeak: 0.95,
+        minPeak: 0.08,
+        maxGain: 8.0,
+        boostExp: 0.5,
+        boostMult: 2.0,
+        minHeightFrac: 0.04,
+        maxHeightFrac: 0.95,
+    });
+    const spectrumDebugRef = useRef(spectrumDebug);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
+    useEffect(() => { spectrumDebugRef.current = spectrumDebug; }, [spectrumDebug]);
 
     // --- MATH HELPERS ---
     const getLogX = (freq: number, width: number) => {
@@ -108,16 +119,25 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // helper rysowania z mocniejszym boostem
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
+                const dbg = spectrumDebugRef.current;
+
                 ctx.beginPath();
                 const bars = 96;
                 ctx.moveTo(0, H - 2);
 
                 for (let i = 0; i < bars; i++) {
-                    const energy = sampler(i, bars);          // 0..1
-                    const boosted = Math.pow(Math.max(0, energy), 0.5) * 2.0;
+                    const energy = sampler(i, bars); // 0..1
+                    const boosted = Math.pow(
+                        Math.max(0, energy),
+                        dbg.boostExp
+                    ) * dbg.boostMult;
+
+                    const minH = H * dbg.minHeightFrac;
+                    const maxH = H * dbg.maxHeightFrac;
+
                     const barH = Math.max(
-                        H * 0.04,                             // min 4% wysokości
-                        Math.min(H * 0.95, boosted * H)       // max 95% wysokości
+                        minH,
+                        Math.min(maxH, boosted * H)
                     );
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
@@ -144,13 +164,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 } else {
                     const normPeak = peak / 255;
 
-                    const TARGET_PEAK = 0.95;
-                    const MIN_PEAK = 0.08;
-                    const MAX_GAIN = 8.0;
+                    const dbg = spectrumDebugRef.current;
 
                     const gain = Math.min(
-                        MAX_GAIN,
-                        TARGET_PEAK / Math.max(normPeak, MIN_PEAK)
+                        dbg.maxGain,
+                        dbg.targetPeak / Math.max(normPeak, dbg.minPeak)
                     );
 
                     drawSpectrum((i, bars) => {
@@ -406,6 +424,121 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     className="block w-full h-full"
                     style={{ width: '100%', height: '100%' }}
                 />
+            </div>
+            {/* PANEL DEBUG POD ANALIZATOREM */}
+            <div className="border-t border-white/10 bg-slate-900/80 px-3 py-2 flex flex-wrap gap-2 text-[10px] font-mono text-slate-300">
+                <div className="flex flex-col mr-2">
+                    <span className="text-slate-500 mb-1">Auto gain</span>
+                    <label className="flex items-center gap-1 mb-1">
+                        <span>targetPeak</span>
+                        <input
+                            type="number"
+                            step={0.01}
+                            min={0}
+                            max={1}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.targetPeak}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                targetPeak: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1 mb-1">
+                        <span>minPeak</span>
+                        <input
+                            type="number"
+                            step={0.01}
+                            min={0}
+                            max={1}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.minPeak}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                minPeak: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1">
+                        <span>maxGain</span>
+                        <input
+                            type="number"
+                            step={0.1}
+                            min={0}
+                            max={20}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.maxGain}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                maxGain: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                </div>
+
+                <div className="flex flex-col">
+                    <span className="text-slate-500 mb-1">Shape</span>
+                    <label className="flex items-center gap-1 mb-1">
+                        <span>boostExp</span>
+                        <input
+                            type="number"
+                            step={0.05}
+                            min={0.1}
+                            max={2}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.boostExp}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                boostExp: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1 mb-1">
+                        <span>boostMult</span>
+                        <input
+                            type="number"
+                            step={0.1}
+                            min={0}
+                            max={5}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.boostMult}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                boostMult: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1 mb-1">
+                        <span>minH</span>
+                        <input
+                            type="number"
+                            step={0.01}
+                            min={0}
+                            max={0.5}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.minHeightFrac}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                minHeightFrac: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1">
+                        <span>maxH</span>
+                        <input
+                            type="number"
+                            step={0.01}
+                            min={0.3}
+                            max={1}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={spectrumDebug.maxHeightFrac}
+                            onChange={e => setSpectrumDebug(d => ({
+                                ...d,
+                                maxHeightFrac: Number(e.target.value) || 0
+                            }))}
+                        />
+                    </label>
+                </div>
             </div>
             <div className="absolute top-2 left-3 text-[9px] text-slate-500 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
                 Interactive Spectrum<br/>
