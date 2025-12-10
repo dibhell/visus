@@ -8,6 +8,10 @@ export class ExperimentalAudioEngine extends AudioEngine {
     private vuScratch = new Float32Array(3);
     private vuSmooth = new Float32Array(3);
 
+    getRecordingStream(): MediaStream | null {
+        return this.recDest ? this.recDest.stream : null;
+    }
+
     getLevelsFast(smoothing = 0.25): Float32Array {
         const useWorklet = (this as any).vuWorkletReady && (this as any).useWorkletFFT && (this as any).vuWorkletLevels;
         if (useWorklet) {

@@ -86,9 +86,15 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             drawGridLine(10000, '10k');
 
             // 3. Spectrum Fill
-            let fftData: Uint8Array | null = (ae as any).getFFTData ? (ae as any).getFFTData() : null;
+            let fftData: Uint8Array | null = null;
+            if ((ae as any).getVizFFTBuffer) {
+                fftData = (ae as any).getVizFFTBuffer();
+            }
+            if (!fftData && (ae as any).getFFTData) {
+                fftData = (ae as any).getFFTData();
+            }
             if (!fftData) {
-                const analyser = (ae as any).mainAnalyser as AnalyserNode | null;
+                const analyser = (ae as any).vizAnalyser as AnalyserNode | null;
                 if (analyser) {
                     const buf = new Uint8Array(analyser.frequencyBinCount);
                     analyser.getByteFrequencyData(buf);
@@ -100,13 +106,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.beginPath();
                 
                 const step = 2;
+                const gainVis = 1.4;
                 for (let x = 0; x < W; x += step) {
                     const freq = getFreqFromX(x, W);
                     const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
                     const binIndex = Math.min(fftData.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData.length)));
                     const val = Math.min(255, (fftData[binIndex] || 0));
                     
-                    const barHeight = (val / 255) * (H * 0.9);
+                    const barHeight = Math.min(H * 0.95, (val / 255) * H * gainVis);
                     const y = H - barHeight;
 
                     if (x === 0) ctx.moveTo(x, y);

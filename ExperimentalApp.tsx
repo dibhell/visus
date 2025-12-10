@@ -1581,9 +1581,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         const canvasStream = canvasRef.current.captureStream(Math.min(recordFps, 30));
         const videoTracks = canvasStream.getVideoTracks();
 
-        let recordingAudio: { stream?: MediaStream | null; cleanup?: () => void } = { cleanup: () => {} };
-        let mixTracks: MediaStreamTrack[] = [];
-
+        let audioTracks: MediaStreamTrack[] = [];
+        const recordingAudio = { cleanup: () => {} };
         if (!debugNoAudio) {
             try {
                 await audioRef.current.initContext();
@@ -1593,19 +1592,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             } catch (e) {
                 console.warn('Audio context resume failed before recording', e);
             }
-
-            const buildRecordingAudio = () => {
-                const streamFactory = (audioRef.current as any).createRecordingStream;
-                if (typeof streamFactory === 'function') {
-                    return streamFactory.call(audioRef.current);
-                }
-                const stream = audioRef.current.getAudioStream();
-                return { stream, cleanup: () => {} };
-            };
-            recordingAudio = buildRecordingAudio();
-            mixTracks = (recordingAudio.stream?.getAudioTracks() || [])
-                .filter((t: MediaStreamTrack): t is MediaStreamTrack => t.readyState === 'live');
-            mixTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
+            const audioStream = (audioRef.current as any).getRecordingStream ? (audioRef.current as any).getRecordingStream() : null;
+            if (audioStream) {
+                audioTracks = audioStream.getAudioTracks().filter((t: MediaStreamTrack) => t.readyState === 'live');
+                audioTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
+            }
         } else {
             console.info('[VISUS] debug_no_audio=1 -> recording video-only (no audio tracks)');
         }
@@ -1618,7 +1609,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         console.info('[VISUS] record start', {
             channels: mixerRef.current,
             channelActive,
-            mixTrackCount: mixTracks.length,
+            mixTrackCount: audioTracks.length,
             videoTracks: videoTracks.length,
             videoSource: {
                 hasSource: mixerRef.current.video.hasSource,
@@ -1635,9 +1626,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
 
-        if (!debugNoAudio && mixTracks.length === 0) {
+        if (!debugNoAudio && audioTracks.length === 0) {
             console.warn('[VISUS] record aborted: master mix has 0 audio tracks');
-            recordingAudio.cleanup?.();
             const msg = preferWebCodecs
                 ? 'WebCodecs: master mix has no audio tracks (VIDEO/MUSIC/MIC). Turn on a source and retry.'
                 : 'Brak sciezki audio w master mixie (VIDEO/MUSIC/MIC). Wlacz zrodlo i sprobuj ponownie.';
@@ -1646,8 +1636,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
 
-        const combinedStream = new MediaStream([...videoTracks, ...mixTracks]);
-        console.debug('[VISUS] combinedStream audio tracks:', combinedStream.getAudioTracks().length);
+        const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+        console.log('[VISUS] REC TRACKS', { video: combinedStream.getVideoTracks().length, audio: combinedStream.getAudioTracks().length });
         try {
             const pickMimeType = () => {
                 const candidates = [

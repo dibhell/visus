@@ -69,6 +69,15 @@ export class AudioEngine {
         return this.spectrumData;
     }
 
+    getVizFFTBuffer(): Uint8Array | null {
+        if (!this.vizAnalyser) return null;
+        if (!this.vizData || this.vizData.length !== this.vizAnalyser.frequencyBinCount) {
+            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
+        }
+        this.vizAnalyser.getByteFrequencyData(this.vizData as Uint8Array<ArrayBuffer>);
+        return this.vizData;
+    }
+
     async initContext() {
         if (!this.ctx) {
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'playback' });
@@ -81,7 +90,7 @@ export class AudioEngine {
 
             this.vizAnalyser = this.ctx.createAnalyser();
             this.vizAnalyser.fftSize = 2048;
-            this.vizAnalyser.smoothingTimeConstant = 0.55;
+            this.vizAnalyser.smoothingTimeConstant = 0.5;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
 
             // Silent sink to keep analyser branches pulling without audible output
