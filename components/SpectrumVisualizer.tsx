@@ -123,16 +123,17 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // 3.3 – helper do rysowania krzywej (BEZ FFT)
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
+                const dbg = spectrumDebugRef.current;
                 ctx.beginPath();
-                const bars = 96;
+                const bars = 160;
                 ctx.moveTo(0, H - 2);
 
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars); // 0..1
-                    const boosted = Math.pow(Math.max(0, energy), 0.5) * 2.0;
+                    const boosted = Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult;
 
-                    const minH = H * 0.03;
-                    const maxH = H * 0.95;
+                    const minH = H * dbg.minHeightFrac;
+                    const maxH = H * dbg.maxHeightFrac;
 
                     const barH = Math.max(
                         minH,
@@ -158,6 +159,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 };
 
                 const bands = smoothBandsRef.current;
+                const dbg = spectrumDebugRef.current;
+                const peakBand = Math.max(bands.sync1 || 0, bands.sync2 || 0, bands.sync3 || 0);
+                const gain = Math.min(
+                    dbg.maxGain,
+                    dbg.targetPeak / Math.max(peakBand, dbg.minPeak)
+                );
 
                 drawSpectrum((i, bars) => {
                     const t = i / Math.max(1, bars - 1); // 0..1 po szerokości
@@ -171,7 +178,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         mid  * tri(t, 0.5,  0.35) +
                         high * tri(t, 0.85, 0.3);
 
-                    return energy;
+                    return Math.min(1, energy * gain);
                 });
             } else {
                 drawSpectrum(() => 0.02);
