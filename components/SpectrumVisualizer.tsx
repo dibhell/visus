@@ -87,21 +87,36 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // 3. Spectrum Fill
             let fftData: Uint8Array | null = null;
-            if (ae && (ae as any).getVizFFTBuffer) {
-                fftData = (ae as any).getVizFFTBuffer();
+            const aeAny: any = ae;
+
+            // 3.1 Spróbuj pobrać FFT z workleta / silnika
+            if (aeAny && typeof aeAny.getVizFFTBuffer === 'function') {
+                try {
+                    fftData = aeAny.getVizFFTBuffer();
+                } catch {
+                    fftData = null;
+                }
             }
-            if (!fftData && ae && (ae as any).getFFTData) {
-                fftData = (ae as any).getFFTData();
-            }
-            if (!fftData) {
-                const analyser = (ae as any)?.vizAnalyser as AnalyserNode | null;
-                if (analyser) {
-                    const buf = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(buf);
-                    fftData = buf;
+            if (!fftData && aeAny && typeof aeAny.getFFTData === 'function') {
+                try {
+                    fftData = aeAny.getFFTData();
+                } catch {
+                    fftData = null;
                 }
             }
 
+            // 3.2 Sprawdź czy FFT ma realną energię (nie same zera)
+            let hasRealFft = false;
+            if (fftData && fftData.length > 0) {
+                for (let i = 0; i < fftData.length; i++) {
+                    if (fftData[i] > 0) {
+                        hasRealFft = true;
+                        break;
+                    }
+                }
+            }
+
+            // Helper do rysowania krzywej widma
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 ctx.beginPath();
                 const bars = 96;
@@ -121,27 +136,53 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.stroke();
             };
 
-            if (enabled && fftData && fftData.length > 0) {
-                const nyquist = (ae as any)?.ctx?.sampleRate ? ((ae as any).ctx.sampleRate / 2) : 24000;
+            // 3.3 Główna ścieżka: prawdziwe FFT z silnika
+            if (enabled && hasRealFft && fftData) {
+                const len = fftData.length;
                 drawSpectrum((i, bars) => {
-                    const step = Math.max(1, Math.floor(fftData!.length / bars));
-                    const binIndex = Math.min(fftData!.length - 1, i * step);
-                    const val = fftData![binIndex] || 0;
-                    const norm = Math.min(1, val / 255);
-                    return norm;
+                    const step = Math.max(1, Math.floor(len / bars));
+                    const binIndex = Math.min(len - 1, i * step);
+                    const val = fftData[binIndex] || 0;
+                    return Math.min(1, val / 255);
                 });
             } else {
-                const bands = (ae as any)?.getBandLevels ? (ae as any).getBandLevels() : { sync1: 0, sync2: 0, sync3: 0 };
+                // 3.4 Fallback: użyj bandów / VU jeśli FFT nie żyje
+                let bands = { sync1: 0, sync2: 0, sync3: 0 };
+
+                // a) jeśli AudioEngine ma getBandLevels, użyj go
+                if (aeAny && typeof aeAny.getBandLevels === 'function') {
+                    try {
+                        bands = aeAny.getBandLevels() || bands;
+                    } catch {
+                        // zignoruj
+                    }
+                } else if (aeAny && aeAny.vuWorkletLevels) {
+                    // b) jeśli mamy tylko VU, normalizuj je do 0..1
+                    const lv = aeAny.vuWorkletLevels;
+                    const maxLv = Math.max(lv.music || 0, lv.video || 0, lv.mic || 0, 0.0001);
+                    const norm = (v: number) => Math.min(1, (v || 0) / maxLv);
+                    bands = {
+                        sync1: norm(lv.music || lv.video || 0),
+                        sync2: norm(lv.video || lv.music || 0),
+                        sync3: norm(lv.mic || lv.music || lv.video || 0),
+                    };
+                }
+
+                // mała funkcja trójkątowa do rozkładu energii po szerokości
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
                 };
+
                 drawSpectrum((i, bars) => {
                     const t = i / Math.max(1, bars - 1);
                     const bass = bands.sync1 || 0;
                     const mid = bands.sync2 || 0;
                     const high = bands.sync3 || 0;
-                    const energy = bass * tri(t, 0.15, 0.25) + mid * tri(t, 0.5, 0.25) + high * tri(t, 0.85, 0.25);
+                    const energy =
+                        bass * tri(t, 0.15, 0.25) +
+                        mid * tri(t, 0.5, 0.25) +
+                        high * tri(t, 0.85, 0.25);
                     return energy;
                 });
             }
