@@ -97,28 +97,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             drawGridLine(1000, '1k');
             drawGridLine(10000, '10k');
 
-            // 3. Spectrum Fill â€“ prefer FFT (log, hi-res), fallback to band levels
+            // 3. Spectrum Fill ÔÇô prosta wersja, tylko z BASS/MID/HIGH
             const aeAny: any = ae;
 
-            // 3.1 â€“ pobierz FFT jeÅ›li dostÄ™pne
-            let fftData: Uint8Array | null = null;
-            if (aeAny?.getVizFFTBuffer) {
-                fftData = aeAny.getVizFFTBuffer();
-            }
-            if (!fftData && aeAny?.getFFTData) {
-                fftData = aeAny.getFFTData();
-            }
-            if (!fftData) {
-                const analyser = aeAny?.vizAnalyser as AnalyserNode | null;
-                if (analyser) {
-                    const buf = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(buf);
-                    fftData = buf;
-                }
-            }
-
-            // 3.2 â€“ bandy jako pewny fallback
+            // 3.1 ÔÇô pobierz bandy z AudioEngine
             let rawBands = { sync1: 0, sync2: 0, sync3: 0 };
+
             if (aeAny?.getBandLevels) {
                 rawBands = aeAny.getBandLevels() || rawBands;
             } else if (aeAny?.vuWorkletBands && aeAny.vuWorkletBands.video) {
@@ -130,25 +114,32 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 };
             }
 
+            // 3.2 ÔÇô lekkie wyg+éadzenie, +-eby nie trzepa+éo
             const smooth = smoothBandsRef.current;
-            const alpha = 0.6;
+            const alpha = 0.6; // 0 ÔÇô mega smooth, 1 ÔÇô zero smooth
             smooth.sync1 = smooth.sync1 * (1 - alpha) + rawBands.sync1 * alpha;
             smooth.sync2 = smooth.sync2 * (1 - alpha) + rawBands.sync2 * alpha;
             smooth.sync3 = smooth.sync3 * (1 - alpha) + rawBands.sync3 * alpha;
 
-            // 3.3 â€“ helper do rysowania krzywej
+            // 3.3 ÔÇô helper do rysowania krzywej (BEZ FFT)
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 const dbg = spectrumDebugRef.current;
                 ctx.beginPath();
-                const bars = 240;
+                const bars = 160;
                 ctx.moveTo(0, H - 2);
 
                 for (let i = 0; i < bars; i++) {
-                    const energy = sampler(i, bars);
+                    const energy = sampler(i, bars); // 0..1
                     const boosted = Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult;
+
                     const minH = H * dbg.minHeightFrac;
                     const maxH = H * dbg.maxHeightFrac;
-                    const barH = Math.max(minH, Math.min(maxH, boosted * H));
+
+                    const barH = Math.max(
+                        minH,
+                        Math.min(maxH, boosted * H)
+                    );
+
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
                     ctx.lineTo(x, y);
@@ -160,48 +151,37 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.stroke();
             };
 
-            // 3.4 â€“ FFT (log sampling) lub fallback na bandy
-            if (enabled && fftData && fftData.length) {
-                let peak = 0;
-                for (let i = 0; i < fftData.length; i++) {
-                    if (fftData[i] > peak) peak = fftData[i];
-                }
-                const dbg = spectrumDebugRef.current;
-                const normPeak = peak / 255;
-                const gain = Math.min(dbg.maxGain, dbg.targetPeak / Math.max(normPeak, dbg.minPeak));
-                const nyquist = (aeAny?.ctx?.sampleRate || 48000) / 2;
-
-                drawSpectrum((i, bars) => {
-                    const t = i / Math.max(1, bars - 1);
-                    const freq = 20 * Math.pow(10, t * Math.log10(20000 / 20));
-                    const bin = Math.min(
-                        fftData!.length - 1,
-                        Math.max(0, Math.round((freq / nyquist) * fftData!.length))
-                    );
-                    const energy = (fftData![bin] || 0) / 255;
-                    return Math.min(1, energy * gain);
-                });
-            } else {
-                const dbg = spectrumDebugRef.current;
+            // 3.4 ÔÇô rozk+éad energii band+-w po szeroko+ci (bez FFT)
+            if (enabled) {
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
                 };
+
                 const bands = smoothBandsRef.current;
+                const dbg = spectrumDebugRef.current;
                 const peakBand = Math.max(bands.sync1 || 0, bands.sync2 || 0, bands.sync3 || 0);
-                const gain = Math.min(dbg.maxGain, dbg.targetPeak / Math.max(peakBand, dbg.minPeak));
+                const gain = Math.min(
+                    dbg.maxGain,
+                    dbg.targetPeak / Math.max(peakBand, dbg.minPeak)
+                );
 
                 drawSpectrum((i, bars) => {
-                    const t = i / Math.max(1, bars - 1);
+                    const t = i / Math.max(1, bars - 1); // 0..1 po szeroko+ci
+
                     const bass = bands.sync1 || 0;
                     const mid  = bands.sync2 || 0;
                     const high = bands.sync3 || 0;
+
                     const energy =
                         bass * tri(t, 0.15, 0.3) +
                         mid  * tri(t, 0.5,  0.35) +
                         high * tri(t, 0.85, 0.3);
+
                     return Math.min(1, energy * gain);
                 });
+            } else {
+                drawSpectrum(() => 0.02);
             }
 // 4. Interactive Points
             const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
