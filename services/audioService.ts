@@ -441,7 +441,7 @@ export class AudioEngine {
             const chooseBuckets = (): Float32Array | null => {
                 const priority: Array<'music' | 'video' | 'mic'> = ['music', 'video', 'mic'];
                 for (const ch of priority) {
-                    if (this.channelActive[ch] && this.vuWorkletBuckets[ch]) return this.vuWorkletBuckets[ch];
+                    if (this.vuWorkletBuckets[ch]) return this.vuWorkletBuckets[ch];
                 }
                 return this.vuWorkletBuckets.music || this.vuWorkletBuckets.video || this.vuWorkletBuckets.mic || null;
             };
@@ -456,32 +456,30 @@ export class AudioEngine {
             }
         }
 
-        // Prefer active sources only; if none active, return null (spectrum should be blank)
-        const pickActive = (an: AnalyserNode | null, active: boolean) => active ? an : null;
+        // Prefer available analysers regardless of channelActive to keep spectrum alive
         const analyser =
-            pickActive(this.musicTapAnalyser, this.channelActive.music) ||
-            pickActive(this.videoTapAnalyser, this.channelActive.video) ||
-            pickActive(this.micTapAnalyser, this.channelActive.mic) ||
+            this.musicTapAnalyser ||
+            this.videoTapAnalyser ||
+            this.micTapAnalyser ||
             null;
 
-        const anyActive = this.channelActive.music || this.channelActive.video || this.channelActive.mic;
-        if (!analyser || !anyActive) return null;
+        if (!analyser) return null;
 
         if (this.vizData.length !== analyser.frequencyBinCount) {
             this.vizData = new Uint8Array(analyser.frequencyBinCount);
         }
         analyser.getByteFrequencyData(this.vizData as Uint8Array<ArrayBuffer>);
 
-        // If the analyser is starved (all zeros), try a quick fallback from other ACTIVE analysers only.
+        // If the analyser is starved (all zeros), try a quick fallback from other analysers.
         let hasEnergy = false;
         for (let i = 0; i < this.vizData.length; i++) {
             if (this.vizData[i] > 0) { hasEnergy = true; break; }
         }
 
-        if (!hasEnergy && anyActive) {
+        if (!hasEnergy) {
             const scratch = new Uint8Array(512);
-            const mixInto = (src: AnalyserNode | null, active: boolean) => {
-                if (!src || !active) return;
+            const mixInto = (src: AnalyserNode | null) => {
+                if (!src) return;
                 if (src.fftSize < 1024) src.fftSize = 1024;
                 src.smoothingTimeConstant = 0.5;
                 src.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
@@ -489,9 +487,9 @@ export class AudioEngine {
                     this.vizData[i] = Math.max(this.vizData[i], scratch[i]);
                 }
             };
-            mixInto(this.videoTapAnalyser || this.videoAnalyser, this.channelActive.video);
-            mixInto(this.musicTapAnalyser || this.musicAnalyser, this.channelActive.music);
-            mixInto(this.micTapAnalyser || this.micAnalyser, this.channelActive.mic);
+            mixInto(this.videoTapAnalyser || this.videoAnalyser);
+            mixInto(this.musicTapAnalyser || this.musicAnalyser);
+            mixInto(this.micTapAnalyser || this.micAnalyser);
 
             // Last resort: use time-domain energy to synthesize a floor so the UI shows activity.
             if (this.vizData.every(v => v === 0)) {

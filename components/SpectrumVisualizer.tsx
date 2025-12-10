@@ -87,11 +87,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // 3. Spectrum Fill
             let fftData: Uint8Array | null = null;
-            if ((ae as any).getVizFFTBuffer) {
-                fftData = (ae as any).getVizFFTBuffer();
-            }
-            if (!fftData && (ae as any).getFFTData) {
+            if ((ae as any).getFFTData) {
                 fftData = (ae as any).getFFTData();
+            }
+            if (!fftData && (ae as any).getVizFFTBuffer) {
+                fftData = (ae as any).getVizFFTBuffer();
             }
             if (!fftData) {
                 const analyser = (ae as any).vizAnalyser as AnalyserNode | null;

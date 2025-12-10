@@ -583,7 +583,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [frameCapMode, setFrameCapMode] = useState<'dynamic' | 'manual'>(getFrameCapMode());
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(8000000);
-    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(webCodecsSupported);
+    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(false);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
     const [quality, setQuality] = useState<QualityMode>('high');
@@ -1519,6 +1519,16 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const videoTrackRef = useRef<MediaStreamTrack | null>(null);
     const encodedChunksRef = useRef<Uint8Array[]>([]);
 
+    const buildRecordingAudio = () => {
+        const ae: any = audioRef.current;
+        if (!ae) return { stream: null as MediaStream | null, cleanup: () => {} };
+        if (typeof ae.createRecordingStream === 'function') {
+            return ae.createRecordingStream();
+        }
+        const stream = typeof ae.getAudioStream === 'function' ? ae.getAudioStream() : null;
+        return { stream, cleanup: () => {} };
+    };
+
     const stopWebCodecsRecording = async () => {
         try { await readerRef.current?.cancel(); } catch {}
         if (videoTrackRef.current) videoTrackRef.current.stop();
@@ -1550,6 +1560,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         const videoTracks = canvasStream.getVideoTracks();
 
         let audioTracks: MediaStreamTrack[] = [];
+        let recordingAudio: { stream: MediaStream | null; cleanup: () => void } = { stream: null, cleanup: () => {} };
         if (!debugNoAudio) {
             try {
                 await audioRef.current.initContext();
@@ -1559,9 +1570,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             } catch (e) {
                 console.warn('Audio context resume failed before recording', e);
             }
-            const audioStream = (audioRef.current as any).getRecordingStream ? (audioRef.current as any).getRecordingStream() : null;
-            if (audioStream) {
-                audioTracks = audioStream.getAudioTracks().filter((t: MediaStreamTrack) => t.readyState === 'live');
+            const { stream, cleanup } = buildRecordingAudio();
+            recordingAudio = { stream, cleanup };
+            if (stream) {
+                audioTracks = stream.getAudioTracks().filter((t: MediaStreamTrack) => t.readyState === 'live');
                 audioTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
             }
         } else {
@@ -1602,7 +1614,26 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
 
+        console.debug('[VISUS] mixTracks before combine:', audioTracks.map((t) => ({
+            kind: t.kind,
+            readyState: t.readyState,
+            enabled: t.enabled,
+            label: t.label,
+        })));
+
         const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
+        const combinedAudioTracks = combinedStream.getAudioTracks();
+        console.debug('[VISUS] combinedStream audioTracks:', combinedAudioTracks.map((t) => ({
+            kind: t.kind,
+            readyState: t.readyState,
+            enabled: t.enabled,
+            label: t.label,
+        })));
+        if (!debugNoAudio && combinedAudioTracks.length === 0) {
+            recordingAudio.cleanup?.();
+            alert('Nagrywanie przerwane: combinedStream nie zawiera żadnej ścieżki audio.');
+            return false;
+        }
         console.log('[VISUS] REC TRACKS', { video: combinedStream.getVideoTracks().length, audio: combinedStream.getAudioTracks().length });
         try {
             const pickMimeType = () => {
@@ -1634,6 +1665,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 console.error('[VISUS] MediaRecorder runtime error', event);
             };
             recorder.onstop = () => {
+                recordingAudio.cleanup?.();
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1650,15 +1682,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return true;
         } catch (e) {
             console.error('[VISUS] MediaRecorder error', e);
+            recordingAudio.cleanup?.();
             alert('Recording failed: ' + e);
             return false;
         }
     };
 const toggleRecording = async () => {
         if (isRecording) {
-            if (useWebCodecsRecord && encoderRef.current) {
-                await stopWebCodecsRecording();
-            }
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
             }
@@ -1666,13 +1696,7 @@ const toggleRecording = async () => {
             return;
         }
 
-        if (useWebCodecsRecord && webCodecsSupported) {
-            encodedChunksRef.current = [];
-            const ok = await startMediaRecorderRecording(true);
-            if (!ok) return;
-            return;
-        }
-
+        // Force MediaRecorder path while debugging audio
         await startMediaRecorderRecording(false);
     };
 
