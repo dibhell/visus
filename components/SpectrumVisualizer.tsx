@@ -124,8 +124,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.moveTo(0, H - 2);
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars);
-                    const boosted = Math.pow(Math.max(0, energy), 0.6) * 1.6;
-                    const barH = Math.max(H * 0.02, Math.min(maxHeight, boosted * maxHeight));
+                    const boosted = Math.pow(Math.max(0, energy), 0.55) * 2.0;
+                    const barH = Math.max(H * 0.04, Math.min(maxHeight, boosted * maxHeight));
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
                     ctx.lineTo(x, y);
@@ -151,9 +151,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 const normPeak = peak / 255;
 
                 // Docelowy poziom wizualny szczytu i ograniczenia
-                const TARGET_PEAK = 0.9;   // jak wysoko ma sięgać krzywa
-                const MIN_PEAK = 0.15;     // minimalny „uczciwy” poziom, żeby nie wariować na ciszy
-                const MAX_GAIN = 8.0;      // górny limit wzmocnienia
+                const TARGET_PEAK = 0.95;   // jak wysoko ma sięgać krzywa
+                const MIN_PEAK = 0.08;     // minimalny „uczciwy” poziom, żeby nie wariować na ciszy
+                const MAX_GAIN = 10.0;      // górny limit wzmocnienia
 
                 // Jeżeli FFT jest słabe – gain rośnie, przy mocnym sygnale wraca do 1
                 const gain = Math.min(
@@ -170,7 +170,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     let energy = (val / 255) * gain;
 
                     // lekkie odcięcie szumu i ograniczenie
-                    if (energy < 0.01) energy = 0;
+                    if (energy < 0.001) energy = 0;
                     if (energy > 1) energy = 1;
 
                     return energy;
