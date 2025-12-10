@@ -108,48 +108,43 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
             }
 
-            const drawSpectrum = (sampler: (t: number) => number) => {
+            const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 ctx.beginPath();
-                const step = 1;
-                for (let x = 0; x < W; x += step) {
-                    const t = x / Math.max(1, W);
-                    const energy = sampler(t);
-                    const boosted = Math.pow(Math.max(0, energy), 0.5);
-                    const barHeight = Math.max(H * 0.08, Math.min(H * 0.95, boosted * H * 6));
-                    const y = H - barHeight;
-                    if (x === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
+                const bars = 96;
+                const maxHeight = H * 0.9;
+                ctx.moveTo(0, H - 2);
+                for (let i = 0; i < bars; i++) {
+                    const energy = sampler(i, bars);
+                    const boosted = Math.pow(Math.max(0, energy), 0.65) * 1.4;
+                    const barH = Math.max(0, Math.min(maxHeight, boosted * maxHeight));
+                    const x = (i / (bars - 1)) * W;
+                    const y = (H - 2) - barH;
+                    ctx.lineTo(x, y);
                 }
-                ctx.lineTo(W, H);
-                ctx.lineTo(0, H);
-                ctx.closePath();
-
-                const grad = ctx.createLinearGradient(0, 0, 0, H);
-                grad.addColorStop(0, 'rgba(45, 212, 191, 0.4)');
-                grad.addColorStop(1, 'rgba(45, 212, 191, 0.0)');
-                ctx.fillStyle = grad;
-                ctx.fill();
-                ctx.lineWidth = 1.5;
+                ctx.lineTo(W, H - 2);
                 ctx.strokeStyle = '#2dd4bf';
+                ctx.lineWidth = 1;
                 ctx.stroke();
             };
 
             if (enabled && fftData && fftData.length > 0) {
                 const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
-                drawSpectrum((t) => {
-                    const freq = getFreqFromX(t * W, W);
-                    const binIndex = Math.min(fftData!.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData!.length)));
-                    const norm = Math.min(1, (fftData![binIndex] || 0) / 255);
+                drawSpectrum((i, bars) => {
+                    const step = Math.max(1, Math.floor(fftData!.length / bars));
+                    const binIndex = Math.min(fftData!.length - 1, i * step);
+                    const freq = (binIndex / fftData!.length) * nyquist;
+                    const val = fftData![binIndex] || 0;
+                    const norm = Math.min(1, val / 255);
                     return norm;
                 });
             } else {
-                // Fallback: use bands (sync1/2/3) as energy distribution across spectrum
                 const bands = (ae as any).getBandLevels ? (ae as any).getBandLevels() : { sync1: 0, sync2: 0, sync3: 0 };
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
                 };
-                drawSpectrum((t) => {
+                drawSpectrum((i, bars) => {
+                    const t = i / Math.max(1, bars - 1);
                     const bass = bands.sync1 || 0;
                     const mid = bands.sync2 || 0;
                     const high = bands.sync3 || 0;
