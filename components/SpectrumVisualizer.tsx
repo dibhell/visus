@@ -87,118 +87,89 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // 3. Spectrum Fill
             let fftData: Uint8Array | null = null;
-            const aeAny: any = ae;
 
-            // 3.1 Spróbuj pobrać FFT z workleta / silnika
-            if (aeAny && typeof aeAny.getVizFFTBuffer === 'function') {
-                try {
-                    fftData = aeAny.getVizFFTBuffer();
-                } catch {
-                    fftData = null;
-                }
+            // priorytet: żywy vizAnalyser
+            if (ae && (ae as any).getVizFFTBuffer) {
+                fftData = (ae as any).getVizFFTBuffer();
             }
-            if (!fftData && aeAny && typeof aeAny.getFFTData === 'function') {
-                try {
-                    fftData = aeAny.getFFTData();
-                } catch {
-                    fftData = null;
-                }
+            // jeśli viz jest pusty, bierz miksowane FFT z silnika
+            if (!fftData && ae && (ae as any).getFFTData) {
+                fftData = (ae as any).getFFTData();
             }
-
-            // 3.2 Sprawdź czy FFT ma realną energię (nie same zera)
-            let hasRealFft = false;
-            if (fftData && fftData.length > 0) {
-                for (let i = 0; i < fftData.length; i++) {
-                    if (fftData[i] > 0) {
-                        hasRealFft = true;
-                        break;
-                    }
+            // ostateczny fallback na surowy analyser
+            if (!fftData) {
+                const analyser = (ae as any)?.vizAnalyser as AnalyserNode | null;
+                if (analyser) {
+                    const buf = new Uint8Array(analyser.frequencyBinCount);
+                    analyser.getByteFrequencyData(buf);
+                    fftData = buf;
                 }
             }
 
-            // Helper do rysowania krzywej widma
+            // helper rysowania z mocniejszym boostem
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 ctx.beginPath();
                 const bars = 96;
-                const maxHeight = H * 0.9;
                 ctx.moveTo(0, H - 2);
+
                 for (let i = 0; i < bars; i++) {
-                    const energy = sampler(i, bars);
-                    const boosted = Math.pow(Math.max(0, energy), 0.55) * 2.0;
-                    const barH = Math.max(H * 0.04, Math.min(maxHeight, boosted * maxHeight));
+                    const energy = sampler(i, bars);          // 0..1
+                    const boosted = Math.pow(Math.max(0, energy), 0.5) * 2.0;
+                    const barH = Math.max(
+                        H * 0.04,                             // min 4% wysokości
+                        Math.min(H * 0.95, boosted * H)       // max 95% wysokości
+                    );
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
                     ctx.lineTo(x, y);
                 }
+
                 ctx.lineTo(W, H - 2);
                 ctx.strokeStyle = '#2dd4bf';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             };
 
-            // 3.3 Główna ścieżka: prawdziwe FFT z silnika
-            if (enabled && hasRealFft && fftData) {
-                const len = fftData.length;
-
-                // 3.3.1 Auto gain – szukamy aktualnego maksimum w buforze FFT
+            // 3.3 – FFT + auto-gain w oparciu o peak
+            if (enabled && fftData && fftData.length > 0) {
+                // wykryj szczyt
                 let peak = 0;
-                for (let i = 0; i < len; i++) {
-                    const v = fftData[i];
-                    if (v > peak) peak = v;
+                for (let i = 0; i < fftData.length; i++) {
+                    if (fftData[i] > peak) peak = fftData[i];
                 }
 
-                // Normalizacja szczytu do 0..1
-                const normPeak = peak / 255;
+                // jeśli FFT praktycznie martwe – narysuj niski floor i wyjdź
+                if (peak < 5) {
+                    drawSpectrum(() => 0.02);
+                } else {
+                    const normPeak = peak / 255;
 
-                // Docelowy poziom wizualny szczytu i ograniczenia
-                const TARGET_PEAK = 0.95;   // jak wysoko ma sięgać krzywa
-                const MIN_PEAK = 0.08;     // minimalny „uczciwy” poziom, żeby nie wariować na ciszy
-                const MAX_GAIN = 10.0;      // górny limit wzmocnienia
+                    const TARGET_PEAK = 0.95;
+                    const MIN_PEAK = 0.08;
+                    const MAX_GAIN = 8.0;
 
-                // Jeżeli FFT jest słabe – gain rośnie, przy mocnym sygnale wraca do 1
-                const gain = Math.min(
-                    MAX_GAIN,
-                    TARGET_PEAK / Math.max(normPeak, MIN_PEAK)
-                );
+                    const gain = Math.min(
+                        MAX_GAIN,
+                        TARGET_PEAK / Math.max(normPeak, MIN_PEAK)
+                    );
 
-                drawSpectrum((i, bars) => {
-                    const step = Math.max(1, Math.floor(len / bars));
-                    const binIndex = Math.min(len - 1, i * step);
-                    const val = fftData[binIndex] || 0;
+                    drawSpectrum((i, bars) => {
+                        const step = Math.max(1, Math.floor(fftData!.length / bars));
+                        const binIndex = Math.min(fftData!.length - 1, i * step);
+                        const val = fftData![binIndex] || 0;
 
-                    // 0..1, z automatycznym wzmocnieniem
-                    let energy = (val / 255) * gain;
-
-                    // lekkie odcięcie szumu i ograniczenie
-                    if (energy < 0.001) energy = 0;
-                    if (energy > 1) energy = 1;
-
-                    return energy;
-                });
+                        let energy = (val / 255) * gain;  // 0..1 z auto-gainem
+                        if (energy < 0) energy = 0;
+                        if (energy > 1) energy = 1;
+                        return energy;
+                    });
+                }
             } else {
-                // 3.4 Fallback: użyj bandów / VU jeśli FFT nie żyje
-                let bands = { sync1: 0, sync2: 0, sync3: 0 };
+                // 3.4 – Fallback na bandy / VU BEZ ZMIAN
+                const bands = (ae as any)?.getBandLevels
+                    ? (ae as any).getBandLevels()
+                    : { sync1: 0, sync2: 0, sync3: 0 };
 
-                // a) jeśli AudioEngine ma getBandLevels, użyj go
-                if (aeAny && typeof aeAny.getBandLevels === 'function') {
-                    try {
-                        bands = aeAny.getBandLevels() || bands;
-                    } catch {
-                        // zignoruj
-                    }
-                } else if (aeAny && aeAny.vuWorkletLevels) {
-                    // b) jeśli mamy tylko VU, normalizuj je do 0..1
-                    const lv = aeAny.vuWorkletLevels;
-                    const maxLv = Math.max(lv.music || 0, lv.video || 0, lv.mic || 0, 0.0001);
-                    const norm = (v: number) => Math.min(1, (v || 0) / maxLv);
-                    bands = {
-                        sync1: norm(lv.music || lv.video || 0),
-                        sync2: norm(lv.video || lv.music || 0),
-                        sync3: norm(lv.mic || lv.music || lv.video || 0),
-                    };
-                }
-
-                // mała funkcja trójkątowa do rozkładu energii po szerokości
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
