@@ -93,10 +93,10 @@ export class AudioEngine {
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
             this.vizAnalyser = this.ctx.createAnalyser();
-            this.vizAnalyser.fftSize = 1024; // wizualizacja: 1024 biny wystarcz¦ù i s¦ù ta+äsze
-            this.vizAnalyser.smoothingTimeConstant = 0.28; // troch¦Ö +-ywsze, mniej rozmycia
-            this.vizAnalyser.minDecibels = -90;
-            this.vizAnalyser.maxDecibels = -10;
+            this.vizAnalyser.fftSize = 4096; // wizualizacja: 1024 biny wystarcz¦ù i s¦ù ta+äsze
+            this.vizAnalyser.smoothingTimeConstant = 0.15; // troch¦Ö +-ywsze, mniej rozmycia
+            this.vizAnalyser.minDecibels = -100;
+            this.vizAnalyser.maxDecibels = -5;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
 
             // Silent sink to keep analyser branches pulling without audible output
