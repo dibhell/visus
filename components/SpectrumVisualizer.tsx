@@ -124,7 +124,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.moveTo(0, H - 2);
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars);
-                    const boosted = Math.pow(Math.max(0, energy), 0.65) * 1.4;
+                    const boosted = Math.pow(Math.max(0, energy), 0.6) * 1.6;
                     const barH = Math.max(H * 0.02, Math.min(maxHeight, boosted * maxHeight));
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
@@ -139,11 +139,41 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             // 3.3 Główna ścieżka: prawdziwe FFT z silnika
             if (enabled && hasRealFft && fftData) {
                 const len = fftData.length;
+
+                // 3.3.1 Auto gain – szukamy aktualnego maksimum w buforze FFT
+                let peak = 0;
+                for (let i = 0; i < len; i++) {
+                    const v = fftData[i];
+                    if (v > peak) peak = v;
+                }
+
+                // Normalizacja szczytu do 0..1
+                const normPeak = peak / 255;
+
+                // Docelowy poziom wizualny szczytu i ograniczenia
+                const TARGET_PEAK = 0.9;   // jak wysoko ma sięgać krzywa
+                const MIN_PEAK = 0.15;     // minimalny „uczciwy” poziom, żeby nie wariować na ciszy
+                const MAX_GAIN = 8.0;      // górny limit wzmocnienia
+
+                // Jeżeli FFT jest słabe – gain rośnie, przy mocnym sygnale wraca do 1
+                const gain = Math.min(
+                    MAX_GAIN,
+                    TARGET_PEAK / Math.max(normPeak, MIN_PEAK)
+                );
+
                 drawSpectrum((i, bars) => {
                     const step = Math.max(1, Math.floor(len / bars));
                     const binIndex = Math.min(len - 1, i * step);
                     const val = fftData[binIndex] || 0;
-                    return Math.min(1, val / 255);
+
+                    // 0..1, z automatycznym wzmocnieniem
+                    let energy = (val / 255) * gain;
+
+                    // lekkie odcięcie szumu i ograniczenie
+                    if (energy < 0.01) energy = 0;
+                    if (energy > 1) energy = 1;
+
+                    return energy;
                 });
             } else {
                 // 3.4 Fallback: użyj bandów / VU jeśli FFT nie żyje
