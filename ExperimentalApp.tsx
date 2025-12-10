@@ -1112,9 +1112,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 lastBandLevelsRef.current = bandLevels;
             }
             if (!skipHeavy) {
-                bandLevels.sync1 = Math.max(0, ae.bands.sync1 * (currentSyncParams[0]?.gain ?? 1));
-                bandLevels.sync2 = Math.max(0, ae.bands.sync2 * (currentSyncParams[1]?.gain ?? 1));
-                bandLevels.sync3 = Math.max(0, ae.bands.sync3 * (currentSyncParams[2]?.gain ?? 1));
+                bandLevels.sync1 = 0;
+                bandLevels.sync2 = 0;
+                bandLevels.sync3 = 0;
 
                 const sampleStride = performanceModeRef.current === 'high' ? 1 : performanceModeRef.current === 'medium' ? 2 : 3;
                 const shouldSampleFft = needsSpectrum && (frameIndexRef.current % sampleStride === 0);
@@ -1146,41 +1146,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         return Math.min(1, norm * gain);
                     };
 
-                    const fftBands = {
-                        sync1: sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1),
-                        sync2: sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1),
-                        sync3: sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1),
-                    };
-
-                    const anyBand = bandLevels.sync1 + bandLevels.sync2 + bandLevels.sync3;
-                    if (anyBand < 0.001) {
-                        bandLevels.sync1 = fftBands.sync1;
-                        bandLevels.sync2 = fftBands.sync2;
-                        bandLevels.sync3 = fftBands.sync3;
-                    } else {
-                        bandLevels.sync1 = Math.max(bandLevels.sync1, fftBands.sync1);
-                        bandLevels.sync2 = Math.max(bandLevels.sync2, fftBands.sync2);
-                        bandLevels.sync3 = Math.max(bandLevels.sync3, fftBands.sync3);
-                    }
-                }
-
-                const spectrum = frameStateRef.current.spectrum;
-                if (spectrum && spectrum.length > 0) {
-                    const sampleRange = (start: number, end: number) => {
-                        const s = Math.max(0, Math.min(spectrum.length - 1, Math.floor(start)));
-                        const e = Math.max(s, Math.min(spectrum.length - 1, Math.ceil(end)));
-                        let sum = 0;
-                        let count = 0;
-                        for (let i = s; i <= e; i++) { sum += spectrum[i]; count++; }
-                        const avg = count > 0 ? sum / count : 0;
-                        return Math.min(1, avg / 255);
-                    };
-                    const bass = sampleRange(0, spectrum.length * 0.08);
-                    const mids = sampleRange(spectrum.length * 0.08, spectrum.length * 0.35);
-                    const highs = sampleRange(spectrum.length * 0.35, spectrum.length * 0.8);
-                    bandLevels.sync1 = Math.max(bandLevels.sync1, bass);
-                    bandLevels.sync2 = Math.max(bandLevels.sync2, mids);
-                    bandLevels.sync3 = Math.max(bandLevels.sync3, highs);
+                    bandLevels.sync1 = sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1);
+                    bandLevels.sync2 = sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1);
+                    bandLevels.sync3 = sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1);
                 }
                 lastBandLevelsRef.current = bandLevels;
             }
@@ -1582,7 +1550,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         const videoTracks = canvasStream.getVideoTracks();
 
         let audioTracks: MediaStreamTrack[] = [];
-        const recordingAudio = { cleanup: () => {} };
         if (!debugNoAudio) {
             try {
                 await audioRef.current.initContext();
@@ -1621,7 +1588,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         if (!debugNoAudio && !hasActiveAudioSource) {
             console.warn('[VISUS] record aborted: no active VIDEO/MUSIC/MIC source armed for mix');
-            recordingAudio.cleanup?.();
             alert('Brak aktywnego zrodla audio (VIDEO/MUSIC/MIC). Wlacz kanal i sprobuj ponownie.');
             return false;
         }
@@ -1651,7 +1617,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             };
             const mimeType = pickMimeType();
             if (!mimeType) {
-                recordingAudio.cleanup?.();
                 alert('MediaRecorder: brak obslugiwanych formatow (mp4/webm).');
                 return false;
             }
@@ -1659,7 +1624,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             console.debug('[VISUS] MediaRecorder mime selected:', mimeType);
             if (!debugNoAudio && combinedStream.getAudioTracks().length === 0) {
                 console.warn('[VISUS] combined stream missing audio track');
-                recordingAudio.cleanup?.();
                 alert('Nagrywanie przerwane: brak aktywnej sciezki audio w strumieniu.');
                 return false;
             }
@@ -1668,10 +1632,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
             recorder.onerror = (event) => {
                 console.error('[VISUS] MediaRecorder runtime error', event);
-                recordingAudio.cleanup?.();
             };
             recorder.onstop = () => {
-                recordingAudio.cleanup?.();
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1688,7 +1650,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return true;
         } catch (e) {
             console.error('[VISUS] MediaRecorder error', e);
-            recordingAudio.cleanup?.();
             alert('Recording failed: ' + e);
             return false;
         }

@@ -9,7 +9,10 @@ export class ExperimentalAudioEngine extends AudioEngine {
     private vuSmooth = new Float32Array(3);
 
     getRecordingStream(): MediaStream | null {
-        return this.recDest ? this.recDest.stream : null;
+        if (!this.ctx) return new MediaStream();
+        // Ensure recDest exists and is wired to master
+        const stream = this.getAudioStream();
+        return stream || new MediaStream();
     }
 
     getLevelsFast(smoothing = 0.25): Float32Array {
