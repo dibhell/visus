@@ -1573,6 +1573,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             const { stream, cleanup } = buildRecordingAudio();
             recordingAudio = { stream, cleanup };
             if (stream) {
+                console.debug('[VISUS] rec stream tracks', stream.getAudioTracks().map((t: MediaStreamTrack) => ({
+                    kind: t.kind,
+                    readyState: t.readyState,
+                    enabled: t.enabled,
+                    label: t.label,
+                })));
                 audioTracks = stream.getAudioTracks().filter((t: MediaStreamTrack) => t.readyState === 'live');
                 audioTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
             }

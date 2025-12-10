@@ -105,15 +105,15 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             if (enabled && fftData && fftData.length > 0) {
                 ctx.beginPath();
                 
-                const step = 2;
+                const step = 1;
                 for (let x = 0; x < W; x += step) {
                     const freq = getFreqFromX(x, W);
                     const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
                     const binIndex = Math.min(fftData.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData.length)));
-                    const val = Math.min(255, (fftData[binIndex] || 0)) / 255;
-
-                    const boosted = Math.pow(val, 0.6);
-                    const barHeight = Math.max(boosted * H, val > 0.03 ? H * 0.02 : 0);
+                    const raw = Math.min(255, (fftData[binIndex] || 0));
+                    const val = Math.min(1, raw / 128); // slight boost vs 255
+                    const boosted = Math.pow(val, 0.5) * 1.6;
+                    const barHeight = Math.max(H * 0.04, Math.min(H * 0.95, boosted * H));
                     const y = H - barHeight;
 
                     if (x === 0) ctx.moveTo(x, y);

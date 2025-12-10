@@ -90,7 +90,7 @@ export class AudioEngine {
 
             this.vizAnalyser = this.ctx.createAnalyser();
             this.vizAnalyser.fftSize = 2048;
-            this.vizAnalyser.smoothingTimeConstant = 0.5;
+            this.vizAnalyser.smoothingTimeConstant = 0.4;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
 
             // Silent sink to keep analyser branches pulling without audible output
