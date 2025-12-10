@@ -593,10 +593,10 @@ export class AudioEngine {
                 if (f.data[i] > peak) peak = f.data[i];
             }
             // Use peak with soft power curve and smoothing to keep bands stable but reactive
-            const shaped = Math.pow(peak / 255, 0.75) * 1.2;
+            const shaped = Math.pow(peak / 255, 0.6) * 1.4;
             const target = Math.min(1.0, shaped);
             const prev = this.bands[f.name] ?? 0;
-            this.bands[f.name] = (prev * 0.5) + (target * 0.5);
+            this.bands[f.name] = (prev * 0.25) + (target * 0.75);
         });
 
         // Blend in worklet-provided bands when available (use max across channels)

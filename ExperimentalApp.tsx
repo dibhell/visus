@@ -1600,6 +1600,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         if (!debugNoAudio && !hasActiveAudioSource) {
             console.warn('[VISUS] record aborted: no active VIDEO/MUSIC/MIC source armed for mix');
+            recordingAudio.cleanup?.();
             alert('Brak aktywnego zrodla audio (VIDEO/MUSIC/MIC). Wlacz kanal i sprobuj ponownie.');
             return false;
         }
@@ -1614,7 +1615,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
 
-        console.debug('[VISUS] mixTracks before combine:', audioTracks.map((t) => ({
+        console.debug('[MIXTRACKS]', audioTracks.map((t) => ({
             kind: t.kind,
             readyState: t.readyState,
             enabled: t.enabled,
@@ -1623,7 +1624,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
         const combinedStream = new MediaStream([...videoTracks, ...audioTracks]);
         const combinedAudioTracks = combinedStream.getAudioTracks();
-        console.debug('[VISUS] combinedStream audioTracks:', combinedAudioTracks.map((t) => ({
+        console.debug('[COMBINED AUDIO TRACKS]', combinedAudioTracks.map((t) => ({
             kind: t.kind,
             readyState: t.readyState,
             enabled: t.enabled,
