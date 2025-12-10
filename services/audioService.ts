@@ -93,8 +93,8 @@ export class AudioEngine {
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
             this.vizAnalyser = this.ctx.createAnalyser();
-            this.vizAnalyser.fftSize = 1024; // wizualizacja: 1024 biny wystarczą i są tańsze
-            this.vizAnalyser.smoothingTimeConstant = 0.28; // trochę żywsze, mniej rozmycia
+            this.vizAnalyser.fftSize = 2048; // wizualizacja: 2048 binów dla wyższej rozdzielczości
+            this.vizAnalyser.smoothingTimeConstant = 0.15; // żywsze spektrum, mniej uśredniania
             this.vizAnalyser.minDecibels = -90;
             this.vizAnalyser.maxDecibels = -10;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
