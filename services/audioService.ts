@@ -78,6 +78,10 @@ export class AudioEngine {
         return this.vizData;
     }
 
+    getBandLevels(): BandsData {
+        return { ...this.bands };
+    }
+
     async initContext() {
         if (!this.ctx) {
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'playback' });

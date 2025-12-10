@@ -60,6 +60,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const ae = audioServiceRef.current;
             const W = rect.width;
             const H = rect.height;
+            console.debug('[VISUS][CANVAS]', {
+                clientHeight: canvas.clientHeight,
+                clientWidth: canvas.clientWidth,
+                heightAttr: canvas.height,
+                styleHeight: canvas.style.height
+            });
 
             // 1. Background
             ctx.clearRect(0, 0, W, H);
@@ -102,38 +108,54 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
             }
 
-            if (enabled && fftData && fftData.length > 0) {
+            const drawSpectrum = (sampler: (t: number) => number) => {
                 ctx.beginPath();
-                
                 const step = 1;
                 for (let x = 0; x < W; x += step) {
-                    const freq = getFreqFromX(x, W);
-                    const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
-                    const binIndex = Math.min(fftData.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData.length)));
-                    const raw = Math.min(255, (fftData[binIndex] || 0));
-                    const val = Math.min(1, raw / 128); // slight boost vs 255
-                    const boosted = Math.pow(val, 0.5) * 1.6;
-                    const barHeight = Math.max(H * 0.04, Math.min(H * 0.95, boosted * H));
+                    const t = x / Math.max(1, W);
+                    const energy = sampler(t);
+                    const boosted = Math.pow(Math.max(0, energy), 0.6);
+                    const barHeight = Math.max(H * 0.02, Math.min(H * 0.95, boosted * H * 1.5));
                     const y = H - barHeight;
-
                     if (x === 0) ctx.moveTo(x, y);
                     else ctx.lineTo(x, y);
                 }
                 ctx.lineTo(W, H);
                 ctx.lineTo(0, H);
                 ctx.closePath();
-                
-                // New Gradient: Teal to Transparent
+
                 const grad = ctx.createLinearGradient(0, 0, 0, H);
-                grad.addColorStop(0, 'rgba(45, 212, 191, 0.4)'); // Teal
+                grad.addColorStop(0, 'rgba(45, 212, 191, 0.4)');
                 grad.addColorStop(1, 'rgba(45, 212, 191, 0.0)');
                 ctx.fillStyle = grad;
                 ctx.fill();
-                
-                // Top Line
                 ctx.lineWidth = 1.5;
                 ctx.strokeStyle = '#2dd4bf';
                 ctx.stroke();
+            };
+
+            if (enabled && fftData && fftData.length > 0) {
+                const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
+                drawSpectrum((t) => {
+                    const freq = getFreqFromX(t * W, W);
+                    const binIndex = Math.min(fftData!.length - 1, Math.max(0, Math.floor((freq / nyquist) * fftData!.length)));
+                    const norm = Math.min(1, (fftData![binIndex] || 0) / 255);
+                    return norm;
+                });
+            } else {
+                // Fallback: use bands (sync1/2/3) as energy distribution across spectrum
+                const bands = (ae as any).getBandLevels ? (ae as any).getBandLevels() : { sync1: 0, sync2: 0, sync3: 0 };
+                const tri = (t: number, c: number, w: number) => {
+                    const d = Math.abs(t - c) / w;
+                    return d >= 1 ? 0 : 1 - d;
+                };
+                drawSpectrum((t) => {
+                    const bass = bands.sync1 || 0;
+                    const mid = bands.sync2 || 0;
+                    const high = bands.sync3 || 0;
+                    const energy = bass * tri(t, 0.15, 0.25) + mid * tri(t, 0.5, 0.25) + high * tri(t, 0.85, 0.25);
+                    return energy;
+                });
             }
 
             // 4. Interactive Points
