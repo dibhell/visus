@@ -60,12 +60,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const ae = audioServiceRef.current;
             const W = rect.width;
             const H = rect.height;
-            console.debug('[VISUS][CANVAS]', {
-                clientHeight: canvas.clientHeight,
-                clientWidth: canvas.clientWidth,
-                heightAttr: canvas.height,
-                styleHeight: canvas.style.height
-            });
 
             // 1. Background
             ctx.clearRect(0, 0, W, H);
@@ -93,14 +87,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             // 3. Spectrum Fill
             let fftData: Uint8Array | null = null;
-            if ((ae as any).getFFTData) {
-                fftData = (ae as any).getFFTData();
-            }
-            if (!fftData && (ae as any).getVizFFTBuffer) {
+            if (ae && (ae as any).getVizFFTBuffer) {
                 fftData = (ae as any).getVizFFTBuffer();
             }
+            if (!fftData && ae && (ae as any).getFFTData) {
+                fftData = (ae as any).getFFTData();
+            }
             if (!fftData) {
-                const analyser = (ae as any).vizAnalyser as AnalyserNode | null;
+                const analyser = (ae as any)?.vizAnalyser as AnalyserNode | null;
                 if (analyser) {
                     const buf = new Uint8Array(analyser.frequencyBinCount);
                     analyser.getByteFrequencyData(buf);
@@ -116,7 +110,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars);
                     const boosted = Math.pow(Math.max(0, energy), 0.65) * 1.4;
-                    const barH = Math.max(0, Math.min(maxHeight, boosted * maxHeight));
+                    const barH = Math.max(H * 0.02, Math.min(maxHeight, boosted * maxHeight));
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
                     ctx.lineTo(x, y);
@@ -128,17 +122,16 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             };
 
             if (enabled && fftData && fftData.length > 0) {
-                const nyquist = (ae.ctx?.sampleRate || 48000) / 2;
+                const nyquist = (ae as any)?.ctx?.sampleRate ? ((ae as any).ctx.sampleRate / 2) : 24000;
                 drawSpectrum((i, bars) => {
                     const step = Math.max(1, Math.floor(fftData!.length / bars));
                     const binIndex = Math.min(fftData!.length - 1, i * step);
-                    const freq = (binIndex / fftData!.length) * nyquist;
                     const val = fftData![binIndex] || 0;
                     const norm = Math.min(1, val / 255);
                     return norm;
                 });
             } else {
-                const bands = (ae as any).getBandLevels ? (ae as any).getBandLevels() : { sync1: 0, sync2: 0, sync3: 0 };
+                const bands = (ae as any)?.getBandLevels ? (ae as any).getBandLevels() : { sync1: 0, sync2: 0, sync3: 0 };
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
