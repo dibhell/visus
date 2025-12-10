@@ -21,13 +21,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
     const [spectrumDebug, setSpectrumDebug] = useState({
-        targetPeak: 0.95,
-        minPeak: 0.08,
-        maxGain: 8.0,
-        boostExp: 0.5,
-        boostMult: 2.0,
-        minHeightFrac: 0.04,
-        maxHeightFrac: 0.95,
+        targetPeak: 0.98,
+        minPeak: 0.04,
+        maxGain: 12.0,
+        boostExp: 0.45,
+        boostMult: 2.5,
+        minHeightFrac: 0.06,
+        maxHeightFrac: 0.98,
     });
     const spectrumDebugRef = useRef(spectrumDebug);
 
@@ -145,8 +145,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
 
                 ctx.lineTo(W, H - 2);
+                ctx.lineTo(W, H);
+                ctx.lineTo(0, H);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(45, 212, 191, 0.18)';
+                ctx.fill();
                 ctx.strokeStyle = '#2dd4bf';
-                ctx.lineWidth = 1;
+                ctx.lineWidth = 1.25;
                 ctx.stroke();
             };
 
@@ -159,8 +164,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
 
                 // jeśli FFT praktycznie martwe – narysuj niski floor i wyjdź
-                if (peak < 5) {
-                    drawSpectrum(() => 0.02);
+                if (peak < 2) {
+                    drawSpectrum(() => 0.05);
                 } else {
                     const normPeak = peak / 255;
 
