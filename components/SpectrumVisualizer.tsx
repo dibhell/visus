@@ -117,7 +117,20 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
             }
 
-            // 3.2 ? bandy jako pewny fallback
+            
+            // 3.1b ? je?li FFT jest "martwe" (praktycznie same zera), wy??cz je
+            if (fftData && fftData.length > 0) {
+                let peak = 0;
+                for (let i = 0; i < fftData.length; i++) {
+                    if (fftData[i] > peak) peak = fftData[i];
+                }
+                // pr?g 5?8 zwykle odcina tylko szum / cisz?
+                if (peak < 5) {
+                    fftData = null;
+                }
+            }
+
+// 3.2 ? bandy jako pewny fallback
             let rawBands = { sync1: 0, sync2: 0, sync3: 0 };
             if (aeAny?.getBandLevels) {
                 rawBands = aeAny.getBandLevels() || rawBands;
