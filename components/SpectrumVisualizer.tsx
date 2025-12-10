@@ -17,6 +17,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const containerRef = useRef<HTMLDivElement>(null);
     const syncParamsRef = useRef<SyncParam[]>(syncParams);
     const hoveredBandRef = useRef<number | null>(null);
+    const smoothBandsRef = useRef({ sync1: 0, sync2: 0, sync3: 0 });
 
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
@@ -96,122 +97,86 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             drawGridLine(1000, '1k');
             drawGridLine(10000, '10k');
 
-            // 3. Spectrum Fill
-            let fftData: Uint8Array | null = null;
+            // 3. Spectrum Fill – prosta wersja, tylko z BASS/MID/HIGH
+            const aeAny: any = ae;
 
-            // priorytet: żywy vizAnalyser
-            if (ae && (ae as any).getVizFFTBuffer) {
-                fftData = (ae as any).getVizFFTBuffer();
-            }
-            // jeśli viz jest pusty, bierz miksowane FFT z silnika
-            if (!fftData && ae && (ae as any).getFFTData) {
-                fftData = (ae as any).getFFTData();
-            }
-            // ostateczny fallback na surowy analyser
-            if (!fftData) {
-                const analyser = (ae as any)?.vizAnalyser as AnalyserNode | null;
-                if (analyser) {
-                    const buf = new Uint8Array(analyser.frequencyBinCount);
-                    analyser.getByteFrequencyData(buf);
-                    fftData = buf;
-                }
+            // 3.1 – pobierz bandy z AudioEngine
+            let rawBands = { sync1: 0, sync2: 0, sync3: 0 };
+
+            if (aeAny?.getBandLevels) {
+                rawBands = aeAny.getBandLevels() || rawBands;
+            } else if (aeAny?.vuWorkletBands && aeAny.vuWorkletBands.video) {
+                const vb = aeAny.vuWorkletBands.video;
+                rawBands = {
+                    sync1: vb[0] || 0,
+                    sync2: vb[1] || 0,
+                    sync3: vb[2] || 0,
+                };
             }
 
-            // helper rysowania z mocniejszym boostem
+            // 3.2 – lekkie wygładzenie, żeby nie trzepało
+            const smooth = smoothBandsRef.current;
+            const alpha = 0.6; // 0 – mega smooth, 1 – zero smooth
+            smooth.sync1 = smooth.sync1 * (1 - alpha) + rawBands.sync1 * alpha;
+            smooth.sync2 = smooth.sync2 * (1 - alpha) + rawBands.sync2 * alpha;
+            smooth.sync3 = smooth.sync3 * (1 - alpha) + rawBands.sync3 * alpha;
+
+            // 3.3 – helper do rysowania krzywej (BEZ FFT)
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
-                const dbg = spectrumDebugRef.current;
-
                 ctx.beginPath();
                 const bars = 96;
                 ctx.moveTo(0, H - 2);
 
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars); // 0..1
-                    const boosted = Math.pow(
-                        Math.max(0, energy),
-                        dbg.boostExp
-                    ) * dbg.boostMult;
+                    const boosted = Math.pow(Math.max(0, energy), 0.5) * 2.0;
 
-                    const minH = H * dbg.minHeightFrac;
-                    const maxH = H * dbg.maxHeightFrac;
+                    const minH = H * 0.03;
+                    const maxH = H * 0.95;
 
                     const barH = Math.max(
                         minH,
                         Math.min(maxH, boosted * H)
                     );
+
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
                     ctx.lineTo(x, y);
                 }
 
                 ctx.lineTo(W, H - 2);
-                ctx.lineTo(W, H);
-                ctx.lineTo(0, H);
-                ctx.closePath();
-                ctx.fillStyle = 'rgba(45, 212, 191, 0.18)';
-                ctx.fill();
                 ctx.strokeStyle = '#2dd4bf';
-                ctx.lineWidth = 1.25;
+                ctx.lineWidth = 1;
                 ctx.stroke();
             };
 
-            // 3.3 – FFT + auto-gain w oparciu o peak
-            if (enabled && fftData && fftData.length > 0) {
-                // wykryj szczyt
-                let peak = 0;
-                for (let i = 0; i < fftData.length; i++) {
-                    if (fftData[i] > peak) peak = fftData[i];
-                }
-
-                // jeśli FFT praktycznie martwe – narysuj niski floor i wyjdź
-                if (peak < 2) {
-                    drawSpectrum(() => 0.05);
-                } else {
-                    const normPeak = peak / 255;
-
-                    const dbg = spectrumDebugRef.current;
-
-                    const gain = Math.min(
-                        dbg.maxGain,
-                        dbg.targetPeak / Math.max(normPeak, dbg.minPeak)
-                    );
-
-                    drawSpectrum((i, bars) => {
-                        const step = Math.max(1, Math.floor(fftData!.length / bars));
-                        const binIndex = Math.min(fftData!.length - 1, i * step);
-                        const val = fftData![binIndex] || 0;
-
-                        let energy = (val / 255) * gain;  // 0..1 z auto-gainem
-                        if (energy < 0) energy = 0;
-                        if (energy > 1) energy = 1;
-                        return energy;
-                    });
-                }
-            } else {
-                // 3.4 – Fallback na bandy / VU BEZ ZMIAN
-                const bands = (ae as any)?.getBandLevels
-                    ? (ae as any).getBandLevels()
-                    : { sync1: 0, sync2: 0, sync3: 0 };
-
+            // 3.4 – rozkład energii bandów po szerokości (bez FFT)
+            if (enabled) {
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
                 };
 
+                const bands = smoothBandsRef.current;
+
                 drawSpectrum((i, bars) => {
-                    const t = i / Math.max(1, bars - 1);
+                    const t = i / Math.max(1, bars - 1); // 0..1 po szerokości
+
                     const bass = bands.sync1 || 0;
-                    const mid = bands.sync2 || 0;
+                    const mid  = bands.sync2 || 0;
                     const high = bands.sync3 || 0;
+
                     const energy =
-                        bass * tri(t, 0.15, 0.25) +
-                        mid * tri(t, 0.5, 0.25) +
-                        high * tri(t, 0.85, 0.25);
+                        bass * tri(t, 0.15, 0.3) +
+                        mid  * tri(t, 0.5,  0.35) +
+                        high * tri(t, 0.85, 0.3);
+
                     return energy;
                 });
+            } else {
+                drawSpectrum(() => 0.02);
             }
-
-            // 4. Interactive Points
+// 4. Interactive Points
             const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             
             const bands = syncParamsRef.current;
