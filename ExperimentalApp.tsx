@@ -522,6 +522,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
+    const spectrumRef = useRef<Uint8Array | null>(null);
+    const frameStateRef = useRef<{ spectrum: Uint8Array | null }>({ spectrum: null });
 
     useEffect(() => {
         console.log('[VISUS] init useEffect enter');
@@ -939,6 +941,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             if (!debugNoAudio) {
                 audioRef.current.initContext().then(() => {
                     audioRef.current.setupFilters(syncParamsRef.current);
+                    const spec = audioRef.current.getSpectrum();
+                    if (!spectrumRef.current || spectrumRef.current.length !== spec.length) {
+                        spectrumRef.current = new Uint8Array(spec.length);
+                    }
+                    spectrumRef.current.set(spec);
+                    frameStateRef.current.spectrum = spectrumRef.current;
                     setIsBooting(false);
                 });
             } else {
@@ -1072,6 +1080,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             if (!skipHeavy) {
                 ae.update();
+                const spec = ae.getSpectrum();
+                if (spec && spec.length > 0) {
+                    if (!spectrumRef.current || spectrumRef.current.length !== spec.length) {
+                        spectrumRef.current = new Uint8Array(spec.length);
+                    }
+                    spectrumRef.current.set(spec);
+                    frameStateRef.current.spectrum = spectrumRef.current;
+                }
             }
             const vu = ae.getLevelsFast(0.08); // channel RMS (video, music, mic)
             const uiBudget = 1000 / Math.max(1, uiFpsLimitRef.current);
@@ -1146,6 +1162,25 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         bandLevels.sync2 = Math.max(bandLevels.sync2, fftBands.sync2);
                         bandLevels.sync3 = Math.max(bandLevels.sync3, fftBands.sync3);
                     }
+                }
+
+                const spectrum = frameStateRef.current.spectrum;
+                if (spectrum && spectrum.length > 0) {
+                    const sampleRange = (start: number, end: number) => {
+                        const s = Math.max(0, Math.min(spectrum.length - 1, Math.floor(start)));
+                        const e = Math.max(s, Math.min(spectrum.length - 1, Math.ceil(end)));
+                        let sum = 0;
+                        let count = 0;
+                        for (let i = s; i <= e; i++) { sum += spectrum[i]; count++; }
+                        const avg = count > 0 ? sum / count : 0;
+                        return Math.min(1, avg / 255);
+                    };
+                    const bass = sampleRange(0, spectrum.length * 0.08);
+                    const mids = sampleRange(spectrum.length * 0.08, spectrum.length * 0.35);
+                    const highs = sampleRange(spectrum.length * 0.35, spectrum.length * 0.8);
+                    bandLevels.sync1 = Math.max(bandLevels.sync1, bass);
+                    bandLevels.sync2 = Math.max(bandLevels.sync2, mids);
+                    bandLevels.sync3 = Math.max(bandLevels.sync3, highs);
                 }
                 lastBandLevelsRef.current = bandLevels;
             }

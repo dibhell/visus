@@ -49,6 +49,7 @@ export class AudioEngine {
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: Uint8Array = new Uint8Array(1024);
     vizData: Uint8Array = new Uint8Array(1024);
+    spectrumData: Uint8Array = new Uint8Array(1024);
     
     // Scratch buffers for VU meters
     vuData: any = new Uint8Array(16); 
@@ -56,6 +57,16 @@ export class AudioEngine {
 
     constructor() {
         this.bands = { sync1: 0, sync2: 0, sync3: 0 };
+    }
+
+    getSpectrum(): Uint8Array {
+        const analyser = this.vizAnalyser || this.mainAnalyser;
+        if (!analyser) return this.spectrumData;
+        if (this.spectrumData.length !== analyser.frequencyBinCount) {
+            this.spectrumData = new Uint8Array(analyser.frequencyBinCount);
+        }
+        analyser.getByteFrequencyData(this.spectrumData as Uint8Array<ArrayBuffer>);
+        return this.spectrumData;
     }
 
     async initContext() {
