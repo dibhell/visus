@@ -60,10 +60,12 @@ export class AudioEngine {
     }
 
     getSpectrum(): Uint8Array {
-        const analyser = this.vizAnalyser || this.mainAnalyser;
+        const analyser = this.mainAnalyser;
         if (!analyser) return this.spectrumData;
-        if (this.spectrumData.length !== analyser.frequencyBinCount) {
-            this.spectrumData = new Uint8Array(analyser.frequencyBinCount);
+
+        const bins = analyser.frequencyBinCount;
+        if (this.spectrumData.length !== bins) {
+            this.spectrumData = new Uint8Array(bins);
         }
         analyser.getByteFrequencyData(this.spectrumData as Uint8Array<ArrayBuffer>);
         return this.spectrumData;
@@ -87,35 +89,28 @@ export class AudioEngine {
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'playback' });
             
             // 1. Create Main Analysis Chain
+            // Hi-res analyser na ca艂ym master miksie (wsp贸lne 藕r贸d艂o dla FX i UI)
             this.mainAnalyser = this.ctx.createAnalyser();
-            this.mainAnalyser.fftSize = 4096;
-            this.mainAnalyser.smoothingTimeConstant = 0.6;
+            this.mainAnalyser.fftSize = 16384; // hi-res, ~8k bin贸w
+            this.mainAnalyser.smoothingTimeConstant = 0.45;
+            this.mainAnalyser.minDecibels = -110;
+            this.mainAnalyser.maxDecibels = -5;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
-            this.vizAnalyser = this.ctx.createAnalyser();
-            this.vizAnalyser.fftSize = 16384; // wizualizacja: 1024 biny wystarcz i s ta+鋝ze
-            this.vizAnalyser.smoothingTimeConstant = 0.08; // trochχ +-ywsze, mniej rozmycia
-            this.vizAnalyser.minDecibels = -100;
-            this.vizAnalyser.maxDecibels = -10;
-            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
+            // UI u偶ywa tego samego analizatora (nie duplikujemy grafu)
+            this.vizAnalyser = this.mainAnalyser;
+            this.vizData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
             // Silent sink to keep analyser branches pulling without audible output
             this.analysisSink = this.ctx.createGain();
             this.analysisSink.gain.value = 0.0;
             this.mainAnalyser.connect(this.analysisSink);
-            this.vizAnalyser.connect(this.analysisSink);
+            this.analysisSink.connect(this.ctx.destination);
 
             this.masterMix = this.ctx.createGain();
             this.masterMix.gain.value = 1.0;
+            // jeden hi-res analyser jako "tap" na master bus
             this.masterMix.connect(this.mainAnalyser);
-            this.masterMix.connect(this.vizAnalyser);
-
-            // Ensure analyser nodes are pulled by the graph (0 gain tap to destination)
-            this.vizOut = this.ctx.createGain();
-            this.vizOut.gain.value = 0.0;
-            this.masterMix.connect(this.vizOut);
-            this.vizOut.connect(this.ctx.destination);
-            this.analysisSink.connect(this.ctx.destination);
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
@@ -180,17 +175,25 @@ export class AudioEngine {
                 }
             }
 
+            const sendToDestination = channel !== 'mic';
+
             if (vuNode) {
                 gain.connect(vuNode);
                 vuNode.connect(analyser);
                 vuNode.connect(tap);
-                vuNode.connect(this.masterMix!); // to mix/recording
-                vuNode.connect(this.ctx!.destination); // to speakers
+                vuNode.connect(this.masterMix!); // zawsze do master bus (FX / spectrum)
+
+                if (sendToDestination) {
+                    vuNode.connect(this.ctx!.destination); // tylko video + music
+                }
             } else {
                 gain.connect(analyser);
                 gain.connect(tap);
                 gain.connect(this.masterMix!);
-                gain.connect(this.ctx!.destination);
+
+                if (sendToDestination) {
+                    gain.connect(this.ctx!.destination);
+                }
             }
 
             // Keep analyser branches active even if their output is unused
@@ -248,11 +251,8 @@ export class AudioEngine {
             this.videoNode = this.ctx.createMediaElementSource(videoEl);
             this.boundVideoElement = videoEl;
             
-            // Path 1: To Mixer (Visuals)
+            // Path: 藕r贸d艂o -> gain (gain wpi臋ty w masterMix/destination w initChannelNodes)
             this.videoNode.connect(this.videoGain);
-            
-            // Path 2: To Speakers (Hearing)
-            this.videoGain.connect(this.ctx.destination);
 
             // Path 3: Direct tap for metering (pre-fader)
             if (this.videoTapAnalyser) {
@@ -271,7 +271,6 @@ export class AudioEngine {
 
         this.musicNode = this.ctx.createMediaElementSource(audioEl);
         this.musicNode.connect(this.musicGain);
-        this.musicGain.connect(this.ctx.destination);
 
         // Direct tap pre-fader for VU/FFT
         if (this.musicTapAnalyser) {
@@ -618,5 +617,3 @@ export class AudioEngine {
         }
     }
 }
-
-

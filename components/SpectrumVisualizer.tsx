@@ -103,10 +103,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                                                             // 3. Spectrum Fill - hi-res, bass-biased FFT
             const aeAny: any = ae;
 
-            // 3.1 - collect FFT (priority: getSpectrum -> getVizFFTBuffer -> getFFTData -> vizAnalyser)
+            // 3.1 FFT z silnika – zawsze hi-res z master bus
             let usedFFT: Uint8Array | null = null;
             let debugSource = 'none';
-
             if (aeAny?.getSpectrum) {
                 try {
                     usedFFT = aeAny.getSpectrum();
@@ -114,32 +113,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 } catch {
                     usedFFT = null;
                 }
-            }
-
-            if ((!usedFFT || usedFFT.length === 0) && aeAny?.getVizFFTBuffer) {
-                try {
-                    usedFFT = aeAny.getVizFFTBuffer();
-                    debugSource = 'getVizFFTBuffer';
-                } catch {
-                    usedFFT = null;
-                }
-            }
-
-            if ((!usedFFT || usedFFT.length === 0) && aeAny?.getFFTData) {
-                try {
-                    usedFFT = aeAny.getFFTData();
-                    debugSource = 'getFFTData';
-                } catch {
-                    usedFFT = null;
-                }
-            }
-
-            if ((!usedFFT || usedFFT.length === 0) && aeAny?.vizAnalyser) {
-                const analyser = aeAny.vizAnalyser as AnalyserNode;
-                const buf = new Uint8Array(analyser.frequencyBinCount);
-                analyser.getByteFrequencyData(buf);
-                usedFFT = buf;
-                debugSource = 'vizAnalyser';
             }
 
             // 3.2 - bands fallback with smoothing
