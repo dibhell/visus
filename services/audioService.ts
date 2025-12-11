@@ -74,7 +74,7 @@ export class AudioEngine {
             this.spectrumData = new Uint8Array(bins);
         }
 
-        analyser.getByteFrequencyData(this.spectrumData);
+        analyser.getByteFrequencyData(this.spectrumData as unknown as Uint8Array<ArrayBuffer>);
         return this.spectrumData;
     }
 
