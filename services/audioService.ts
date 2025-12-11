@@ -4,6 +4,8 @@ import { FilterBand, SyncParam, BandsData, AdditiveEnvConfig, DEFAULT_ADDITIVE_E
 
 type ByteArray = Uint8Array<ArrayBuffer>;
 
+const ADD_ENV_HISTORY_LEN = 256; // ~1s przy ~256 blokach/s
+
 export class AudioEngine {
     ctx: AudioContext | null = null;
     
@@ -51,6 +53,16 @@ export class AudioEngine {
     additiveEnvReady = false;
     additiveEnvValue = 0.5;
     additiveEnvConfig: AdditiveEnvConfig = { ...DEFAULT_ADDITIVE_ENV_CONFIG };
+    additiveEnvHistory = {
+        env: new Float32Array(ADD_ENV_HISTORY_LEN),
+        det: new Float32Array(ADD_ENV_HISTORY_LEN),
+        eff: (() => {
+            const arr = new Float32Array(ADD_ENV_HISTORY_LEN);
+            arr.fill(NaN);
+            return arr;
+        })(),
+        index: 0,
+    };
     
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: ByteArray = new Uint8Array(1024) as ByteArray;
@@ -265,8 +277,24 @@ export class AudioEngine {
             });
 
             node.port.onmessage = (ev) => {
-                if (ev.data && typeof ev.data.additiveEnv === 'number') {
-                    this.additiveEnvValue = ev.data.additiveEnv;
+                const data = ev.data || {};
+                if (typeof data.additiveEnv === 'number') {
+                    this.additiveEnvValue = data.additiveEnv;
+                }
+
+                const hist = this.additiveEnvHistory;
+                if (hist) {
+                    const i = hist.index;
+                    const envOut = typeof data.additiveEnv === 'number' ? data.additiveEnv : this.additiveEnvValue;
+                    const det = typeof data.detector === 'number' ? data.detector : envOut;
+
+                    hist.env[i] = envOut;
+                    hist.det[i] = det;
+                    if (!Number.isFinite(hist.eff[i])) {
+                        hist.eff[i] = envOut;
+                    }
+
+                    hist.index = (i + 1) % hist.env.length;
                 }
             };
 
@@ -413,6 +441,36 @@ export class AudioEngine {
 
     getAdditiveEnvValue() {
         return this.additiveEnvValue;
+    }
+
+    getAdditiveEnvTrace(windowMs: number = 1000) {
+        const hist = this.additiveEnvHistory;
+        if (!hist) return null;
+
+        const len = hist.env.length;
+        const samples = Math.min(len, Math.max(16, Math.floor((len * windowMs) / 1000)));
+
+        const outEnv = new Float32Array(samples);
+        const outDet = new Float32Array(samples);
+        const outEff = new Float32Array(samples);
+
+        let idx = (hist.index + len - 1) % len;
+        for (let i = samples - 1; i >= 0; i--) {
+            outEnv[i] = hist.env[idx];
+            outDet[i] = hist.det[idx];
+            outEff[i] = hist.eff[idx];
+            idx = (idx + len - 1) % len;
+        }
+
+        return { env: outEnv, det: outDet, eff: outEff };
+    }
+
+    updateAdditiveEnvEffective(value: number) {
+        const hist = this.additiveEnvHistory;
+        if (!hist) return;
+        const len = hist.env.length;
+        const i = (hist.index + len - 1) % len;
+        hist.eff[i] = value;
     }
 
     setVolume(channel: 'video' | 'music' | 'mic', val: number) {

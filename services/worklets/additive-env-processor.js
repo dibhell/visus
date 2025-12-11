@@ -87,10 +87,15 @@ class AdditiveEnvProcessor extends AudioWorkletProcessor {
     }
   }
 
-  maybeSend(value) {
+  maybeSend(envOut, detector, envRaw) {
     const now = currentTime;
-    if (now - this.lastSent >= 0.05) {
-      this.port.postMessage({ additiveEnv: value });
+    // gęstsze próbkowanie ~50 fps
+    if (now - this.lastSent >= 0.02) {
+      this.port.postMessage({
+        additiveEnv: envOut,
+        detector,
+        envRaw,
+      });
       this.lastSent = now;
     }
   }
@@ -105,12 +110,12 @@ class AdditiveEnvProcessor extends AudioWorkletProcessor {
     }
 
     if (!this.config.enabled || this.config.depth <= 0) {
-      this.maybeSend(0.5);
+      this.maybeSend(0.5, 0.0, this.env);
       return true;
     }
 
     if (!channel || channel.length === 0) {
-      this.maybeSend(clamp01(this.env));
+      this.maybeSend(clamp01(this.env), 0.0, this.env);
       return true;
     }
 
@@ -163,7 +168,10 @@ class AdditiveEnvProcessor extends AudioWorkletProcessor {
     }
 
     const envOut = clamp01(delayed);
-    this.maybeSend(envOut);
+
+    // incoming: poziom z detektora (RMS/Peak 0..1)
+    // env: obwiednia po attack/release
+    this.maybeSend(envOut, incoming, env);
     return true;
   }
 }

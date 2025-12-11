@@ -1,41 +1,8 @@
-
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { AudioEngine } from '../services/audioService';
 import { SyncParam } from '../constants';
 
 const SPECTRUM_CALIB_MARKERS = [50, 80, 100, 200, 500, 1000, 2000, 5000];
-
-// pomocnicza funkcja do znalezienia głównego piku w FFT
-function findMainPeak(
-    fft: Uint8Array,
-    sampleRate: number,
-    minFreq: number,
-    maxFreq: number
-) {
-    if (!fft || fft.length === 0) {
-        return { freq: 0, value: 0 };
-    }
-
-    const nyquist = sampleRate / 2;
-    const len = fft.length;
-
-    const minBin = Math.max(1, Math.round((minFreq / nyquist) * len));
-    const maxBin = Math.min(len - 1, Math.round((maxFreq / nyquist) * len));
-
-    let bestBin = minBin;
-    let bestVal = 0;
-
-    for (let i = minBin; i <= maxBin; i++) {
-        const v = fft[i] || 0;
-        if (v > bestVal) {
-            bestVal = v;
-            bestBin = i;
-        }
-    }
-
-    const freq = (bestBin / len) * nyquist;
-    return { freq, value: bestVal };
-}
 
 interface Props {
     audioServiceRef: React.MutableRefObject<AudioEngine>;
@@ -71,8 +38,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const [spectrumMode, setSpectrumMode] = useState<'ableton' | 'raw'>('ableton');
     const spectrumModeRef = useRef<'ableton' | 'raw'>('ableton');
 
-    const lastPeakFreqRef = useRef<number | null>(null);
     const spectrumDebugRef = useRef(spectrumDebug);
+    const lastPeakFreqRef = useRef<number | null>(null);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
@@ -92,6 +59,36 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const maxLog = Math.log10(20000);
         const t = x / width;
         return Math.pow(10, minLog + t * (maxLog - minLog));
+    };
+
+    const findMainPeak = (
+        fft: Uint8Array,
+        sampleRate: number,
+        minFreq: number,
+        maxFreq: number
+    ) => {
+        if (!fft || fft.length === 0) {
+            return { freq: 0, value: 0 };
+        }
+        const nyquist = sampleRate / 2;
+        const len = fft.length;
+
+        const minBin = Math.max(1, Math.round((minFreq / nyquist) * len));
+        const maxBin = Math.min(len - 1, Math.round((maxFreq / nyquist) * len));
+
+        let bestBin = minBin;
+        let bestVal = 0;
+
+        for (let i = minBin; i <= maxBin; i++) {
+            const v = fft[i] || 0;
+            if (v > bestVal) {
+                bestVal = v;
+                bestBin = i;
+            }
+        }
+
+        const freq = (bestBin / len) * nyquist;
+        return { freq, value: bestVal };
     };
 
     // --- DRAW LOOP ---
@@ -261,37 +258,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.fillText(label, x, 2);
                 });
 
-                const peakFreq = lastPeakFreqRef.current;
-
-                if (peakFreq && peakFreq > 0) {
-                    const peakX = getLogX(peakFreq, W);
-
-                    // marker piku
-                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(peakX + 0.5, 0);
-                    ctx.lineTo(peakX + 0.5, H * 0.25);
-                    ctx.stroke();
-
-                    // tekst z częstotliwością
-                    ctx.font = '11px system-ui';
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'bottom';
-                    ctx.fillStyle = 'rgba(255, 215, 0, 0.95)';
-                    const freqLabel =
-                        peakFreq >= 1000
-                            ? `${(peakFreq / 1000).toFixed(2)} kHz`
-                            : `${peakFreq.toFixed(1)} Hz`;
-                    ctx.fillText(`Peak: ${freqLabel}`, peakX + 4, H * 0.25 - 2);
-                }
-
                 ctx.restore();
             };
 
             // 3.4 FFT (logarytmiczna mapa czestotliwosci + auto-gain, bez usredniania zakresow)
             let fftUsed = false;
-            lastPeakFreqRef.current = null;
 
             if (enabled && usedFFT && usedFFT.length > 0) {
                 const dbg = spectrumDebugRef.current;
@@ -390,6 +361,37 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                     return Math.min(1, energy * gain);
                 });
+            }
+
+            // 3.5 - overlay kalibracyjny piku FFT
+            try {
+                const peakFreq = lastPeakFreqRef.current;
+                if (peakFreq && peakFreq > 0) {
+                    const peakX = getLogX(peakFreq, W);
+
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)';
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(peakX + 0.5, 0);
+                    ctx.lineTo(peakX + 0.5, H * 0.25);
+                    ctx.stroke();
+
+                    ctx.font = '11px JetBrains Mono, monospace';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillStyle = 'rgba(255, 215, 0, 0.95)';
+
+                    const label =
+                        peakFreq >= 1000
+                            ? `${(peakFreq / 1000).toFixed(2)} kHz`
+                            : `${peakFreq.toFixed(1)} Hz`;
+
+                    ctx.fillText(`Peak: ${label}`, peakX + 4, H * 0.25 - 2);
+                    ctx.restore();
+                }
+            } catch {
+                // overlay nie jest krytyczny
             }
 
             // 3.6 - overlay: FFT vs fallback (debug)

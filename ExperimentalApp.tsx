@@ -653,7 +653,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [additiveGain, setAdditiveGain] = useState(80);
     const [additiveEnvConfig, setAdditiveEnvConfig] = useState<AdditiveEnvConfig>(DEFAULT_ADDITIVE_ENV_CONFIG);
     const [additiveEnvValue, setAdditiveEnvValue] = useState(0.5);
-    const [additiveEnvHistory, setAdditiveEnvHistory] = useState<number[]>([]);
+    const [additiveEnvTrace, setAdditiveEnvTrace] = useState<{ env: Float32Array; det: Float32Array; eff: Float32Array } | null>(null);
     const [showEnvAdvanced, setShowEnvAdvanced] = useState(false);
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
@@ -685,7 +685,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const additiveGainRef = useRef(additiveGain);
     const additiveEnvConfigRef = useRef<AdditiveEnvConfig>(DEFAULT_ADDITIVE_ENV_CONFIG);
     const additiveEnvValueRef = useRef(0.5);
-    const additiveEnvHistoryRef = useRef<number[]>([]);
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
     const renderScaleRef = useRef(renderScale);
@@ -701,7 +700,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { additiveGainRef.current = additiveGain; }, [additiveGain]);
     useEffect(() => { additiveEnvConfigRef.current = additiveEnvConfig; }, [additiveEnvConfig]);
     useEffect(() => { additiveEnvValueRef.current = additiveEnvValue; }, [additiveEnvValue]);
-    useEffect(() => { additiveEnvHistoryRef.current = additiveEnvHistory; }, [additiveEnvHistory]);
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
@@ -743,21 +741,53 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, width, height);
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
         ctx.fillRect(0, 0, width, height);
 
-        if (additiveEnvHistory.length > 0) {
-            ctx.strokeStyle = '#a855f7';
-            ctx.lineWidth = 2;
+        const trace = additiveEnvTrace;
+        if (trace && trace.env.length > 1) {
+            const { env, det, eff } = trace;
+            const N = env.length;
+            const barW = Math.max(1, width / N);
+
+            // Detector bars
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+            for (let i = 0; i < N; i++) {
+                const x = (i / (N - 1)) * width;
+                const amp = Math.pow(Math.max(0, det[i] || 0), 0.7);
+                const h = amp * (height * 0.9);
+                ctx.fillRect(x, height - 2 - h, barW, h);
+            }
+
+            // Envelope line
             ctx.beginPath();
-            additiveEnvHistory.forEach((v, idx) => {
-                const clamped = Math.max(0, Math.min(1, v));
-                const x = (idx / Math.max(1, additiveEnvHistory.length - 1)) * width;
-                const y = height - clamped * height;
-                if (idx === 0) ctx.moveTo(x, y);
+            for (let i = 0; i < N; i++) {
+                const x = (i / (N - 1)) * width;
+                const envVal = Number.isFinite(env[i]) ? env[i] : 0;
+                const y = height - 2 - envVal * (height * 0.9);
+                if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
-            });
+            }
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 1.5;
             ctx.stroke();
+
+            // Effective line (dashed)
+            if (eff && eff.length === N) {
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                for (let i = 0; i < N; i++) {
+                    const x = (i / (N - 1)) * width;
+                    const effVal = Number.isFinite(eff[i]) ? eff[i] : Number.isFinite(env[i]) ? env[i] : 0;
+                    const y = height - 2 - effVal * (height * 0.9);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = '#22c55e';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
         }
 
         const baseLine = Math.max(0, Math.min(1, additiveGain / 100));
@@ -770,7 +800,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         ctx.lineTo(width, yBase);
         ctx.stroke();
         ctx.setLineDash([]);
-    }, [additiveEnvHistory, additiveGain]);
+    }, [additiveEnvTrace, additiveGain]);
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
     useEffect(() => {
         setRenderPreference(getRenderPreference());
@@ -1317,15 +1347,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
 
             effectiveAdditive = Math.max(0, Math.min(1, effectiveAdditive));
+            if (!debugNoAudio) {
+                audioRef.current.updateAdditiveEnvEffective(effectiveAdditive);
+            }
 
             const shouldUpdateEnvUi = (now - lastEnvUiUpdateRef.current) > 50;
             if (shouldUpdateEnvUi) {
-                const history = additiveEnvHistoryRef.current ? [...additiveEnvHistoryRef.current] : [];
-                history.push(envValue);
-                const maxSamples = 20;
-                if (history.length > maxSamples) history.splice(0, history.length - maxSamples);
-                additiveEnvHistoryRef.current = history;
-                setAdditiveEnvHistory(history);
+                const trace = debugNoAudio ? null : audioRef.current.getAdditiveEnvTrace(1000);
+                if (trace) setAdditiveEnvTrace(trace);
                 setAdditiveEnvValue(envValue);
                 lastEnvUiUpdateRef.current = now;
             }
