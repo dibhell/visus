@@ -2245,13 +2245,18 @@ const toggleRecording = async () => {
                                     className="w-full accent-accent"
                                 />
                                 <div className="pointer-events-none absolute inset-0 flex items-center">
-                                    <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                                        <div className="h-full bg-accent/40" style={{ width: `${effectivePercent}%` }}></div>
+                                    <div className="relative w-full h-1 bg-slate-800 rounded-full overflow-visible">
+                                        <div className="absolute inset-y-0 left-0 rounded-full bg-accent/40" style={{ width: `${effectivePercent}%` }}></div>
+                                        <div
+                                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)] border border-slate-900/70 flex items-center justify-center"
+                                            style={{ left: `${effectivePercent}%` }}
+                                        >
+                                            <div
+                                                className="w-2 h-2 rounded-full bg-fuchsia-500 shadow-[0_0_6px_rgba(217,70,239,0.9)] pointer-events-none"
+                                                style={{ opacity: 0 }}
+                                            />
+                                        </div>
                                     </div>
-                                    <div
-                                        className="absolute top-1/2 w-2.5 h-2.5 -mt-[5px] rounded-full bg-accent shadow-[0_0_10px_rgba(168,85,247,0.6)]"
-                                        style={{ left: `calc(${effectivePercent}% - 5px)` }}
-                                    ></div>
                                 </div>
                             </div>
 
