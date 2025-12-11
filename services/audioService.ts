@@ -2,6 +2,8 @@
 
 import { FilterBand, SyncParam, BandsData, AdditiveEnvConfig, DEFAULT_ADDITIVE_ENV_CONFIG } from '../constants';
 
+type ByteArray = Uint8Array<ArrayBuffer>;
+
 export class AudioEngine {
     ctx: AudioContext | null = null;
     
@@ -51,12 +53,12 @@ export class AudioEngine {
     additiveEnvConfig: AdditiveEnvConfig = { ...DEFAULT_ADDITIVE_ENV_CONFIG };
     
     // FFT buffer sized to analyser.frequencyBinCount
-    fftData: Uint8Array = new Uint8Array(1024);
-    vizData: Uint8Array = new Uint8Array(1024);
-    spectrumData: Uint8Array = new Uint8Array(1024);
+    fftData: ByteArray = new Uint8Array(1024) as ByteArray;
+    vizData: ByteArray = new Uint8Array(1024) as ByteArray;
+    spectrumData: ByteArray = new Uint8Array(1024) as ByteArray;
     
     // Scratch buffers for VU meters
-    vuData: any = new Uint8Array(16); 
+    vuData: ByteArray = new Uint8Array(16) as ByteArray; 
     channelActive = { video: false, music: false, mic: false };
 
     constructor() {
@@ -69,18 +71,18 @@ export class AudioEngine {
 
         const bins = analyser.frequencyBinCount;
         if (this.spectrumData.length !== bins) {
-            this.spectrumData = new Uint8Array(bins);
+            this.spectrumData = new Uint8Array(bins) as ByteArray;
         }
-        analyser.getByteFrequencyData(this.spectrumData as Uint8Array<ArrayBuffer>);
+        analyser.getByteFrequencyData(this.spectrumData);
         return this.spectrumData;
     }
 
     getVizFFTBuffer(): Uint8Array | null {
         if (!this.vizAnalyser) return null;
         if (!this.vizData || this.vizData.length !== this.vizAnalyser.frequencyBinCount) {
-            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
+            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount) as ByteArray;
         }
-        this.vizAnalyser.getByteFrequencyData(this.vizData as Uint8Array<ArrayBuffer>);
+        this.vizAnalyser.getByteFrequencyData(this.vizData);
         return this.vizData;
     }
 
@@ -99,13 +101,13 @@ export class AudioEngine {
             this.mainAnalyser = ctx.createAnalyser();
             this.mainAnalyser.fftSize = 16384;
             this.mainAnalyser.smoothingTimeConstant = 0.7;
-            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+            this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount) as ByteArray;
 
             // Dodatkowy analyser do wizualizacji / tapów
             this.vizAnalyser = ctx.createAnalyser();
             this.vizAnalyser.fftSize = 512;
             this.vizAnalyser.smoothingTimeConstant = 0.55;
-            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
+            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount) as ByteArray;
 
             // Master bus
             this.masterMix = ctx.createGain();
@@ -199,30 +201,24 @@ export class AudioEngine {
             // mic tylko przez masterMix.
             const sendToDestination = (channel === 'video' || channel === 'music');
 
+            // GŁÓWNY TOR AUDIO – ZAWSZE BEZPOŚREDNIO Z GAIN
+            gain.connect(this.masterMix!);
+            if (sendToDestination) {
+                gain.connect(this.ctx!.destination);
+            }
+
+            // VU WORKLET JAKO SIDECHAIN (ANALIZA ONLY)
             if (vuNode) {
-                // główny tor
+                // podgląd do workleta
                 gain.connect(vuNode);
 
-                // odnogi do analizy
+                // worklet karmi lokalne analysers
                 vuNode.connect(analyser);
                 vuNode.connect(tap);
-
-                // zawsze na master bus (FX / spectrum / envelope follower)
-                vuNode.connect(this.masterMix!);
-
-                // tylko video + music dodatkowo prosto na głośniki
-                if (sendToDestination) {
-                    vuNode.connect(this.ctx!.destination);
-                }
             } else {
-                // fallback bez workleta
+                // fallback bez workleta – gain też karmi analysers
                 gain.connect(analyser);
                 gain.connect(tap);
-                gain.connect(this.masterMix!);
-
-                if (sendToDestination) {
-                    gain.connect(this.ctx!.destination);
-                }
             }
 
             // utrzymujemy gałąź analityczną aktywną
@@ -559,9 +555,9 @@ export class AudioEngine {
         if (!analyser) return null;
 
         if (this.vizData.length !== analyser.frequencyBinCount) {
-            this.vizData = new Uint8Array(analyser.frequencyBinCount);
+            this.vizData = new Uint8Array(analyser.frequencyBinCount) as ByteArray;
         }
-        analyser.getByteFrequencyData(this.vizData as Uint8Array<ArrayBuffer>);
+        analyser.getByteFrequencyData(this.vizData);
 
         // If the analyser is starved (all zeros), try a quick fallback from other analysers.
         let hasEnergy = false;
@@ -570,12 +566,12 @@ export class AudioEngine {
         }
 
         if (!hasEnergy) {
-            const scratch = new Uint8Array(512);
+            const scratch = new Uint8Array(512) as ByteArray;
             const mixInto = (src: AnalyserNode | null) => {
                 if (!src) return;
                 if (src.fftSize < 1024) src.fftSize = 1024;
                 src.smoothingTimeConstant = 0.5;
-                src.getByteFrequencyData(scratch as Uint8Array<ArrayBuffer>);
+                src.getByteFrequencyData(scratch);
                 for (let i = 0; i < scratch.length && i < this.vizData.length; i++) {
                     this.vizData[i] = Math.max(this.vizData[i], scratch[i]);
                 }
@@ -586,8 +582,8 @@ export class AudioEngine {
 
             // Last resort: use time-domain energy to synthesize a floor so the UI shows activity.
             if (this.vizData.every(v => v === 0)) {
-                const timeBuf = new Uint8Array(analyser.fftSize);
-                analyser.getByteTimeDomainData(timeBuf as Uint8Array<ArrayBuffer>);
+                const timeBuf = new Uint8Array(analyser.fftSize) as ByteArray;
+                analyser.getByteTimeDomainData(timeBuf);
                 for (let i = 0; i < timeBuf.length && i < this.vizData.length; i++) {
                     const v = Math.abs(timeBuf[i] - 128) * 2;
                     this.vizData[i] = Math.min(255, v);
@@ -595,7 +591,7 @@ export class AudioEngine {
             }
         }
 
-        return new Uint8Array(this.vizData);
+        return new Uint8Array(this.vizData) as ByteArray;
     }
 
     setupFilters(syncParams: SyncParam[]) {
@@ -630,7 +626,7 @@ export class AudioEngine {
             // Connect analyser to silent sink so it keeps processing
             if (this.analysisSink) analyser.connect(this.analysisSink);
 
-            this.filters.push({ name, bandpass, analyser, data: new Uint8Array(analyser.frequencyBinCount) });
+            this.filters.push({ name, bandpass, analyser, data: new Uint8Array(analyser.frequencyBinCount) as ByteArray });
         });
     }
 
@@ -660,16 +656,16 @@ export class AudioEngine {
             const analyser = this.vizAnalyser || this.mainAnalyser;
             if (analyser) {
                 if (this.fftData.length !== analyser.frequencyBinCount) {
-                    this.fftData = new Uint8Array(analyser.frequencyBinCount);
+                    this.fftData = new Uint8Array(analyser.frequencyBinCount) as ByteArray;
                 }
-                analyser.getByteFrequencyData(this.fftData as Uint8Array<ArrayBuffer>);
+                analyser.getByteFrequencyData(this.fftData);
 
                 // If still empty (possible if graph not yet flowing), try time-domain energy
                 let energy = 0;
                 for (let i = 0; i < this.fftData.length; i++) energy += this.fftData[i];
                 if (energy === 0) {
-                    const timeBuf = new Uint8Array(analyser.fftSize);
-                    analyser.getByteTimeDomainData(timeBuf as Uint8Array<ArrayBuffer>);
+                    const timeBuf = new Uint8Array(analyser.fftSize) as ByteArray;
+                    analyser.getByteTimeDomainData(timeBuf);
                     for (let i = 0; i < timeBuf.length && i < this.fftData.length; i++) {
                         const v = Math.abs(timeBuf[i] - 128) * 2;
                         this.fftData[i] = Math.min(255, v);
