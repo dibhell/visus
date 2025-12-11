@@ -165,14 +165,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 const dbg = spectrumDebugRef.current;
 
-                // dense sampling for more detail
-                const bars = Math.min(2048, Math.max(512, Math.floor(W * 3.0)));
+                // dense sampling for more detail (bliżej Ableton)
+                const bars = Math.min(4096, Math.max(1024, Math.floor(W * 4.0)));
 
                 const minHeight = H * dbg.minHeightFrac;
                 const maxHeight = H * dbg.maxHeightFrac;
 
-                ctx.beginPath();
-                ctx.moveTo(0, H - 2);
+                const points: Array<{ x: number; y: number }> = [];
 
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars); // 0..1
@@ -185,9 +184,28 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                     const x = (i / (bars - 1)) * W;
                     const y = (H - 2) - barH;
-                    ctx.lineTo(x, y);
+                    points.push({ x, y });
                 }
 
+                // fill
+                ctx.beginPath();
+                ctx.moveTo(0, H - 2);
+                points.forEach((p) => ctx.lineTo(p.x, p.y));
+                ctx.lineTo(W, H - 2);
+                ctx.lineTo(0, H - 2);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(45, 212, 191, 0.18)';
+                ctx.fill();
+
+                // stroke
+                ctx.beginPath();
+                if (points.length) {
+                    ctx.moveTo(points[0].x, points[0].y);
+                    for (let i = 1; i < points.length; i++) {
+                        const p = points[i];
+                        ctx.lineTo(p.x, p.y);
+                    }
+                }
                 ctx.lineTo(W, H - 2);
                 ctx.strokeStyle = '#2dd4bf';
                 ctx.lineWidth = 1;
@@ -207,7 +225,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
 
                 // jeśli FFT praktycznie martwe – nie używamy go
-                if (peak > 3) {
+                if (peak > 1) {
                     const normPeak = peak / 255;
                     const gain = Math.min(
                         dbg.maxGain,
@@ -232,9 +250,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
-                    // sampler: dla każdej „kolumny” bierzemy JEDEN bin FFT
+                    // sampler: dla każdej „kolumny” bierzemy JEDEN bin FFT, z biasem na bas
                     drawSpectrum((i, bars) => {
-                        const t = bars > 1 ? i / (bars - 1) : 0;
+                        // bias na bas: więcej punktów w dole pasma
+                        const tLinear = bars > 1 ? i / (bars - 1) : 0;
+                        const t = Math.pow(tLinear, 2.5);
 
                         // logarytmiczna oś częstotliwości
                         const logF = minLog + t * (maxLog - minLog);
@@ -244,6 +264,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const val = usedFFT[bin] || 0;
 
                         let energy = (val / 255) * gain;
+                        // delikatny floor, żeby cisza nie dawała linii 0 px
+                        if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
