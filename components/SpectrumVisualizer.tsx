@@ -68,11 +68,16 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         minHeightFrac: 0.0,
         maxHeightFrac: 0.81,
     });
+    const [spectrumMode, setSpectrumMode] = useState<'ableton' | 'raw'>('ableton');
+    const spectrumModeRef = useRef<'ableton' | 'raw'>('ableton');
+
+    const lastPeakFreqRef = useRef<number | null>(null);
     const spectrumDebugRef = useRef(spectrumDebug);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
     useEffect(() => { spectrumDebugRef.current = spectrumDebug; }, [spectrumDebug]);
+    useEffect(() => { spectrumModeRef.current = spectrumMode; }, [spectrumMode]);
 
     // --- MATH HELPERS ---
     const getLogX = (freq: number, width: number) => {
@@ -174,6 +179,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 overlay?: { fft?: Uint8Array | null; sampleRate?: number }
             ) => {
                 const dbg = spectrumDebugRef.current;
+                const mode = spectrumModeRef.current;
 
                 // dense sampling for more detail (bli┼╝ej Ableton)
                 const bars = Math.min(4096, Math.max(1024, Math.floor(W * 4.0)));
@@ -185,11 +191,20 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars); // 0..1
-                    const boosted = Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult;
+
+                    let displayEnergy = energy;
+
+                    if (mode === 'ableton') {
+                        // „muzyczny” tryb z kształtowaniem – jak dotychczas
+                        displayEnergy = Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult;
+                    } else {
+                        // RAW – bez dodatkowego wzmacniania, tylko clamp
+                        displayEnergy = Math.max(0, Math.min(1, energy));
+                    }
 
                     const barH = Math.max(
                         minHeight,
-                        Math.min(maxHeight, boosted * H)
+                        Math.min(maxHeight, displayEnergy * H)
                     );
 
                     const x = (i / (bars - 1)) * W;
@@ -246,14 +261,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.fillText(label, x, 2);
                 });
 
-                const fftOverlay = overlay?.fft;
-                const sampleRateOverlay = overlay?.sampleRate ?? 48000;
-                const peak = fftOverlay ? findMainPeak(fftOverlay, sampleRateOverlay, 20, 20000) : { freq: 0, value: 0 };
+                const peakFreq = lastPeakFreqRef.current;
 
-                if (peak.freq > 0 && peak.value > 0) {
-                    const peakX = getLogX(peak.freq, W);
+                if (peakFreq && peakFreq > 0) {
+                    const peakX = getLogX(peakFreq, W);
 
-                    // marker piku na górze
+                    // marker piku
                     ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
@@ -267,28 +280,29 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.textBaseline = 'bottom';
                     ctx.fillStyle = 'rgba(255, 215, 0, 0.95)';
                     const freqLabel =
-                        peak.freq >= 1000
-                            ? `${(peak.freq / 1000).toFixed(2)} kHz`
-                            : `${peak.freq.toFixed(1)} Hz`;
+                        peakFreq >= 1000
+                            ? `${(peakFreq / 1000).toFixed(2)} kHz`
+                            : `${peakFreq.toFixed(1)} Hz`;
                     ctx.fillText(`Peak: ${freqLabel}`, peakX + 4, H * 0.25 - 2);
                 }
 
                 ctx.restore();
             };
 
-            // 3.4 FFT (logarytmiczna mapa cz─Östotliwo┼Ťci + auto-gain, bez u┼Ťredniania zakres├│w)
+            // 3.4 FFT (logarytmiczna mapa czestotliwosci + auto-gain, bez usredniania zakresow)
             let fftUsed = false;
+            lastPeakFreqRef.current = null;
 
             if (enabled && usedFFT && usedFFT.length > 0) {
                 const dbg = spectrumDebugRef.current;
 
-                // peak z ca┼éego FFT
+                // peak z calego FFT
                 let peak = 0;
                 for (let i = 0; i < usedFFT.length; i++) {
                     if (usedFFT[i] > peak) peak = usedFFT[i];
                 }
 
-                // je┼Ťli FFT praktycznie martwe ÔÇô nie u┼╝ywamy go
+                // jeżeli FFT praktycznie martwe – nie używamy go
                 if (peak > 1) {
                     const normPeak = peak / 255;
                     const gain = Math.min(
@@ -300,7 +314,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const sampleRate = aeAny?.ctx?.sampleRate || 48000;
                     const nyquist = sampleRate / 2;
 
-                    // pomocnicza funkcja: mapuje cz─Östotliwo┼Ť─ç na indeks binu
+                    // pomocnicza funkcja: mapuje czestotliwosc na indeks binu
                     const binForFreq = (freqHz: number) => {
                         const f = Math.max(20, Math.min(20000, freqHz));
                         const idxFloat = (f / nyquist) * len;
@@ -308,19 +322,22 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         return Math.min(len - 1, Math.max(0, idx));
                     };
 
-                    // zakres spektrum ÔÇô taki sam jak grid (20 Hz ÔÇô 20 kHz)
+                    // zakres spektrum – taki sam jak grid (20 Hz – 20 kHz)
                     const minFreq = 20;
                     const maxFreq = 20000;
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
-                    // sampler: dla ka?dej kolumny bierzemy JEDEN bin FFT, z biasem na bas
+                    // sampler: dla każdej "kolumny" bierzemy JEDEN bin FFT, z biasem na bas
+                    let visPeakFreq = 0;
+                    let visPeakEnergy = 0;
+
                     drawSpectrum((i, bars) => {
-                        // bias na bas: wi?cej punkt?w w dole pasma
+                        // bias na bas: więcej punktów w dole pasma
                         const tLinear = bars > 1 ? i / (bars - 1) : 0;
                         const t = Math.pow(tLinear, 2.5);
 
-                        // logarytmiczna o? cz?stotliwo?ci
+                        // logarytmiczna oś częstotliwości
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
 
@@ -328,13 +345,27 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const val = usedFFT[bin] || 0;
 
                         let energy = (val / 255) * gain;
-                        // delikatny floor, ?eby cisza nie dawa?a linii 0 px
+                        // delikatny floor, żeby cisza nie dawała linii 0 px
                         if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
+                        // zapamiętujemy to, co rysujemy jako najwyższy słupek
+                        const mode = spectrumModeRef.current;
+                        const displayEnergy = mode === 'ableton'
+                            ? Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult
+                            : Math.max(0, Math.min(1, energy));
+                        if (displayEnergy > visPeakEnergy) {
+                            visPeakEnergy = displayEnergy;
+                            visPeakFreq = freq;
+                        }
+
                         return energy;
                     }, { fft: usedFFT, sampleRate });
+
+                    if (visPeakFreq > 0) {
+                        lastPeakFreqRef.current = visPeakFreq;
+                    }
 
                     fftUsed = true;
                 }
@@ -656,6 +687,35 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             </div>
             {/* PANEL DEBUG POD ANALIZATOREM */}
             <div className="border-t border-white/10 bg-slate-900/80 px-3 py-2 flex flex-wrap gap-2 text-[10px] font-mono text-slate-300">
+                <div className="flex flex-col mr-4">
+                    <span className="text-slate-500 mb-1">Mode</span>
+                    <div className="flex gap-1">
+                        <button
+                            type="button"
+                            className={
+                                'px-2 py-[2px] rounded border text-[9px] ' +
+                                (spectrumMode === 'ableton'
+                                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                                    : 'bg-slate-800 border-slate-600 text-slate-300')
+                            }
+                            onClick={() => setSpectrumMode('ableton')}
+                        >
+                            ABLETON
+                        </button>
+                        <button
+                            type="button"
+                            className={
+                                'px-2 py-[2px] rounded border text-[9px] ' +
+                                (spectrumMode === 'raw'
+                                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-200'
+                                    : 'bg-slate-800 border-slate-600 text-slate-300')
+                            }
+                            onClick={() => setSpectrumMode('raw')}
+                        >
+                            RAW
+                        </button>
+                    </div>
+                </div>
                 <div className="flex flex-col mr-2">
                     <span className="text-slate-500 mb-1">Auto gain</span>
                     <label className="flex items-center gap-1 mb-1">
