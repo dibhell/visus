@@ -91,9 +91,8 @@ export class AudioEngine {
     async initContext() {
         if (!this.ctx) {
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'playback' });
-            
+
             // 1. Create Main Analysis Chain
-            // Hi-res analyser na całym master miksie (wspólne źródło dla FX i UI)
             this.mainAnalyser = this.ctx.createAnalyser();
             this.mainAnalyser.fftSize = 16384;
             this.mainAnalyser.smoothingTimeConstant = 0.45;
@@ -101,7 +100,7 @@ export class AudioEngine {
             this.mainAnalyser.maxDecibels = -5;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
-            // UI używa tego samego analizatora (nie duplikujemy grafu)
+            // UI uses the same analyser (no duplicate graph)
             this.vizAnalyser = this.mainAnalyser;
             this.vizData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
@@ -109,13 +108,13 @@ export class AudioEngine {
             this.masterMix = this.ctx.createGain();
             this.masterMix.gain.value = 1.0;
 
-            // TAP do analizatora (FFT na całym miksie)
+            // TAP do analizatora (FFT na ca?ym miksie)
             this.masterMix.connect(this.mainAnalyser);
 
-            // WYJŚCIE NA GŁOŚNIKI
+            // WYJ?CIE NA G?O?NIKI
             this.masterMix.connect(this.ctx.destination);
 
-            // Silent sink (tylko dla drobnych analyserów, nie dla mastera)
+            // Silent sink (tylko dla drobnych analyser?w, nie dla mastera)
             this.analysisSink = this.ctx.createGain();
             this.analysisSink.gain.value = 0.0;
 
@@ -142,17 +141,18 @@ export class AudioEngine {
                 console.warn('Additive envelope worklet not available, using static value', err);
                 this.additiveEnvReady = false;
             }
-            
+
             // Initialize Channels
             this.initChannelNodes();
             this.setupAdditiveEnvFollower();
+
+            console.info('[AudioEngine] initContext ok, masterMix -> destination active');
         }
 
         if (this.ctx.state === 'suspended') {
             await this.ctx.resume();
         }
     }
-
     private handleVuMessage(channel: 'video' | 'music' | 'mic', payload: any) {
         if (!payload) return;
         const { rms = 0, bands, buckets } = payload;
@@ -184,14 +184,18 @@ export class AudioEngine {
             let vuNode: AudioWorkletNode | null = null;
             if (this.vuWorkletReady) {
                 try {
-                    vuNode = new AudioWorkletNode(this.ctx!, 'vu-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+                    vuNode = new AudioWorkletNode(this.ctx!, 'vu-processor', {
+                        numberOfInputs: 1,
+                        numberOfOutputs: 1,
+                        outputChannelCount: [1],
+                    });
                     vuNode.port.onmessage = (ev) => this.handleVuMessage(channel, ev.data);
                 } catch (e) {
                     vuNode = null;
                 }
             }
 
-            const sendToDestination = false;
+            const sendToDestination = (channel === 'video' || channel === 'music');
 
             if (vuNode) {
                 gain.connect(vuNode);
@@ -212,7 +216,6 @@ export class AudioEngine {
                 }
             }
 
-            // Keep analyser branches active even if their output is unused
             if (this.analysisSink) {
                 analyser.connect(this.analysisSink);
                 tap.connect(this.analysisSink);
@@ -245,13 +248,22 @@ export class AudioEngine {
         if (this.additiveEnvNode) return;
 
         try {
-            const node = new AudioWorkletNode(this.ctx, 'additive-env-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+            const node = new AudioWorkletNode(this.ctx, 'additive-env-processor', {
+                numberOfInputs: 1,
+                numberOfOutputs: 1,
+                outputChannelCount: [1],
+            });
+
             node.port.onmessage = (ev) => {
                 if (ev.data && typeof ev.data.additiveEnv === 'number') {
                     this.additiveEnvValue = ev.data.additiveEnv;
                 }
             };
+
+            // Podpinamy pod SUMĘ miksu
             this.masterMix.connect(node);
+
+            // Wyprowadzenie node na „cichy” sink tylko po to, by graf był aktywny
             if (this.analysisSink) {
                 node.connect(this.analysisSink);
             } else {
@@ -260,6 +272,7 @@ export class AudioEngine {
                 node.connect(silent);
                 silent.connect(this.ctx.destination);
             }
+
             node.port.postMessage({ type: 'config', config: this.additiveEnvConfig });
             this.additiveEnvNode = node;
         } catch (err) {

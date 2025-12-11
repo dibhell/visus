@@ -717,10 +717,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, [useWorkletFFT, debugNoAudio]);
     useEffect(() => { useVideoFrameCbRef.current = useVideoFrameCb; localStorage.setItem('visus_vfc', useVideoFrameCb ? '1' : '0'); }, [useVideoFrameCb]);
     useEffect(() => {
-        if (!debugNoAudio) {
-            audioRef.current.updateAdditiveEnvConfig(additiveEnvConfig);
-        }
-    }, [additiveEnvConfig, debugNoAudio]);
+        if (!audioRef.current) return;
+        audioRef.current.updateAdditiveEnvConfig(additiveEnvConfig);
+    }, [additiveEnvConfig]);
     useEffect(() => {
         const canvas = envCanvasRef.current;
         if (!canvas) return;
@@ -1028,8 +1027,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 }
             }
 
-            if (!debugNoAudio) {
-                audioRef.current.initContext().then(() => {
+            const initializeAudio = async () => {
+                await audioRef.current.initContext();
+
+                if (!debugNoAudio) {
                     audioRef.current.setupFilters(syncParamsRef.current);
                     const spec = audioRef.current.getSpectrum();
                     if (!spectrumRef.current || spectrumRef.current.length !== spec.length) {
@@ -1037,12 +1038,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     }
                     spectrumRef.current.set(spec);
                     frameStateRef.current.spectrum = spectrumRef.current;
-                    setIsBooting(false);
-                });
-            } else {
-                setIsBooting(false);
-                console.info('[VISUS] debug_no_audio=1 -> audio init skipped');
-            }
+                } else {
+                    console.info('[VISUS] debug_no_audio=1 -> AudioContext utworzony, filtry/FFT pominięte');
+                }
+            };
+
+            await initializeAudio();
+            setIsBooting(false);
             handleResize();
         };
 
@@ -1290,8 +1292,15 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             const envValue = (ae as any).getAdditiveEnvValue ? (ae as any).getAdditiveEnvValue() : 0.5;
             additiveEnvValueRef.current = envValue;
-            const envDepth = additiveEnvConfigRef.current.enabled ? Math.max(0, Math.min(1, additiveEnvConfigRef.current.depth)) : 0;
-            let effectiveAdditive = (1 - envDepth) * Math.max(0, Math.min(1, additiveGainRef.current / 100)) + envDepth * envValue;
+
+            const envDepth = additiveEnvConfigRef.current.enabled
+                ? Math.max(0, Math.min(1, additiveEnvConfigRef.current.depth))
+                : 0;
+
+            let effectiveAdditive =
+                (1 - envDepth) * Math.max(0, Math.min(1, additiveGainRef.current / 100)) +
+                envDepth * envValue;
+
             effectiveAdditive = Math.max(0, Math.min(1, effectiveAdditive));
 
             const shouldUpdateEnvUi = (now - lastEnvUiUpdateRef.current) > 50;
