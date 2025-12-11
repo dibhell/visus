@@ -53,7 +53,7 @@ export class AudioEngine {
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: Uint8Array = new Uint8Array(1024);
     vizData: Uint8Array = new Uint8Array(1024);
-    private spectrumData: Uint8Array | null = null;
+    spectrumData: Uint8Array = new Uint8Array(1024);
     
     // Scratch buffers for VU meters
     vuData: any = new Uint8Array(16); 
@@ -64,17 +64,14 @@ export class AudioEngine {
     }
 
     getSpectrum(): Uint8Array {
-        if (!this.mainAnalyser || !this.ctx) {
-            return this.spectrumData ?? new Uint8Array(0);
-        }
-
         const analyser = this.mainAnalyser;
+        if (!analyser) return this.spectrumData;
+
         const bins = analyser.frequencyBinCount;
-        if (!this.spectrumData || this.spectrumData.length !== bins) {
+        if (this.spectrumData.length !== bins) {
             this.spectrumData = new Uint8Array(bins);
         }
-
-        analyser.getByteFrequencyData(this.spectrumData as unknown as Uint8Array<ArrayBuffer>);
+        analyser.getByteFrequencyData(this.spectrumData as Uint8Array<ArrayBuffer>);
         return this.spectrumData;
     }
 
@@ -104,7 +101,7 @@ export class AudioEngine {
             this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
-            // Dodatkowy analyser do wizualizacji / tapów (oddzielny, ale podpięty do masterMix)
+            // Dodatkowy analyser do wizualizacji / tapów
             this.vizAnalyser = ctx.createAnalyser();
             this.vizAnalyser.fftSize = 512;
             this.vizAnalyser.smoothingTimeConstant = 0.55;
@@ -114,9 +111,8 @@ export class AudioEngine {
             this.masterMix = ctx.createGain();
             this.masterMix.gain.value = 1;
 
-            // Wyjście na głośniki + główny analyser + dodatkowy viz analyser
+            // Wyjście na głośniki + główny analyser
             this.masterMix.connect(this.mainAnalyser);
-            this.masterMix.connect(this.vizAnalyser);
             this.masterMix.connect(ctx.destination);
 
             // Analiza pomocnicza (tap, worklety itp.)
