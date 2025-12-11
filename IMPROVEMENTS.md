@@ -2,23 +2,26 @@
 
 ## Co zostało zrobione
 - Render przeniesiony do workera z OffscreenCanvas (`RenderWorker` + `FastGLService`) z fallbackiem.
-- Adaptacyjne LOD (renderScale) zale?ne od FPS.
+- Adaptacyjne LOD (renderScale) zależne od FPS.
 - Nagrywanie WebCodecs (prefer HW) + fallback MediaRecorder (WebM).
-- Audio: osobny `vizAnalyser`, tap-y prefader, filtry pasmowe sync1/2/3 z analyserem 256 i smoothingiem 0.55 + wyg?adzanie bandLevels (35%), FFT fallback clamp 1, szybkie VU (`getLevelsFast`).
-- Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker; debug overlay/log wy??czony.
-- Performance: dynamiczny frame cap (auto 60?30?24), Performance Mode (FFT co 1/2/3 klatki), limiter UI/VU (20 FPS), Ultra Low renderScale + lock 0.5x, HUD z dt/mode/cap.
+- Audio: osobny `vizAnalyser`, tap-y prefader, filtry pasmowe sync1/2/3 z analyserem 256 i smoothingiem 0.55 + wygładzanie bandLevels (35%), FFT fallback clamp 1, szybkie VU (`getLevelsFast`).
+- Spektrum: hi-res FFT (16384) z biasem na bas, sampler max w oknie log-freq, auto-gain bez progu, fallback na bands; drag punktów stabilny, blokada globalnego scrolla przy kręceniu width/Q.
+- Sterowanie FX: routing Bass/Mid/High/BPM/manual, Wet/Dry w pakiecie FX do renderera/worker; debug overlay/log wyłączony.
+- Performance: dynamiczny frame cap (auto 60→30→24), Performance Mode (FFT co 1/2/3 klatki), limiter UI/VU (20 FPS), Ultra Low renderScale + lock 0.5x, HUD z dt/mode/cap.
+- UI: Performance Lab uporządkowane (Pipeline checkboxy z nagłówkami), panel Auto gain/Shape w spektrum stale widoczny; nowa ikona + favicon.
 - Startup: flagi diagnostyczne `debug_nogl`/`debug_noaudio`/`debug_noworker`, logi `[VISUS] init ...`, Error Boundary dla `ExperimentalAppFull`, tworzenie FastGL/Audio w `useEffect`.
 
 ## Obecne problemy
 - Do potwierdzenia live: czułość audio-reactive (FX sufit 24, VU 10, smoothing 30/35%) na Bass/Mid/High; możliwe drobne korekty mnożników/alpha/clamp.
 - Sprawdzić, czy smoothing bandów/fftSize 256 (smoothing 0.45, wygładzanie ~50%) jest optymalne przy różnych freq/width i źródłach; ewentualnie doprecyzować.
 - Potwierdzić nagrywanie (audio w WebM) i wydajność po zmianach mapowania/smoothingu.
-- WebGL: zbi? liczb? wywo?a? uniform?w (tablice uFX + uniform1fv/2fv), kompilowa? shadery tylko przy zmianie preset?w.
+- WebGL: zbić liczbę wywołań uniformów (tablice uFX + uniform1fv/2fv), kompilować shadery tylko przy zmianie presetów.
 
-## Plan naprawy FX (kolejno??)
-1) Test manualny: muzyka z wyra?nym Bass/Mid/High, routing slot?w Bass/Mid/High, obserwacja VU i efekt?w.
-2) Ewentualne korekty mapowania (multiplier/alpha/clamp) i band analyser?w po testach.
-3) Build + smoke nagrywania.
+## Plan naprawy FX/spectrum (kolejność)
+1) Test manualny: muzyka z wyraźnym Bass/Mid/High, routing slotów Bass/Mid/High, obserwacja VU i efektów.
+2) Sprawdzić nowe spektrum (FFT max sampler) na głośnym basie/hi-hat; w razie potrzeby stroić boostExp/boostMult w panelu.
+3) Ewentualne korekty mapowania (multiplier/alpha/clamp) i band analyserów po testach.
+4) Build + smoke nagrywania.
 
 ## Zadania do patcha (skrót)
 - Zestroić czułość po testach live (FX/VU smoothing, clamp 24/10).

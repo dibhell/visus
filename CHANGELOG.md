@@ -3,6 +3,12 @@
 ## [Unreleased]
 - Playlist UX/backlog: np. playlista z klipami video (do rozważenia).
 
+## [0.2.7] - 2025-12-11
+- Spectrum: hi-res FFT z biasem na bas, sampler max zamiast średniej, auto-gain bez twardego progu; fallback bands aktywny.
+- Spectrum UX: drag punktów bez „uciekania”, blokada globalnego scrolla przy kręceniu width/Q, panel Auto gain/Shape zawsze widoczny.
+- Performance Lab: uporządkowany layout sekcji Pipeline (checkboxy, spójne nagłówki).
+- Assets: nowa ikona `public/icon.png` + wygenerowany `public/favicon.ico`.
+
 ## [0.2.6] - 2025-12-10
 - Startup: nowe flagi diagnostyczne (debug_nogl, debug_noaudio, debug_noworker) oraz czytelne logi inicjalizacji GL/Audio/Worker.
 - Stabilnosc: Error Boundary dla ExperimentalAppFull, instancje FastGL/Audio tworzone w useEffect (brak ciezkich obiektow w renderze).

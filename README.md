@@ -15,9 +15,9 @@ VISUS to przegladarkowy silnik VJ/AV: miksuje wideo (pliki, kamera), audio (plik
 
 ## Wersjonowanie (biezacy stan)
 - **Branch:** `main`
-- **Wersja:** 0.2.6 (patrz `CHANGELOG.md`)
-- **Ostatnie zmiany:** diagnostyczne flagi startowe (`debug_nogl`/`debug_noaudio`/`debug_noworker`), logi init GL/Audio, Error Boundary dla `ExperimentalAppFull`, inicjalizacja GL/Audio w `useEffect`; dynamiczny frame cap (auto 60->30->24), tryb Performance (FFT co 1/2/3 klatki), limiter UI (20 FPS), nowy poziom Ultra Low (35%) + blokada rozdzielczosci 0.5x, HUD z dt/mode/cap. Nagrywanie korzysta wylacznie z miksu master (VIDEO/MUSIC/MIC).
-- **Znane problemy:** do potwierdzenia live: czulosc Bass/Mid/High po throttlingu, wydajnosc na slabszych GPU (test 1080p + FX), optymalizacja batchowania uniformow WebGL.
+- **Wersja:** 0.2.7 (patrz `CHANGELOG.md`)
+- **Ostatnie zmiany:** hi-res spectrum (FFT bias na bas, sampler max, auto-gain bez progu) + UX drag (bez „uciekania”) i blokada scrolla przy kręceniu width/Q; panel Auto gain/Shape stale widoczny; uporządkowany Performance Lab (Pipeline); nowa ikona + favicon. Poprzednio: diagnostyczne flagi startowe, dynamiczny frame cap, Performance Mode (FFT co 1/2/3), limiter UI 20 FPS, Ultra Low 35% + lock 0.5x, HUD z dt/mode/cap, nagrywanie z miksu master.
+- **Znane problemy:** test live: czułość Bass/Mid/High vs. nowe spektrum; wydajność na słabszych GPU (1080p + FX); batchowanie uniformów WebGL w toku.
 
 ## Uruchomienie lokalne
 **Wymagania:** Node.js 18+

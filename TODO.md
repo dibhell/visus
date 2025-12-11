@@ -4,16 +4,16 @@
    - Uruchom scenariusze: `?debug_nogl=1&debug_noaudio=1&debug_noworker=1`, `?debug_nogl=1&debug_noaudio=1`, `?debug_nogl=1`, `?debug_nogl=0&debug_noworker=1`; zapisz w konsoli które moduły startują i czy pojawia się OOM/render error.
 
 1) Strojenie FX audio-reactive
-   - Nowe mapowanie: pow(0.7) + smoothing 35% z sufitem FX 24; VU pow(0.8) + smoothing 45% z sufitem 10. Zweryfikowa? na Bass/Mid/High czy czu?o?? jest wystarczaj?ca; w razie potrzeby skorygowa? mno?nik/limit.
-   - Sprawdzi?, czy smoothing VU nie spowalnia UI wzgl?dem pasma.
+   - Nowe mapowanie: pow(0.7) + smoothing 35% z sufitem FX 24; VU pow(0.8) + smoothing 45% z sufitem 10. Zweryfikować na Bass/Mid/High; w razie potrzeby skorygować mnożnik/limit.
+   - Sprawdzić, czy smoothing VU nie spowalnia UI względem pasma.
 
-2) AudioEngine / FFT
-   - Filtry bandpass (sync1/2/3): analyser 256, smoothing 0.45 + wyg?adzanie band?w (~50%). Przetestowa? na r??nych freq/width vs FFT fallback (?rednia z okna, clamp 1) i potwierdzi? stabilne bandLevels.
-   - Ewentualnie doprecyzowa? fftSize/smoothing po testach live.
+2) AudioEngine / FFT / Spectrum
+   - Filtry bandpass (sync1/2/3): analyser 256, smoothing 0.45 + wygładzanie bandów (~50%). Przetestować na różnych freq/width vs FFT fallback.
+   - Spektrum: hi-res FFT (16384) bias bas, sampler max w oknie log-freq, auto-gain bez progu; potwierdzić pk > 0 i ruch linii (w razie potrzeby stroić boostExp/boostMult/min/maxH).
 
-3) Dokumentacja/porz?dek
-   - README/Instructions zaktualizowane do nowego strojenia; debug overlay/log wy??czony.
-   - Przed releasem: `npm run build` + kr?tki smoke (nagrywanie/FX na pasmach).
+3) Dokumentacja/porządek
+   - README/Instructions/Changelog/Improvements zaktualizowane do nowego strojenia; debug overlay/log wyłączony.
+   - Przed releasem: `npm run build` + krótki smoke (nagrywanie/FX na pasmach).
 
 4) Nagrywanie WebM
    - Potwierdzi?, ?e nagrywanie master mix (VIDEO/MUSIC/MIC) dzia?a stabilnie; brak miksu powinien przerwa? nagranie z alertem.
