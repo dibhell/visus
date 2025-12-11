@@ -586,74 +586,42 @@ export class AudioEngine {
             this.ctx.resume().catch(() => {});
         }
 
-        if (this.vuWorkletReady && this.useWorkletFFT) {
-            const chooseBuckets = (): Float32Array | null => {
-                const priority: Array<'music' | 'video' | 'mic'> = ['music', 'video', 'mic'];
-                for (const ch of priority) {
-                    if (this.vuWorkletBuckets[ch]) return this.vuWorkletBuckets[ch];
-                }
-                return this.vuWorkletBuckets.music || this.vuWorkletBuckets.video || this.vuWorkletBuckets.mic || null;
-            };
-            const buckets = chooseBuckets();
-            if (buckets && buckets.length > 0) {
-                const buf = new Uint8Array(buckets.length);
-                for (let i = 0; i < buckets.length; i++) {
-                    const v = Math.max(0, Math.min(1, buckets[i] || 0));
-                    buf[i] = Math.min(255, Math.round(v * 255));
-                }
-                return buf;
+        // Always return linear 0..Nyquist FFT from native analysers (no worklet buckets),
+        // so mapping bin->Hz remains accurate for band routing (sync1/2/3).
+        const candidates: Array<{ node: AnalyserNode | null; active: boolean }> = [
+            { node: this.musicTapAnalyser, active: this.channelActive.music },
+            { node: this.videoTapAnalyser, active: this.channelActive.video },
+            { node: this.micTapAnalyser, active: this.channelActive.mic },
+            { node: this.vizAnalyser, active: true },
+            { node: this.mainAnalyser, active: true },
+        ];
+
+        const ensureBuffer = (analyser: AnalyserNode) => {
+            if (this.vizData.length !== analyser.frequencyBinCount) {
+                this.vizData = new Uint8Array(analyser.frequencyBinCount) as ByteArray;
+            }
+        };
+
+        const hasEnergy = (buf: Uint8Array) => {
+            for (let i = 0; i < buf.length; i++) {
+                if (buf[i] > 0) return true;
+            }
+            return false;
+        };
+
+        let lastBuf: Uint8Array | null = null;
+
+        for (const { node, active } of candidates) {
+            if (!node) continue;
+            ensureBuffer(node);
+            node.getByteFrequencyData(this.vizData);
+            lastBuf = new Uint8Array(this.vizData);
+            if (active && hasEnergy(lastBuf)) {
+                return lastBuf;
             }
         }
 
-        // Prefer available analysers regardless of channelActive to keep spectrum alive
-        const analyser =
-            this.musicTapAnalyser ||
-            this.videoTapAnalyser ||
-            this.micTapAnalyser ||
-            this.vizAnalyser ||
-            this.mainAnalyser ||
-            null;
-
-        if (!analyser) return null;
-
-        if (this.vizData.length !== analyser.frequencyBinCount) {
-            this.vizData = new Uint8Array(analyser.frequencyBinCount) as ByteArray;
-        }
-        analyser.getByteFrequencyData(this.vizData);
-
-        // If the analyser is starved (all zeros), try a quick fallback from other analysers.
-        let hasEnergy = false;
-        for (let i = 0; i < this.vizData.length; i++) {
-            if (this.vizData[i] > 0) { hasEnergy = true; break; }
-        }
-
-        if (!hasEnergy) {
-            const scratch = new Uint8Array(512) as ByteArray;
-            const mixInto = (src: AnalyserNode | null) => {
-                if (!src) return;
-                if (src.fftSize < 1024) src.fftSize = 1024;
-                src.smoothingTimeConstant = 0.5;
-                src.getByteFrequencyData(scratch);
-                for (let i = 0; i < scratch.length && i < this.vizData.length; i++) {
-                    this.vizData[i] = Math.max(this.vizData[i], scratch[i]);
-                }
-            };
-            mixInto(this.videoTapAnalyser || this.videoAnalyser || this.vizAnalyser || this.mainAnalyser);
-            mixInto(this.musicTapAnalyser || this.musicAnalyser || this.vizAnalyser || this.mainAnalyser);
-            mixInto(this.micTapAnalyser || this.micAnalyser || this.vizAnalyser || this.mainAnalyser);
-
-            // Last resort: use time-domain energy to synthesize a floor so the UI shows activity.
-            if (this.vizData.every(v => v === 0)) {
-                const timeBuf = new Uint8Array(analyser.fftSize) as ByteArray;
-                analyser.getByteTimeDomainData(timeBuf);
-                for (let i = 0; i < timeBuf.length && i < this.vizData.length; i++) {
-                    const v = Math.abs(timeBuf[i] - 128) * 2;
-                    this.vizData[i] = Math.min(255, v);
-                }
-            }
-        }
-
-        return new Uint8Array(this.vizData) as ByteArray;
+        return lastBuf;
     }
 
     setupFilters(syncParams: SyncParam[]) {
