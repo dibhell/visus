@@ -532,17 +532,28 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     // Info Tooltip
                     if (isHovered || isDraggingThis) {
                         const tooltipY = anchorY - 20;
-                        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                        ctx.fillRect(x - 30, tooltipY - 22, 60, 24);
-                        ctx.fillStyle = colors[i];
-                        ctx.font = '10px JetBrains Mono, monospace';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(`Param: ${Math.round(param.freq)}Hz`, x, tooltipY - 12);
-                        ctx.fillStyle = '#fff';
-                        ctx.fillText(`G:${param.gain.toFixed(1)}`, x, tooltipY - 2);
-                    }
-                });
-            }
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                    ctx.fillRect(x - 30, tooltipY - 22, 60, 24);
+                    ctx.fillStyle = colors[i];
+                    ctx.font = '10px JetBrains Mono, monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`Param: ${Math.round(param.freq)}Hz`, x, tooltipY - 12);
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(`G:${param.gain.toFixed(1)}`, x, tooltipY - 2);
+                } else {
+                    // stały, mały opis częstotliwości pasma (bez hover)
+                    ctx.fillStyle = colors[i];
+                    ctx.font = '9px JetBrains Mono, monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    const bandLabel =
+                        param.freq >= 1000
+                            ? `${(param.freq / 1000).toFixed(2)}k`
+                            : `${Math.round(param.freq)}Hz`;
+                    ctx.fillText(bandLabel, x, anchorY - 14);
+                }
+            });
+        }
 
             frameRef.current = requestAnimationFrame(draw);
         };
