@@ -60,14 +60,19 @@ const FxSlot: React.FC<FxSlotProps> = React.memo(({ slotName, fxState, setFxStat
     const slotBg = isMain ? 'bg-accent/5' : 'bg-white/5';
     const glowColor = isMain ? '#a78bfa' : '#2dd4bf';
 
+    const fxCeiling = 6.0;
+    const vuCeiling = 10.0;
+    const activeNorm = Math.min(1, Math.max(0, (activeLevel ?? 0) / fxCeiling));
+    const vuNorm = Math.min(1, Math.max(0, (vuLevel ?? 0) / vuCeiling));
+
     return (
         <div className={`${slotBg} p-3 rounded-xl border ${slotBorder} mb-3 relative overflow-hidden group hover:border-white/20 transition-all duration-300`}>
              {/* Activity Indicator Bar */}
              <div 
                 className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent transition-all duration-75 ease-out shadow-[0_0_10px_rgba(167,139,250,0.5)]"
                 style={{ 
-                    opacity: config.routing !== 'off' ? 0.3 + (activeLevel * 0.7) : 0,
-                    height: `${Math.min(100, activeLevel * 100)}%`,
+                    opacity: config.routing !== 'off' ? 0.2 + (activeNorm * 0.8) : 0,
+                    height: `${Math.max(6, Math.min(100, activeNorm * 100))}%`,
                     bottom: 0, top: 'auto' 
                 }} 
             />
@@ -103,20 +108,20 @@ const FxSlot: React.FC<FxSlotProps> = React.memo(({ slotName, fxState, setFxStat
                 </div>
 
                 {/* Bottom Row: Knobs Grid */}
-                {config.shader !== '00_NONE' && (
-                    <div className="flex justify-around items-center pt-2 pb-1 bg-black/20 rounded-lg border border-white/5 relative overflow-hidden">
-                        {/* Band VU (if routed to band/BPM) */}
-                        {config.routing !== 'off' && (
-                            <div className="absolute left-1 top-2 bottom-2 w-2.5 bg-slate-900/70 rounded-full overflow-hidden">
-                                <div
-                                    className="w-full rounded-full transition-all duration-60"
-                                    style={{
-                                        height: `${Math.min(100, Math.max(5, vuLevel * 120))}%`,
-                                        background: `linear-gradient(180deg, ${routingColor} 0%, ${routingColor}55 70%, transparent 100%)`,
-                                        position: 'absolute',
-                                        bottom: 0,
-                                        boxShadow: `0 0 8px ${routingColor}55`
-                                    }}
+                        {config.shader !== '00_NONE' && (
+                            <div className="flex justify-around items-center pt-2 pb-1 bg-black/20 rounded-lg border border-white/5 relative overflow-hidden">
+                                {/* Band VU (if routed to band/BPM) */}
+                                {config.routing !== 'off' && (
+                                    <div className="absolute left-1 top-2 bottom-2 w-2.5 bg-slate-900/70 rounded-full overflow-hidden">
+                                        <div
+                                            className="w-full rounded-full transition-all duration-60"
+                                            style={{
+                                                height: `${Math.max(6, Math.min(100, vuNorm * 100))}%`,
+                                                background: `linear-gradient(180deg, ${routingColor} 0%, ${routingColor}55 70%, transparent 100%)`,
+                                                position: 'absolute',
+                                                bottom: 0,
+                                                boxShadow: `0 0 8px ${routingColor}55`
+                                            }}
                                 />
                             </div>
                         )}
