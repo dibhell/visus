@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useRef, useState, memo } from 'react';
 import { AudioEngine } from '../services/audioService';
 import { SyncParam } from '../constants';
@@ -72,8 +71,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const ae = audioServiceRef.current;
             const W = rect.width;
             const H = rect.height;
-            let debugSource = 'none';
-
             // 1. Background
             ctx.clearRect(0, 0, W, H);
             ctx.fillStyle = 'rgba(15, 23, 42, 0.3)'; // Slate dark
@@ -98,11 +95,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             drawGridLine(1000, '1k');
             drawGridLine(10000, '10k');
 
-            // 3. Spectrum Fill – high-res Ableton style
+                                                            // 3. Spectrum Fill - hi-res, bass-biased FFT
             const aeAny: any = ae;
 
-            // 3.1 – pobierz FFT z AudioEngine (wysokiej rozdzielczości)
+            // 3.1 - collect FFT (priority: getSpectrum -> getVizFFTBuffer -> getFFTData -> vizAnalyser)
             let usedFFT: Uint8Array | null = null;
+            let debugSource = 'none';
 
             if (aeAny?.getSpectrum) {
                 try {
@@ -113,7 +111,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 }
             }
 
-            // awaryjnie: spróbuj innych źródeł FFT, jeśli getSpectrum nie istnieje
             if ((!usedFFT || usedFFT.length === 0) && aeAny?.getVizFFTBuffer) {
                 try {
                     usedFFT = aeAny.getVizFFTBuffer();
@@ -122,6 +119,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     usedFFT = null;
                 }
             }
+
             if ((!usedFFT || usedFFT.length === 0) && aeAny?.getFFTData) {
                 try {
                     usedFFT = aeAny.getFFTData();
@@ -130,7 +128,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     usedFFT = null;
                 }
             }
-            if (!usedFFT && aeAny?.vizAnalyser) {
+
+            if ((!usedFFT || usedFFT.length === 0) && aeAny?.vizAnalyser) {
                 const analyser = aeAny.vizAnalyser as AnalyserNode;
                 const buf = new Uint8Array(analyser.frequencyBinCount);
                 analyser.getByteFrequencyData(buf);
@@ -138,12 +137,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 debugSource = 'vizAnalyser';
             }
 
-            // 3.2 – bandy jako pewny fallback
+            // 3.2 - bands fallback with smoothing
             let rawBands = { sync1: 0, sync2: 0, sync3: 0 };
             if (aeAny?.getBandLevels) {
                 rawBands = aeAny.getBandLevels() || rawBands;
             } else if (aeAny?.vuWorkletBands && aeAny.vuWorkletBands.video) {
-                const vb = aeAny.vuWorkletBands.video;
+                const vb = aeAny.vuWorkletBands.video as Float32Array;
                 rawBands = {
                     sync1: vb[0] || 0,
                     sync2: vb[1] || 0,
@@ -151,34 +150,28 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 };
             }
 
-            // 3.3 – wygładzenie bandów (tylko dla fallbacku)
             const smooth = smoothBandsRef.current;
-            const alpha = 0.6;
-            smooth.sync1 = smooth.sync1 * (1 - alpha) + rawBands.sync1 * alpha;
-            smooth.sync2 = smooth.sync2 * (1 - alpha) + rawBands.sync2 * alpha;
-            smooth.sync3 = smooth.sync3 * (1 - alpha) + rawBands.sync3 * alpha;
+            const bandAlpha = 0.6;
+            smooth.sync1 = smooth.sync1 * (1 - bandAlpha) + rawBands.sync1 * bandAlpha;
+            smooth.sync2 = smooth.sync2 * (1 - bandAlpha) + rawBands.sync2 * bandAlpha;
+            smooth.sync3 = smooth.sync3 * (1 - bandAlpha) + rawBands.sync3 * bandAlpha;
 
-            // 3.4 – helper rysowania krzywej (używany przez FFT i fallback)
+            // 3.3 - draw helper (dense curve, bass bias)
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 const dbg = spectrumDebugRef.current;
 
-                ctx.beginPath();
-
-                // liczba punktów zależna od szerokości – wysoka rozdzielczość
-                const bars = Math.min(1024, Math.max(256, Math.floor(W * 2.5)));
-                // więcej próbek niż pikseli – gęstsza, bardziej „analogowa” krzywa
+                // dense sampling for more detail
+                const bars = Math.min(2048, Math.max(512, Math.floor(W * 3.0)));
 
                 const minHeight = H * dbg.minHeightFrac;
                 const maxHeight = H * dbg.maxHeightFrac;
 
+                ctx.beginPath();
                 ctx.moveTo(0, H - 2);
 
                 for (let i = 0; i < bars; i++) {
                     const energy = sampler(i, bars); // 0..1
-                    const boosted = Math.pow(
-                        Math.max(0, energy),
-                        dbg.boostExp
-                    ) * dbg.boostMult;
+                    const boosted = Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult;
 
                     const barH = Math.max(
                         minHeight,
@@ -196,64 +189,82 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.stroke();
             };
 
-            // 3.5 – FFT branch: log-freq mapping + auto-gain
+            // 3.4 - FFT with bass bias (better ~50 Hz visibility)
             let fftUsed = false;
+
             if (enabled && usedFFT && usedFFT.length > 0) {
-                // peak FFT
+                const dbg = spectrumDebugRef.current;
+
                 let peak = 0;
                 for (let i = 0; i < usedFFT.length; i++) {
                     if (usedFFT[i] > peak) peak = usedFFT[i];
                 }
 
-                // jeśli FFT jest praktycznie martwe – przeskocz na fallback
-                if (peak > 3) {
-                    const dbg = spectrumDebugRef.current;
-                    const normPeak = peak / 255;
+                const normPeak = Math.max(dbg.minPeak, (peak / 255) || 0);
+                const gain = Math.min(dbg.maxGain, dbg.targetPeak / normPeak);
 
-                    const gain = Math.min(
-                        dbg.maxGain,
-                        dbg.targetPeak / Math.max(normPeak, dbg.minPeak)
-                    );
+                const len = usedFFT.length;
+                const sampleRate = aeAny?.ctx?.sampleRate || 48000;
+                const nyquist = sampleRate / 2;
+                const minFreq = 20;
+                const maxFreq = 20000;
+                const minLog = Math.log10(minFreq);
+                const maxLog = Math.log10(maxFreq);
 
-                    const sampleRate = aeAny?.ctx?.sampleRate || 48000;
-                    const nyquist = sampleRate / 2;
-                    const len = usedFFT.length;
+                const bassBias = 2.2; // >1 means more points in bass
 
-                    drawSpectrum((i, bars) => {
-                        // logarytmiczna pozycja na osi częstotliwości
-                        const t = i / Math.max(1, bars - 1);
-                        const minLog = Math.log10(40);
-                        const maxLog = Math.log10(20000);
-                        const logF = minLog + t * (maxLog - minLog);
-                        const freq = Math.pow(10, logF);
+                drawSpectrum((i, bars) => {
+                    const u0 = i / bars;
+                    const u1 = (i + 1) / bars;
 
-                        const binFloat = (freq / nyquist) * len;
-                        const binIndex = Math.min(len - 1, Math.max(0, Math.round(binFloat)));
+                    const t0 = Math.pow(u0, bassBias);
+                    const t1 = Math.pow(u1, bassBias);
 
-                        const val = usedFFT![binIndex] || 0;
+                    const fCenterLog = minLog + ((t0 + t1) * 0.5) * (maxLog - minLog);
+                    const fCenter = Math.pow(10, fCenterLog);
 
-                        let energy = (val / 255) * gain;
-                        if (energy < 0) energy = 0;
-                        if (energy > 1) energy = 1;
+                    const binCenter = (fCenter / nyquist) * len;
 
-                        return energy;
-                    });
+                    let b0 = Math.floor(binCenter - 2);
+                    let b1 = Math.ceil(binCenter + 2);
+                    if (b0 < 0) b0 = 0;
+                    if (b1 >= len) b1 = len - 1;
+                    if (b1 < b0) b1 = b0;
 
-                    fftUsed = true;
-                }
+                    let sum = 0;
+                    let count = 0;
+                    for (let b = b0; b <= b1; b++) {
+                        sum += usedFFT![b];
+                        count++;
+                    }
+                    const avg = count > 0 ? sum / count : 0;
+
+                    let energy = (avg / 255) * gain;
+                    if (energy < 0) energy = 0;
+                    if (energy > 1) energy = 1;
+
+                    return energy;
+                });
+
+                fftUsed = true;
             }
 
-            // 3.6 – fallback na bandy (BASS/MID/HIGH), gdy FFT nie działa
+            // 3.5 - fallback to bands when FFT is empty
             if (!fftUsed) {
                 const dbg = spectrumDebugRef.current;
-                const bands = smoothBandsRef.current;
+                const bandsSmooth = smoothBandsRef.current;
 
                 const tri = (t: number, c: number, w: number) => {
                     const d = Math.abs(t - c) / w;
                     return d >= 1 ? 0 : 1 - d;
                 };
 
-                const peakBand = Math.max(bands.sync1 || 0, bands.sync2 || 0, bands.sync3 || 0);
+                const peakBand = Math.max(
+                    bandsSmooth.sync1 || 0,
+                    bandsSmooth.sync2 || 0,
+                    bandsSmooth.sync3 || 0
+                );
+
                 const gain = Math.min(
                     dbg.maxGain,
                     dbg.targetPeak / Math.max(peakBand, dbg.minPeak)
@@ -261,34 +272,39 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                 drawSpectrum((i, bars) => {
                     const t = i / Math.max(1, bars - 1);
-                    const bass = bands.sync1 || 0;
-                    const mid  = bands.sync2 || 0;
-                    const high = bands.sync3 || 0;
+
+                    const bass = bandsSmooth.sync1 || 0;
+                    const mid  = bandsSmooth.sync2 || 0;
+                    const high = bandsSmooth.sync3 || 0;
 
                     const energy =
-                        bass * tri(t, 0.15, 0.30) +
+                        bass * tri(t, 0.18, 0.30) +
                         mid  * tri(t, 0.50, 0.35) +
-                        high * tri(t, 0.85, 0.30);
+                        high * tri(t, 0.82, 0.30);
 
                     return Math.min(1, energy * gain);
                 });
             }
 
-            // 3.6 – mały overlay diagnostyczny
+            // 3.6 - overlay: FFT vs fallback (debug)
             try {
                 let info = '';
 
                 if (fftUsed && usedFFT && usedFFT.length) {
-                    info = `FFT: ${debugSource} len=${usedFFT.length}`;
+                    info = `FFT:${debugSource} len=${usedFFT.length}`;
                 } else {
-                    const bands = smoothBandsRef.current;
-                    const pk = Math.max(bands.sync1 || 0, bands.sync2 || 0, bands.sync3 || 0).toFixed(2);
-                    info = `BANDS fallback pk=${pk}`;
+                    const bandsSmooth = smoothBandsRef.current;
+                    const pk = Math.max(
+                        bandsSmooth.sync1 || 0,
+                        bandsSmooth.sync2 || 0,
+                        bandsSmooth.sync3 || 0
+                    ).toFixed(2);
+                    info = `BANDS:fallback pk=${pk}`;
                 }
 
                 ctx.save();
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                ctx.fillRect(6, 6, 180, 18);
+                ctx.fillRect(6, 6, 220, 18);
                 ctx.fillStyle = '#a5b4fc';
                 ctx.font = '10px JetBrains Mono, monospace';
                 ctx.textBaseline = 'middle';
@@ -297,7 +313,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             } catch {
                 // overlay nie jest krytyczny
             }
-// 4. Interactive Points
+            // 4. Interactive Points
             const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             
             const bands = syncParamsRef.current;
