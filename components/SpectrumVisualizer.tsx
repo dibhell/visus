@@ -121,10 +121,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             ctx.lineWidth = 1;
             const drawGridLine = (freq: number, label: string) => {
                 const x = getLogX(freq, W);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
-                ctx.lineTo(x, H);
+                ctx.lineTo(x, H * 0.7);
                 ctx.stroke();
                 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
@@ -252,14 +252,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 // --- KALIBRACJA: linie częstotliwości + opis piku ---
                 ctx.save();
                 ctx.lineWidth = 1;
-                ctx.globalAlpha = 0.35;
+                ctx.globalAlpha = 0.2;
                 ctx.strokeStyle = '#ffffff';
 
                 SPECTRUM_CALIB_MARKERS.forEach((markerHz) => {
                     const x = getLogX(markerHz, W);
                     ctx.beginPath();
                     ctx.moveTo(x + 0.5, 0);
-                    ctx.lineTo(x + 0.5, H);
+                    ctx.lineTo(x + 0.5, H * 0.8);
                     ctx.stroke();
 
                     // mały opis nad osią
@@ -270,7 +270,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         markerHz >= 1000
                             ? `${(markerHz / 1000).toFixed(markerHz >= 2000 ? 0 : 1)}k`
                             : `${markerHz}`;
-                    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                    ctx.fillStyle = 'rgba(255,255,255,0.45)';
                     ctx.fillText(label, x, 2);
                 });
 
@@ -437,6 +437,37 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             } catch {
                 // overlay nie jest krytyczny
             }
+
+            // 3.7 - overlay z wartościami: peak FFT + freq punktu (hover/drag)
+            try {
+                const peakFreq = lastPeakFreqRef.current;
+                const hoverIdx = hoveredBandRef.current;
+                const bands = syncParamsRef.current;
+                const hoverFreq = hoverIdx !== null && bands[hoverIdx] ? bands[hoverIdx].freq : null;
+
+                ctx.save();
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.fillRect(6, 26, 210, 28);
+                ctx.font = '11px JetBrains Mono, monospace';
+                ctx.textBaseline = 'middle';
+
+                const peakLabel =
+                    peakFreq && peakFreq > 0
+                        ? (peakFreq >= 1000 ? `${(peakFreq / 1000).toFixed(2)}kHz` : `${peakFreq.toFixed(1)}Hz`)
+                        : '---';
+                const hoverLabel =
+                    hoverFreq && hoverFreq > 0
+                        ? (hoverFreq >= 1000 ? `${(hoverFreq / 1000).toFixed(2)}kHz` : `${hoverFreq.toFixed(1)}Hz`)
+                        : '---';
+
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillText(`Peak: ${peakLabel}`, 12, 40);
+                ctx.fillStyle = '#a5b4fc';
+                ctx.fillText(`Param: ${hoverLabel}`, 118, 40);
+                ctx.restore();
+            } catch {
+                // overlay nie jest krytyczny
+            }
             // 4. Interactive Points
             const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             
@@ -499,7 +530,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         ctx.fillStyle = colors[i];
                         ctx.font = '10px JetBrains Mono, monospace';
                         ctx.textAlign = 'center';
-                        ctx.fillText(`${Math.round(param.freq)}Hz`, x, tooltipY - 12);
+                        ctx.fillText(`Param: ${Math.round(param.freq)}Hz`, x, tooltipY - 12);
                         ctx.fillStyle = '#fff';
                         ctx.fillText(`G:${param.gain.toFixed(1)}`, x, tooltipY - 2);
                     }
@@ -680,7 +711,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             onTouchEnd={handleTouchEnd}
             onWheel={handleWheel}
         >
-            <div className="w-full h-[140px]">
+            <div className="w-full h-[180px]">
                 <canvas 
                     ref={canvasRef} 
                     className="block w-full h-full"
