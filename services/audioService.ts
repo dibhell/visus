@@ -588,12 +588,13 @@ export class AudioEngine {
 
         // Always return linear 0..Nyquist FFT from native analysers (no worklet buckets),
         // so mapping bin->Hz remains accurate for band routing (sync1/2/3).
-        // Prefer active taps, then the full-resolution mainAnalyser, then vizAnalyser fallback.
+        // Use the full-resolution master analyser for consistent 0..Nyquist mapping (same as visualizer).
+        // If it is missing, fall back to active taps.
         const candidates: Array<{ node: AnalyserNode | null; active: boolean }> = [
+            { node: this.mainAnalyser, active: true },
             { node: this.musicTapAnalyser, active: this.channelActive.music },
             { node: this.videoTapAnalyser, active: this.channelActive.video },
             { node: this.micTapAnalyser, active: this.channelActive.mic },
-            { node: this.mainAnalyser, active: true },
             { node: this.vizAnalyser, active: true },
         ];
 
