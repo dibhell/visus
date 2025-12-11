@@ -555,6 +555,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const envCanvasRef = useRef<HTMLCanvasElement>(null);
     const spectrumRef = useRef<Uint8Array | null>(null);
     const frameStateRef = useRef<{ spectrum: Uint8Array | null }>({ spectrum: null });
+    const ensureAudioContext = useCallback(async () => {
+        if (!audioRef.current) return;
+        if (!audioRef.current.ctx) {
+            await audioRef.current.initContext();
+        } else if (audioRef.current.ctx.state === 'suspended') {
+            await audioRef.current.ctx.resume();
+        }
+    }, []);
 
     useEffect(() => {
         console.log('[VISUS] init useEffect enter');
@@ -1533,7 +1541,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const stopVideo = useCallback(() => stopTransport('video'), [stopTransport]);
     const stopMusic = useCallback(() => stopTransport('music'), [stopTransport]);
 
-    const loadMusicTrack = useCallback((url: string, name: string) => {
+    const loadMusicTrack = useCallback(async (url: string, name: string) => {
         if (debugNoAudio) {
             console.info('[VISUS] debug_no_audio=1 -> music load skipped');
             return;
@@ -1548,6 +1556,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         audio.crossOrigin = 'anonymous';
         audioElRef.current = audio;
 
+        await ensureAudioContext();
         audioRef.current.connectMusic(audio);
         audioRef.current.setupFilters(syncParamsRef.current);
 
@@ -1559,9 +1568,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         }).catch(e => console.log('Auto-play prevented', e));
 
         setShowCatalog(false);
-    }, [debugNoAudio]);
+    }, [debugNoAudio, ensureAudioContext]);
 
-    const handleFile = (type: 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFile = useCallback(async (type: 'video' | 'audio', e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             try {
                 const file = e.target.files[0];
@@ -1576,10 +1585,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         videoRef.current.loop = true;
                         videoRef.current.play().catch(() => {});
                         if (!debugNoAudio) {
+                            await ensureAudioContext();
                             audioRef.current.connectVideo(videoRef.current);
                             audioRef.current.setupFilters(syncParamsRef.current);
                         }
-                        setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
+                        setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true, name: file.name } }));
                     } catch (err) {
                         console.error('Video load failed', err);
                     }
@@ -1588,13 +1598,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         console.info('[VISUS] debug_no_audio=1 -> audio file load skipped');
                         return;
                     }
-                    loadMusicTrack(url, file.name);
+                    await loadMusicTrack(url, file.name);
                 }
             } catch (err) {
                 console.error(err);
             }
         }
-    };
+    }, [debugNoAudio, ensureAudioContext, loadMusicTrack]);
 
     const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;

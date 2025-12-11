@@ -90,60 +90,59 @@ export class AudioEngine {
 
     async initContext() {
         if (!this.ctx) {
-            this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: 'playback' });
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
+                latencyHint: 'playback',
+            });
+            this.ctx = ctx;
 
-            // 1. Create Main Analysis Chain
-            this.mainAnalyser = this.ctx.createAnalyser();
+            // Główny analyser do FX/spectrum
+            this.mainAnalyser = ctx.createAnalyser();
             this.mainAnalyser.fftSize = 16384;
-            this.mainAnalyser.smoothingTimeConstant = 0.45;
-            this.mainAnalyser.minDecibels = -110;
-            this.mainAnalyser.maxDecibels = -5;
+            this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
-            // UI uses the same analyser (no duplicate graph)
-            this.vizAnalyser = this.mainAnalyser;
-            this.vizData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+            // Dodatkowy analyser do wizualizacji / tapów
+            this.vizAnalyser = ctx.createAnalyser();
+            this.vizAnalyser.fftSize = 512;
+            this.vizAnalyser.smoothingTimeConstant = 0.55;
+            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
 
             // Master bus
-            this.masterMix = this.ctx.createGain();
-            this.masterMix.gain.value = 1.0;
+            this.masterMix = ctx.createGain();
+            this.masterMix.gain.value = 1;
 
-            // TAP do analizatora (FFT na ca?ym miksie)
+            // Wyjście na głośniki + główny analyser
             this.masterMix.connect(this.mainAnalyser);
+            this.masterMix.connect(ctx.destination);
 
-            // WYJ?CIE NA G?O?NIKI
-            this.masterMix.connect(this.ctx.destination);
+            // Analiza pomocnicza (tap, worklety itp.)
+            this.analysisSink = ctx.createGain();
+            this.analysisSink.gain.value = 0;
+            this.analysisSink.connect(ctx.destination);
 
-            // Silent sink (tylko dla drobnych analyserow, nie dla mastera)
-            this.analysisSink = this.ctx.createGain();
-            this.analysisSink.gain.value = 0.0;
-            this.analysisSink.connect(this.ctx.destination);
-
-            // 2. Create Recording Destination
-            this.recDest = this.ctx.createMediaStreamDestination();
-            this.recDest.channelCount = 2;
-            this.recDest.channelCountMode = 'explicit';
-            this.recDest.channelInterpretation = 'speakers';
+            // Destination do nagrywania
+            this.recDest = ctx.createMediaStreamDestination();
             this.masterMix.connect(this.recDest);
 
-            // 3. Try load VU Worklet (optional)
+            // VU worklet (FFT / RMS / bands)
             try {
-                await this.ctx.audioWorklet.addModule(new URL('./worklets/vu-processor.js', import.meta.url));
+                await ctx.audioWorklet.addModule('/vu-processor.js');
                 this.vuWorkletReady = true;
             } catch (err) {
-                console.warn('VU worklet not available, falling back to analyser nodes', err);
+                console.warn('VU worklet unavailable', err);
                 this.vuWorkletReady = false;
             }
 
+            // Additive env worklet (obwiednia)
             try {
-                await this.ctx.audioWorklet.addModule(new URL('./worklets/additive-env-processor.js', import.meta.url));
+                await ctx.audioWorklet.addModule('/additive-env-processor.js');
                 this.additiveEnvReady = true;
             } catch (err) {
-                console.warn('Additive envelope worklet not available, using static value', err);
+                console.warn('Additive env worklet unavailable', err);
                 this.additiveEnvReady = false;
             }
 
-            // Initialize Channels
+            // Kanały + envelope follower
             this.initChannelNodes();
             this.setupAdditiveEnvFollower();
 
@@ -175,7 +174,7 @@ export class AudioEngine {
         const createChannel = (channel: 'video' | 'music' | 'mic') => {
             const gain = this.ctx!.createGain();
             const analyser = this.ctx!.createAnalyser();
-            analyser.fftSize = 32; // Small for VU meter
+            analyser.fftSize = 32; // VU
             analyser.smoothingTimeConstant = 0.3;
 
             const tap = this.ctx!.createAnalyser();
@@ -196,18 +195,27 @@ export class AudioEngine {
                 }
             }
 
+            // UWAGA: video + music idą również bezpośrednio na destination,
+            // mic tylko przez masterMix.
             const sendToDestination = (channel === 'video' || channel === 'music');
 
             if (vuNode) {
+                // główny tor
                 gain.connect(vuNode);
+
+                // odnogi do analizy
                 vuNode.connect(analyser);
                 vuNode.connect(tap);
-                vuNode.connect(this.masterMix!); // zawsze do master bus (FX / spectrum)
 
+                // zawsze na master bus (FX / spectrum / envelope follower)
+                vuNode.connect(this.masterMix!);
+
+                // tylko video + music dodatkowo prosto na głośniki
                 if (sendToDestination) {
-                    vuNode.connect(this.ctx!.destination); // tylko video + music
+                    vuNode.connect(this.ctx!.destination);
                 }
             } else {
+                // fallback bez workleta
                 gain.connect(analyser);
                 gain.connect(tap);
                 gain.connect(this.masterMix!);
@@ -217,6 +225,7 @@ export class AudioEngine {
                 }
             }
 
+            // utrzymujemy gałąź analityczną aktywną
             if (this.analysisSink) {
                 analyser.connect(this.analysisSink);
                 tap.connect(this.analysisSink);
@@ -227,21 +236,21 @@ export class AudioEngine {
 
         // Video
         const v = createChannel('video');
-        this.videoGain = v.gain;
-        this.videoAnalyser = v.analyser;
-        this.videoTapAnalyser = v.tap;
+        this.videoGain = v!.gain;
+        this.videoAnalyser = v!.analyser;
+        this.videoTapAnalyser = v!.tap;
 
         // Music
         const m = createChannel('music');
-        this.musicGain = m.gain;
-        this.musicAnalyser = m.analyser;
-        this.musicTapAnalyser = m.tap;
+        this.musicGain = m!.gain;
+        this.musicAnalyser = m!.analyser;
+        this.musicTapAnalyser = m!.tap;
 
         // Mic
         const mic = createChannel('mic');
-        this.micGain = mic.gain;
-        this.micAnalyser = mic.analyser;
-        this.micTapAnalyser = mic.tap;
+        this.micGain = mic!.gain;
+        this.micAnalyser = mic!.analyser;
+        this.micTapAnalyser = mic!.tap;
     }
 
     setupAdditiveEnvFollower() {
@@ -261,10 +270,10 @@ export class AudioEngine {
                 }
             };
 
-            // Podpinamy pod SUMĘ miksu
+            // słuchamy całego master busa
             this.masterMix.connect(node);
 
-            // Wyprowadzenie node na „cichy” sink tylko po to, by graf był aktywny
+            // utrzymujemy node aktywny - albo do analysisSink, albo cichej gałęzi
             if (this.analysisSink) {
                 node.connect(this.analysisSink);
             } else {
