@@ -126,7 +126,7 @@ export class AudioEngine {
 
             // VU worklet (FFT / RMS / bands)
             try {
-                await ctx.audioWorklet.addModule('/vu-processor.js');
+                await ctx.audioWorklet.addModule(new URL('./worklets/vu-processor.js', import.meta.url));
                 this.vuWorkletReady = true;
             } catch (err) {
                 console.warn('VU worklet unavailable', err);
@@ -135,7 +135,7 @@ export class AudioEngine {
 
             // Additive env worklet (obwiednia)
             try {
-                await ctx.audioWorklet.addModule('/additive-env-processor.js');
+                await ctx.audioWorklet.addModule(new URL('./worklets/additive-env-processor.js', import.meta.url));
                 this.additiveEnvReady = true;
             } catch (err) {
                 console.warn('Additive env worklet unavailable', err);
