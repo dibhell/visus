@@ -194,57 +194,56 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.stroke();
             };
 
-            // 3.4 - FFT with bass bias (better ~50 Hz visibility)
+            // 3.4 FFT (logarytmiczna mapa częstotliwości + auto-gain, bez uśredniania zakresów)
             let fftUsed = false;
 
             if (enabled && usedFFT && usedFFT.length > 0) {
                 const dbg = spectrumDebugRef.current;
 
+                // peak z całego FFT
                 let peak = 0;
                 for (let i = 0; i < usedFFT.length; i++) {
                     if (usedFFT[i] > peak) peak = usedFFT[i];
                 }
 
-                // Only use FFT if there is any energy at all
-                if (peak > 0) {
-                    const normPeak = Math.max(dbg.minPeak, (peak / 255) || 0);
-                    const gain = Math.min(dbg.maxGain, dbg.targetPeak / Math.max(normPeak, dbg.minPeak));
+                // jeśli FFT praktycznie martwe – nie używamy go
+                if (peak > 3) {
+                    const normPeak = peak / 255;
+                    const gain = Math.min(
+                        dbg.maxGain,
+                        dbg.targetPeak / Math.max(normPeak, dbg.minPeak)
+                    );
 
                     const len = usedFFT.length;
                     const sampleRate = aeAny?.ctx?.sampleRate || 48000;
                     const nyquist = sampleRate / 2;
+
+                    // pomocnicza funkcja: mapuje częstotliwość na indeks binu
+                    const binForFreq = (freqHz: number) => {
+                        const f = Math.max(20, Math.min(20000, freqHz));
+                        const idxFloat = (f / nyquist) * len;
+                        const idx = Math.round(idxFloat);
+                        return Math.min(len - 1, Math.max(0, idx));
+                    };
+
+                    // zakres spektrum – taki sam jak grid (20 Hz – 20 kHz)
                     const minFreq = 20;
                     const maxFreq = 20000;
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
-                    const bassBias = 2.2; // >1 means more points in bass
-
+                    // sampler: dla każdej „kolumny” bierzemy JEDEN bin FFT
                     drawSpectrum((i, bars) => {
-                        const u0 = i / bars;
-                        const u1 = (i + 1) / bars;
+                        const t = bars > 1 ? i / (bars - 1) : 0;
 
-                        const t0 = Math.pow(u0, bassBias);
-                        const t1 = Math.pow(u1, bassBias);
+                        // logarytmiczna oś częstotliwości
+                        const logF = minLog + t * (maxLog - minLog);
+                        const freq = Math.pow(10, logF);
 
-                        const fCenterLog = minLog + ((t0 + t1) * 0.5) * (maxLog - minLog);
-                        const fCenter = Math.pow(10, fCenterLog);
+                        const bin = binForFreq(freq);
+                        const val = usedFFT[bin] || 0;
 
-                        const binCenter = (fCenter / nyquist) * len;
-
-                        let b0 = Math.floor(binCenter - 2);
-                        let b1 = Math.ceil(binCenter + 2);
-                        if (b0 < 0) b0 = 0;
-                        if (b1 >= len) b1 = len - 1;
-                        if (b1 < b0) b1 = b0;
-
-                        let maxVal = 0;
-                        for (let b = b0; b <= b1; b++) {
-                            const v = usedFFT![b] || 0;
-                            if (v > maxVal) maxVal = v;
-                        }
-
-                        let energy = (maxVal / 255) * gain;
+                        let energy = (val / 255) * gain;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
