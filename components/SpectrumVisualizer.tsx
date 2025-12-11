@@ -139,10 +139,26 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                                                             // 3. Spectrum Fill - hi-res, bass-biased FFT
             const aeAny: any = ae;
 
-            // 3.1 FFT z silnika ÔÇô zawsze hi-res z master bus
+            // 3.1 FFT z silnika - zawsze hi-res z master bus
             let usedFFT: Uint8Array | null = null;
             let debugSource = 'none';
-            if (aeAny?.getSpectrum) {
+
+            // PRIORYTET: bezposrednio mainAnalyser z AudioContext (RAW FFT 0..Nyquist)
+            if (aeAny?.mainAnalyser && aeAny?.ctx) {
+                try {
+                    const analyser: AnalyserNode = aeAny.mainAnalyser;
+                    const binCount = analyser.frequencyBinCount;
+                    const arr = new Uint8Array(binCount);
+                    analyser.getByteFrequencyData(arr);
+                    usedFFT = arr;
+                    debugSource = 'mainAnalyser';
+                } catch {
+                    usedFFT = null;
+                }
+            }
+
+            // Fallback: stare getSpectrum (jesli mainAnalyser z jakiegos powodu nie istnieje)
+            else if (aeAny?.getSpectrum) {
                 try {
                     usedFFT = aeAny.getSpectrum();
                     debugSource = 'getSpectrum';
@@ -686,7 +702,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                             }
                             onClick={() => setSpectrumMode('ableton')}
                         >
-                            ABLETON
+                            SMOOTH
                         </button>
                         <button
                             type="button"
