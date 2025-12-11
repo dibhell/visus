@@ -1293,7 +1293,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             };
 
             const lerp = (prev: number, next: number, alpha: number) => (prev * (1 - alpha)) + (next * alpha);
-            const fxCeiling = 24.0;
+            const fxCeiling = 4.0;
             const vuCeiling = 10.0;
             const fxAlpha = 0.30; // slightly snappier to avoid UI lag
             const vuAlpha = 0.35; // keep VU responsive without jitter
@@ -2249,12 +2249,16 @@ const toggleRecording = async () => {
                                     <div className="relative w-full h-1 bg-slate-800/80 rounded-full overflow-visible">
                                         <div className="absolute inset-y-0 left-0 rounded-full bg-accent/40" style={{ width: `${effectivePercent}%` }}></div>
                                         <div
-                                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.55)] border border-slate-900/70 flex items-center justify-center"
+                                            className="absolute top-1/2 -translate-y-[70%] -translate-x-1/2 w-3 h-3 rounded-full border border-accent/60 bg-slate-900 shadow-[0_0_10px_rgba(167,139,250,0.2)]"
+                                            style={{ left: `${basePercent}%`, opacity: 0.85 }}
+                                        ></div>
+                                        <div
+                                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.6)] border border-slate-900/70 flex items-center justify-center"
                                             style={{ left: `${effectivePercent}%` }}
                                         >
                                             <div
-                                                className="w-2 h-2 rounded-full bg-fuchsia-500 shadow-[0_0_6px_rgba(217,70,239,0.9)] pointer-events-none"
-                                                style={{ opacity: 0 }}
+                                                className="w-2.5 h-2.5 rounded-full bg-accent shadow-[0_0_8px_rgba(167,139,250,0.8)] pointer-events-none"
+                                                style={{ opacity: 0.85 }}
                                             />
                                         </div>
                                     </div>
