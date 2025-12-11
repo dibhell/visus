@@ -3,6 +3,40 @@ import React, { useEffect, useRef, useState, memo } from 'react';
 import { AudioEngine } from '../services/audioService';
 import { SyncParam } from '../constants';
 
+const SPECTRUM_CALIB_MARKERS = [50, 80, 100, 200, 500, 1000, 2000, 5000];
+
+// pomocnicza funkcja do znalezienia głównego piku w FFT
+function findMainPeak(
+    fft: Uint8Array,
+    sampleRate: number,
+    minFreq: number,
+    maxFreq: number
+) {
+    if (!fft || fft.length === 0) {
+        return { freq: 0, value: 0 };
+    }
+
+    const nyquist = sampleRate / 2;
+    const len = fft.length;
+
+    const minBin = Math.max(1, Math.round((minFreq / nyquist) * len));
+    const maxBin = Math.min(len - 1, Math.round((maxFreq / nyquist) * len));
+
+    let bestBin = minBin;
+    let bestVal = 0;
+
+    for (let i = minBin; i <= maxBin; i++) {
+        const v = fft[i] || 0;
+        if (v > bestVal) {
+            bestVal = v;
+            bestBin = i;
+        }
+    }
+
+    const freq = (bestBin / len) * nyquist;
+    return { freq, value: bestVal };
+}
+
 interface Props {
     audioServiceRef: React.MutableRefObject<AudioEngine>;
     syncParams: SyncParam[];
@@ -135,7 +169,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             smooth.sync3 = smooth.sync3 * (1 - bandAlpha) + rawBands.sync3 * bandAlpha;
 
             // 3.3 - draw helper (dense curve, bass bias)
-            const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
+            const drawSpectrum = (
+                sampler: (i: number, bars: number) => number,
+                overlay?: { fft?: Uint8Array | null; sampleRate?: number }
+            ) => {
                 const dbg = spectrumDebugRef.current;
 
                 // dense sampling for more detail (bli┼╝ej Ableton)
@@ -183,6 +220,60 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.strokeStyle = '#2dd4bf';
                 ctx.lineWidth = 1;
                 ctx.stroke();
+
+                // --- KALIBRACJA: linie częstotliwości + opis piku ---
+                ctx.save();
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.35;
+                ctx.strokeStyle = '#ffffff';
+
+                SPECTRUM_CALIB_MARKERS.forEach((markerHz) => {
+                    const x = getLogX(markerHz, W);
+                    ctx.beginPath();
+                    ctx.moveTo(x + 0.5, 0);
+                    ctx.lineTo(x + 0.5, H);
+                    ctx.stroke();
+
+                    // mały opis nad osią
+                    ctx.font = '10px system-ui';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    const label =
+                        markerHz >= 1000
+                            ? `${(markerHz / 1000).toFixed(markerHz >= 2000 ? 0 : 1)}k`
+                            : `${markerHz}`;
+                    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                    ctx.fillText(label, x, 2);
+                });
+
+                const fftOverlay = overlay?.fft;
+                const sampleRateOverlay = overlay?.sampleRate ?? 48000;
+                const peak = fftOverlay ? findMainPeak(fftOverlay, sampleRateOverlay, 20, 20000) : { freq: 0, value: 0 };
+
+                if (peak.freq > 0 && peak.value > 0) {
+                    const peakX = getLogX(peak.freq, W);
+
+                    // marker piku na górze
+                    ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(peakX + 0.5, 0);
+                    ctx.lineTo(peakX + 0.5, H * 0.25);
+                    ctx.stroke();
+
+                    // tekst z częstotliwością
+                    ctx.font = '11px system-ui';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillStyle = 'rgba(255, 215, 0, 0.95)';
+                    const freqLabel =
+                        peak.freq >= 1000
+                            ? `${(peak.freq / 1000).toFixed(2)} kHz`
+                            : `${peak.freq.toFixed(1)} Hz`;
+                    ctx.fillText(`Peak: ${freqLabel}`, peakX + 4, H * 0.25 - 2);
+                }
+
+                ctx.restore();
             };
 
             // 3.4 FFT (logarytmiczna mapa cz─Östotliwo┼Ťci + auto-gain, bez u┼Ťredniania zakres├│w)
@@ -223,13 +314,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
-                    // sampler: dla ka┼╝dej ÔÇ×kolumnyÔÇŁ bierzemy JEDEN bin FFT, z biasem na bas
+                    // sampler: dla ka?dej kolumny bierzemy JEDEN bin FFT, z biasem na bas
                     drawSpectrum((i, bars) => {
-                        // bias na bas: wi─Öcej punkt├│w w dole pasma
+                        // bias na bas: wi?cej punkt?w w dole pasma
                         const tLinear = bars > 1 ? i / (bars - 1) : 0;
                         const t = Math.pow(tLinear, 2.5);
 
-                        // logarytmiczna o┼Ť cz─Östotliwo┼Ťci
+                        // logarytmiczna o? cz?stotliwo?ci
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
 
@@ -237,13 +328,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const val = usedFFT[bin] || 0;
 
                         let energy = (val / 255) * gain;
-                        // delikatny floor, ┼╝eby cisza nie dawa┼éa linii 0 px
+                        // delikatny floor, ?eby cisza nie dawa?a linii 0 px
                         if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
                         return energy;
-                    });
+                    }, { fft: usedFFT, sampleRate });
 
                     fftUsed = true;
                 }
