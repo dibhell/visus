@@ -22,9 +22,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
     const [spectrumDebug, setSpectrumDebug] = useState({
-        targetPeak: 0.98,
+        targetPeak: 1.0,
         minPeak: 0.04,
-        maxGain: 12.0,
+        maxGain: 11.0,
         boostExp: 0.45,
         boostMult: 2.5,
         minHeightFrac: 0.06,
@@ -640,6 +640,5 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 };
 
 export default memo(SpectrumVisualizer);
-
 
 
