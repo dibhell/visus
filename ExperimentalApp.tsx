@@ -2247,18 +2247,19 @@ const toggleRecording = async () => {
                                 />
                                 <div className="pointer-events-none absolute inset-0 flex items-center">
                                     <div className="relative w-full h-1 bg-slate-800/80 rounded-full overflow-visible">
-                                        <div className="absolute inset-y-0 left-0 rounded-full bg-accent/40" style={{ width: `${effectivePercent}%` }}></div>
+                                        <div className="absolute inset-y-0 left-0 rounded-full bg-slate-600/60" style={{ width: `${basePercent}%` }}></div>
+                                        <div className="absolute inset-y-0 left-0 rounded-full bg-accent/35" style={{ width: `${effectivePercent}%` }}></div>
                                         <div
-                                            className="absolute top-1/2 -translate-y-[70%] -translate-x-1/2 w-3 h-3 rounded-full border border-accent/60 bg-slate-900 shadow-[0_0_10px_rgba(167,139,250,0.2)]"
-                                            style={{ left: `${basePercent}%`, opacity: 0.85 }}
+                                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-accent shadow-[0_0_12px_rgba(167,139,250,0.35)] border border-slate-900/60 flex items-center justify-center"
+                                            style={{ left: `${basePercent}%` }}
                                         ></div>
                                         <div
-                                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white shadow-[0_0_12px_rgba(255,255,255,0.6)] border border-slate-900/70 flex items-center justify-center"
+                                            className="absolute top-1/2 -translate-y-[70%] -translate-x-1/2 w-4 h-4 rounded-full bg-white/80 shadow-[0_0_10px_rgba(255,255,255,0.45)] border border-slate-900/70 flex items-center justify-center"
                                             style={{ left: `${effectivePercent}%` }}
                                         >
                                             <div
-                                                className="w-2.5 h-2.5 rounded-full bg-accent shadow-[0_0_8px_rgba(167,139,250,0.8)] pointer-events-none"
-                                                style={{ opacity: 0.85 }}
+                                                className="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)] pointer-events-none"
+                                                style={{ opacity: 0.9 }}
                                             />
                                         </div>
                                     </div>
