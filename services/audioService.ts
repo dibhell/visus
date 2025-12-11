@@ -114,9 +114,10 @@ export class AudioEngine {
             // WYJ?CIE NA G?O?NIKI
             this.masterMix.connect(this.ctx.destination);
 
-            // Silent sink (tylko dla drobnych analyser?w, nie dla mastera)
+            // Silent sink (tylko dla drobnych analyserow, nie dla mastera)
             this.analysisSink = this.ctx.createGain();
             this.analysisSink.gain.value = 0.0;
+            this.analysisSink.connect(this.ctx.destination);
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
