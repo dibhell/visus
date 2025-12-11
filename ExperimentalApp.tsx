@@ -1305,9 +1305,16 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 ? Math.max(0, Math.min(1, additiveEnvConfigRef.current.depth))
                 : 0;
 
-            let effectiveAdditive =
-                (1 - envDepth) * Math.max(0, Math.min(1, additiveGainRef.current / 100)) +
-                envDepth * envValue;
+            const baseAdditive = Math.max(0, Math.min(1, additiveGainRef.current / 100));
+
+            // Env moduluje bazę zamiast ją całkowicie zastępować:
+            // depth=0   → final = base
+            // depth=1   → final = base * env
+            let effectiveAdditive = baseAdditive;
+            if (envDepth > 0) {
+                const mod = (1 - envDepth) + envDepth * envValue;
+                effectiveAdditive = baseAdditive * mod;
+            }
 
             effectiveAdditive = Math.max(0, Math.min(1, effectiveAdditive));
 
@@ -1853,7 +1860,7 @@ const toggleRecording = async () => {
 
     const toggleEnvFollower = (enabled: boolean) => {
         setAdditiveEnvConfig(prev => {
-            const nextDepth = enabled && prev.depth === 0 ? 0.5 : prev.depth;
+            const nextDepth = enabled && prev.depth === 0 ? 0.3 : prev.depth;
             return { ...prev, enabled, depth: enabled ? nextDepth : prev.depth };
         });
     };
@@ -1872,10 +1879,14 @@ const toggleRecording = async () => {
 
     const baseNormalizedUi = Math.max(0, Math.min(1, additiveGain / 100));
     const appliedDepth = additiveEnvConfig.enabled ? additiveEnvConfig.depth : 0;
-    const effectiveAdditiveUi = Math.max(
-        0,
-        Math.min(1, (1 - appliedDepth) * baseNormalizedUi + appliedDepth * additiveEnvValue)
-    );
+
+    // ten sam wzór co w renderLoop:
+    let effectiveAdditiveUi = baseNormalizedUi;
+    if (appliedDepth > 0) {
+        const modUi = (1 - appliedDepth) + appliedDepth * additiveEnvValue;
+        effectiveAdditiveUi = baseNormalizedUi * modUi;
+    }
+    effectiveAdditiveUi = Math.max(0, Math.min(1, effectiveAdditiveUi));
     const basePercent = Math.round(baseNormalizedUi * 100);
     const envPercent = Math.round(additiveEnvValue * 100);
     const effectivePercent = Math.round(effectiveAdditiveUi * 100);

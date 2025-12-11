@@ -27,12 +27,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     } | null>(null);
     const [spectrumDebug, setSpectrumDebug] = useState({
         targetPeak: 1.0,
-        minPeak: 0.04,
-        maxGain: 11.0,
-        boostExp: 0.45,
-        boostMult: 2.5,
-        minHeightFrac: 0.06,
-        maxHeightFrac: 0.98,
+        minPeak: 0.30,
+        maxGain: 20.0,
+        boostExp: 2.0,
+        boostMult: 0.6,
+        minHeightFrac: 0.0,
+        maxHeightFrac: 0.81,
     });
     const spectrumDebugRef = useRef(spectrumDebug);
 
