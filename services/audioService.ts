@@ -95,7 +95,7 @@ export class AudioEngine {
             // 1. Create Main Analysis Chain
             // Hi-res analyser na całym master miksie (wspólne źródło dla FX i UI)
             this.mainAnalyser = this.ctx.createAnalyser();
-            this.mainAnalyser.fftSize = 16384; // hi-res, ~8k binów
+            this.mainAnalyser.fftSize = 16384;
             this.mainAnalyser.smoothingTimeConstant = 0.45;
             this.mainAnalyser.minDecibels = -110;
             this.mainAnalyser.maxDecibels = -5;
@@ -105,16 +105,19 @@ export class AudioEngine {
             this.vizAnalyser = this.mainAnalyser;
             this.vizData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
-            // Silent sink to keep analyser branches pulling without audible output
-            this.analysisSink = this.ctx.createGain();
-            this.analysisSink.gain.value = 0.0;
-            this.mainAnalyser.connect(this.analysisSink);
-            this.analysisSink.connect(this.ctx.destination);
-
+            // Master bus
             this.masterMix = this.ctx.createGain();
             this.masterMix.gain.value = 1.0;
-            // jeden hi-res analyser jako "tap" na master bus
+
+            // TAP do analizatora (FFT na całym miksie)
             this.masterMix.connect(this.mainAnalyser);
+
+            // WYJŚCIE NA GŁOŚNIKI
+            this.masterMix.connect(this.ctx.destination);
+
+            // Silent sink (tylko dla drobnych analyserów, nie dla mastera)
+            this.analysisSink = this.ctx.createGain();
+            this.analysisSink.gain.value = 0.0;
 
             // 2. Create Recording Destination
             this.recDest = this.ctx.createMediaStreamDestination();
@@ -188,7 +191,7 @@ export class AudioEngine {
                 }
             }
 
-            const sendToDestination = channel !== 'mic';
+            const sendToDestination = false;
 
             if (vuNode) {
                 gain.connect(vuNode);
