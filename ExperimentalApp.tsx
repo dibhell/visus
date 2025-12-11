@@ -336,6 +336,12 @@ const PanelSettings: React.FC<{
         useVideoFrameCb, setUseVideoFrameCb,
     } = props;
 
+    // Aliases for clearer naming in UI
+    const autoScaleQuality = autoScale;
+    const setAutoScaleQuality = setAutoScale;
+    const useVideoFrameCallback = useVideoFrameCb;
+    const setUseVideoFrameCallback = setUseVideoFrameCb;
+
     const qualityOptions: { key: QualityMode; label: string }[] = [
         { key: 'ultraLow', label: 'ULow' },
         { key: 'low', label: 'Low' },
@@ -376,7 +382,7 @@ const PanelSettings: React.FC<{
 
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase">Frame cap mode</div>
+                    <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">Frame cap mode</div>
                     <div className="flex gap-2">
                         {['dynamic', 'manual'].map((m) => (
                             <button
@@ -404,7 +410,7 @@ const PanelSettings: React.FC<{
                 </div>
 
                 <div className="space-y-2">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase">Performance mode</div>
+                    <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">Performance mode</div>
                     <div className="grid grid-cols-3 gap-2">
                         {perfOptions.map((p) => (
                             <button
@@ -416,7 +422,7 @@ const PanelSettings: React.FC<{
                             </button>
                         ))}
                     </div>
-                    <div className="text-[10px] text-slate-500 font-bold uppercase">UI FPS limit</div>
+                    <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">UI FPS limit</div>
                     <div className="flex gap-2">
                         {uiFpsOptions.map((fps) => (
                             <button
@@ -433,7 +439,7 @@ const PanelSettings: React.FC<{
 
             <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase">Recording</div>
+                    <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">Recording</div>
                     <label className="flex items-center gap-2 text-[11px] text-slate-300">
                         <span className="w-24">FPS</span>
                         <input
@@ -468,21 +474,45 @@ const PanelSettings: React.FC<{
                     </label>
                 </div>
 
-                <div className="space-y-2">
-                    <div className="text-[10px] text-slate-500 font-bold uppercase">Pipeline</div>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <input type="checkbox" checked={autoScale} onChange={(e) => setAutoScale(e.target.checked)} />
-                        Auto scale quality
-                    </label>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <input type="checkbox" checked={useWorkletFFT} onChange={(e) => setUseWorkletFFT(e.target.checked)} />
-                        Use worklet FFT
-                    </label>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <input type="checkbox" checked={useVideoFrameCb} onChange={(e) => setUseVideoFrameCb(e.target.checked)} />
-                        requestVideoFrameCallback
-                    </label>
-                </div>
+                <section className="mt-4">
+                    <h3 className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">
+                        Pipeline
+                    </h3>
+
+                    <div className="grid grid-cols-1 gap-1 text-[11px] text-slate-200">
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={autoScaleQuality}
+                                onChange={e => setAutoScaleQuality(e.target.checked)}
+                                className="accent-sky-400"
+                            />
+                            <span className="leading-tight">Auto scale quality</span>
+                        </label>
+
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={useWorkletFFT}
+                                onChange={e => setUseWorkletFFT(e.target.checked)}
+                                className="accent-sky-400"
+                            />
+                            <span className="leading-tight">Use worklet FFT</span>
+                        </label>
+
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={useVideoFrameCallback}
+                                onChange={e => setUseVideoFrameCallback(e.target.checked)}
+                                className="accent-sky-400"
+                            />
+                            <span className="leading-tight break-words">
+                                requestVideoFrameCallback
+                            </span>
+                        </label>
+                    </div>
+                </section>
             </div>
         </section>
     );

@@ -20,6 +20,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
+    const dragMetaRef = useRef<{
+        index: number;
+        startY: number;
+        startGain: number;
+    } | null>(null);
     const [spectrumDebug, setSpectrumDebug] = useState({
         targetPeak: 1.0,
         minPeak: 0.04,
@@ -416,8 +421,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     // --- MOUSE ---
 
     const handleMouseDown = (e: React.MouseEvent) => {
-        const { x, w } = getMousePos(e);
-        checkHit(x, w);
+        const { x, y, w, h } = getMousePos(e);
+        checkHit(x, y, w, h);
     };
 
     const handleMouseMove = (e: React.MouseEvent) => {
@@ -427,14 +432,15 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     const handleMouseUp = () => {
         isDragging.current = null;
+        dragMetaRef.current = null;
     };
 
     // --- TOUCH ---
     
     const handleTouchStart = (e: React.TouchEvent) => {
         // e.preventDefault(); // Often needed to prevent scroll
-        const { x, w } = getMousePos(e);
-        checkHit(x, w);
+        const { x, y, w, h } = getMousePos(e);
+        checkHit(x, y, w, h);
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
@@ -444,11 +450,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     const handleTouchEnd = () => {
         isDragging.current = null;
+        dragMetaRef.current = null;
     };
 
     // --- SHARED LOGIC ---
 
-    const checkHit = (x: number, w: number) => {
+    const checkHit = (x: number, y: number, w: number, h: number) => {
         let closest = -1;
         let minDist = 30; // Hit radius
 
@@ -464,6 +471,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         if (closest !== -1) {
             isDragging.current = closest;
             setHoveredBand(closest);
+            const params = syncParams[closest];
+            dragMetaRef.current = {
+                index: closest,
+                startY: y,
+                startGain: params ? params.gain : 1.0,
+            };
+        } else {
+            dragMetaRef.current = null;
         }
     };
 
@@ -474,10 +489,20 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             // Freq (X)
             const newFreq = Math.max(20, Math.min(20000, getFreqFromX(x, w)));
             
-            // Gain (Y)
-            const normalizedY = 1 - (y / h); 
-            // Mapping: Bottom=0.1, Top=3.0
-            const newGain = Math.max(0.1, Math.min(3.0, normalizedY * 3.0));
+            // Gain (Y) relative to drag start
+            const meta = dragMetaRef.current;
+            const minGain = 0.1;
+            const maxGain = 3.0;
+            let newGain = syncParams[i]?.gain ?? 1.0;
+
+            if (meta && meta.index === i) {
+                const dy = meta.startY - y; // up -> increase gain
+                const gainRange = maxGain - minGain;
+                const deltaGain = (dy / h) * gainRange;
+                newGain = meta.startGain + deltaGain;
+            }
+
+            newGain = Math.max(minGain, Math.min(maxGain, newGain));
 
             onParamChange(i, { freq: newFreq, gain: newGain });
         } else {
@@ -512,10 +537,21 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         }
     };
 
+    useEffect(() => {
+        const onGlobalWheel = (e: WheelEvent) => {
+            if (isDragging.current !== null) {
+                e.preventDefault();
+            }
+        };
+
+        window.addEventListener('wheel', onGlobalWheel, { passive: false });
+        return () => window.removeEventListener('wheel', onGlobalWheel);
+    }, []);
+
     return (
         <div 
             ref={containerRef}
-            className="bg-black/20 border border-white/10 rounded-xl mb-4 overflow-hidden relative group cursor-crosshair select-none backdrop-blur-sm touch-none"
+            className="bg-black/20 border border-white/10 rounded-xl mb-4 overflow-hidden relative group cursor-crosshair select-none backdrop-blur-sm touch-none overscroll-contain"
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -656,5 +692,3 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 };
 
 export default memo(SpectrumVisualizer);
-
-
