@@ -438,16 +438,21 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 // overlay nie jest krytyczny
             }
 
-            // 3.7 - overlay z wartościami: peak FFT + freq punktu (hover/drag)
+            // 3.7 - overlay z wartościami: peak FFT + freq punktu (hover/drag) + podgląd pasm
             try {
                 const peakFreq = lastPeakFreqRef.current;
                 const hoverIdx = hoveredBandRef.current;
                 const bands = syncParamsRef.current;
                 const hoverFreq = hoverIdx !== null && bands[hoverIdx] ? bands[hoverIdx].freq : null;
+                const bandLabels = bands.slice(0, 3).map((b, i) => {
+                    const f = b?.freq || 0;
+                    const text = f >= 1000 ? `${(f / 1000).toFixed(2)}kHz` : `${Math.round(f)}Hz`;
+                    return `${i + 1}:${text}`;
+                });
 
                 ctx.save();
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                ctx.fillRect(6, 26, 210, 28);
+                ctx.fillRect(6, 26, 235, 44);
                 ctx.font = '11px JetBrains Mono, monospace';
                 ctx.textBaseline = 'middle';
 
@@ -461,9 +466,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         : '---';
 
                 ctx.fillStyle = '#fbbf24';
-                ctx.fillText(`Peak: ${peakLabel}`, 12, 40);
+                ctx.fillText(`Peak (FFT): ${peakLabel}`, 12, 40);
                 ctx.fillStyle = '#a5b4fc';
-                ctx.fillText(`Param: ${hoverLabel}`, 118, 40);
+                ctx.fillText(`Param (set): ${hoverLabel}`, 12, 56);
+                ctx.fillStyle = 'rgba(255,255,255,0.75)';
+                ctx.fillText(`Bands: ${bandLabels.join(' | ')}`, 125, 56);
                 ctx.restore();
             } catch {
                 // overlay nie jest krytyczny
