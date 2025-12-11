@@ -104,16 +104,19 @@ export class AudioEngine {
             this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
 
-            // Dodatkowy analyser do wizualizacji / tapów (używamy mainAnalyser, by mieć pewny sygnał)
-            this.vizAnalyser = this.mainAnalyser;
-            this.vizData = new Uint8Array(this.mainAnalyser.frequencyBinCount);
+            // Dodatkowy analyser do wizualizacji / tapów (oddzielny, ale podpięty do masterMix)
+            this.vizAnalyser = ctx.createAnalyser();
+            this.vizAnalyser.fftSize = 512;
+            this.vizAnalyser.smoothingTimeConstant = 0.55;
+            this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount);
 
             // Master bus
             this.masterMix = ctx.createGain();
             this.masterMix.gain.value = 1;
 
-            // Wyjście na głośniki + główny analyser
+            // Wyjście na głośniki + główny analyser + dodatkowy viz analyser
             this.masterMix.connect(this.mainAnalyser);
+            this.masterMix.connect(this.vizAnalyser);
             this.masterMix.connect(ctx.destination);
 
             // Analiza pomocnicza (tap, worklety itp.)
