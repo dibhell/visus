@@ -1293,7 +1293,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             };
 
             const lerp = (prev: number, next: number, alpha: number) => (prev * (1 - alpha)) + (next * alpha);
-            const fxCeiling = 1.5;
+            // FX depth ceiling: give headroom without saturating at low %.
+            const fxCeiling = 6.0;
             const vuCeiling = 10.0;
             const fxAlpha = 0.30; // slightly snappier to avoid UI lag
             const vuAlpha = 0.35; // keep VU responsive without jitter
@@ -1301,7 +1302,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             const computeFxVal = (config: any, prev: number) => {
                 const sourceLevel = Math.max(0, getLevel(config.routing));
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                const shaped = Math.pow(sourceLevel, 1.0);
+                const shaped = Math.pow(sourceLevel, 0.8);
                 const target = Math.min(fxCeiling, shaped * gainMult * fxCeiling);
                 return lerp(prev, target, fxAlpha);
             };
