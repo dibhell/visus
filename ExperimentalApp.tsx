@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
-import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE, FallbackReason } from './constants';
+import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE, FallbackReason, AdditiveEnvConfig, DEFAULT_ADDITIVE_ENV_CONFIG } from './constants';
 import RenderWorker from './services/renderWorker?worker';
 import FxSlot from './components/FxSlot';
 import BandControls from './components/BandControls';
@@ -552,6 +552,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
+    const envCanvasRef = useRef<HTMLCanvasElement>(null);
     const spectrumRef = useRef<Uint8Array | null>(null);
     const frameStateRef = useRef<{ spectrum: Uint8Array | null }>({ spectrum: null });
 
@@ -584,6 +585,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const rafRef = useRef<number>(0);
     const lastFrameRef = useRef<number>(0);
     const lastUiUpdateRef = useRef<number>(0);
+    const lastEnvUiUpdateRef = useRef<number>(0);
     const lastFpsTickRef = useRef<number>(0);
     const fpsSmoothRef = useRef<number>(60);
     const frameIndexRef = useRef<number>(0);
@@ -641,6 +643,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [isMirrored, setIsMirrored] = useState(false);
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
     const [additiveGain, setAdditiveGain] = useState(80);
+    const [additiveEnvConfig, setAdditiveEnvConfig] = useState<AdditiveEnvConfig>(DEFAULT_ADDITIVE_ENV_CONFIG);
+    const [additiveEnvValue, setAdditiveEnvValue] = useState(0.5);
+    const [additiveEnvHistory, setAdditiveEnvHistory] = useState<number[]>([]);
+    const [showEnvAdvanced, setShowEnvAdvanced] = useState(false);
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
@@ -669,6 +675,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const fxStateRef = useRef(fxState);
     const syncParamsRef = useRef(syncParams);
     const additiveGainRef = useRef(additiveGain);
+    const additiveEnvConfigRef = useRef<AdditiveEnvConfig>(DEFAULT_ADDITIVE_ENV_CONFIG);
+    const additiveEnvValueRef = useRef(0.5);
+    const additiveEnvHistoryRef = useRef<number[]>([]);
     const transformRef = useRef(transform);
     const isMirroredRef = useRef(isMirrored);
     const renderScaleRef = useRef(renderScale);
@@ -682,6 +691,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { additiveGainRef.current = additiveGain; }, [additiveGain]);
+    useEffect(() => { additiveEnvConfigRef.current = additiveEnvConfig; }, [additiveEnvConfig]);
+    useEffect(() => { additiveEnvValueRef.current = additiveEnvValue; }, [additiveEnvValue]);
+    useEffect(() => { additiveEnvHistoryRef.current = additiveEnvHistory; }, [additiveEnvHistory]);
     useEffect(() => { transformRef.current = transform; }, [transform]);
     useEffect(() => { isMirroredRef.current = isMirrored; }, [isMirrored]);
     useEffect(() => { renderScaleRef.current = renderScale; }, [renderScale]);
@@ -704,6 +716,54 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
     }, [useWorkletFFT, debugNoAudio]);
     useEffect(() => { useVideoFrameCbRef.current = useVideoFrameCb; localStorage.setItem('visus_vfc', useVideoFrameCb ? '1' : '0'); }, [useVideoFrameCb]);
+    useEffect(() => {
+        if (!debugNoAudio) {
+            audioRef.current.updateAdditiveEnvConfig(additiveEnvConfig);
+        }
+    }, [additiveEnvConfig, debugNoAudio]);
+    useEffect(() => {
+        const canvas = envCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const width = canvas.clientWidth || 240;
+        const height = canvas.clientHeight || 60;
+        if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.6)';
+        ctx.fillRect(0, 0, width, height);
+
+        if (additiveEnvHistory.length > 0) {
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            additiveEnvHistory.forEach((v, idx) => {
+                const clamped = Math.max(0, Math.min(1, v));
+                const x = (idx / Math.max(1, additiveEnvHistory.length - 1)) * width;
+                const y = height - clamped * height;
+                if (idx === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+
+        const baseLine = Math.max(0, Math.min(1, additiveGain / 100));
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = 'rgba(45, 212, 191, 0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const yBase = height - baseLine * height;
+        ctx.moveTo(0, yBase);
+        ctx.lineTo(width, yBase);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }, [additiveEnvHistory, additiveGain]);
     useEffect(() => { setFxPreference(getFxPreference()); }, []);
     useEffect(() => {
         setRenderPreference(getRenderPreference());
@@ -1228,6 +1288,24 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             fxVuLevelsRef.current.fx4 = computeFxVu(currentFxState.fx4, fxVuLevelsRef.current.fx4);
             fxVuLevelsRef.current.fx5 = computeFxVu(currentFxState.fx5, fxVuLevelsRef.current.fx5);
 
+            const envValue = (ae as any).getAdditiveEnvValue ? (ae as any).getAdditiveEnvValue() : 0.5;
+            additiveEnvValueRef.current = envValue;
+            const envDepth = additiveEnvConfigRef.current.enabled ? Math.max(0, Math.min(1, additiveEnvConfigRef.current.depth)) : 0;
+            let effectiveAdditive = (1 - envDepth) * Math.max(0, Math.min(1, additiveGainRef.current / 100)) + envDepth * envValue;
+            effectiveAdditive = Math.max(0, Math.min(1, effectiveAdditive));
+
+            const shouldUpdateEnvUi = (now - lastEnvUiUpdateRef.current) > 50;
+            if (shouldUpdateEnvUi) {
+                const history = additiveEnvHistoryRef.current ? [...additiveEnvHistoryRef.current] : [];
+                history.push(envValue);
+                const maxSamples = 20;
+                if (history.length > maxSamples) history.splice(0, history.length - maxSamples);
+                additiveEnvHistoryRef.current = history;
+                setAdditiveEnvHistory(history);
+                setAdditiveEnvValue(envValue);
+                lastEnvUiUpdateRef.current = now;
+            }
+
             if (shouldUpdateUi) {
                 setVisualLevels({ ...visualLevelsRef.current });
                 setFxVuLevels({ ...fxVuLevelsRef.current });
@@ -1239,7 +1317,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 mainFXGain: visualLevelsRef.current.main,
                 main_id: SHADER_LIST[currentFxState.main.shader]?.id || 0,
                 mainMix: (currentFxState.main.mix ?? 100) / 100,
-                additiveMasterGain: additiveGainRef.current / 100,
+                additiveMasterGain: effectiveAdditive,
                 transform: currentTransform,
                 isMirrored: isMirroredRef.current,
                 fx1: visualLevelsRef.current.fx1, fx2: visualLevelsRef.current.fx2, fx3: visualLevelsRef.current.fx3, fx4: visualLevelsRef.current.fx4, fx5: visualLevelsRef.current.fx5,
@@ -1668,7 +1746,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         })));
         if (!debugNoAudio && combinedAudioTracks.length === 0) {
             recordingAudio.cleanup?.();
-            alert('Nagrywanie przerwane: combinedStream nie zawiera żadnej ścieżki audio.');
+            alert('Nagrywanie przerwane: combinedStream nie zawiera ┼╝adnej ┼Ťcie┼╝ki audio.');
             return false;
         }
         console.log('[VISUS] REC TRACKS', { video: combinedStream.getVideoTracks().length, audio: combinedStream.getAudioTracks().length });
@@ -1754,6 +1832,17 @@ const toggleRecording = async () => {
         setTransform(prev => ({ ...prev, [key]: value }));
     };
 
+    const toggleEnvFollower = (enabled: boolean) => {
+        setAdditiveEnvConfig(prev => {
+            const nextDepth = enabled && prev.depth === 0 ? 0.5 : prev.depth;
+            return { ...prev, enabled, depth: enabled ? nextDepth : prev.depth };
+        });
+    };
+
+    const updateEnvFollower = (changes: Partial<AdditiveEnvConfig>) => {
+        setAdditiveEnvConfig(prev => ({ ...prev, ...changes }));
+    };
+
     const exitToLanding = () => {
         if (isRecording) toggleRecording();
         if (videoRef.current && videoRef.current.srcObject) {
@@ -1761,6 +1850,18 @@ const toggleRecording = async () => {
         }
         onExit();
     };
+
+    const baseNormalizedUi = Math.max(0, Math.min(1, additiveGain / 100));
+    const appliedDepth = additiveEnvConfig.enabled ? additiveEnvConfig.depth : 0;
+    const effectiveAdditiveUi = Math.max(
+        0,
+        Math.min(1, (1 - appliedDepth) * baseNormalizedUi + appliedDepth * additiveEnvValue)
+    );
+    const basePercent = Math.round(baseNormalizedUi * 100);
+    const envPercent = Math.round(additiveEnvValue * 100);
+    const effectivePercent = Math.round(effectiveAdditiveUi * 100);
+    const depthPercent = Math.round(additiveEnvConfig.depth * 100);
+    const envActive = additiveEnvConfig.enabled && additiveEnvConfig.depth > 0;
 
     return (
         <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
@@ -2035,7 +2136,10 @@ const toggleRecording = async () => {
                                 <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
                                 FX Chain
                             </div>
-                            <div className="text-[9px] text-slate-500">Additive Gain: <span className="text-accent font-semibold">{additiveGain}%</span></div>
+                            <div className="text-right leading-tight">
+                                <div className="text-[9px] text-slate-500">Additive</div>
+                                <div className="text-[11px] text-accent font-semibold">{effectivePercent}%</div>
+                            </div>
                         </div>
                         <FxSlot category="main" slotName="main" fxState={fxState} setFxState={setFxState} activeLevel={visualLevels.main} vuLevel={fxVuLevels.main} />
                         <div className="space-y-2 mt-4">
@@ -2052,9 +2156,201 @@ const toggleRecording = async () => {
                                 />
                             ))}
                         </div>
-                        <div className="mt-3 bg-white/5 border border-white/10 rounded-xl p-3">
-                            <div className="text-[10px] text-slate-400 mb-1">Additive Master</div>
-                            <input type="range" min={0} max={200} step={1} value={additiveGain} onChange={(e) => setAdditiveGain(parseInt(e.target.value, 10))} className="w-full" />
+                        <div className="mt-3 bg-white/5 border border-white/10 rounded-xl p-3 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <div className="text-[10px] text-slate-400 uppercase tracking-[0.25em]">Additive Master</div>
+                                    <div className="text-sm font-semibold text-white">Effective {effectivePercent}%</div>
+                                    <div className="text-[9px] text-slate-500">Env {envPercent}% · Base {basePercent}%</div>
+                                </div>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={additiveEnvConfig.enabled}
+                                        onChange={(e) => toggleEnvFollower(e.target.checked)}
+                                    />
+                                    <div className="w-10 h-5 bg-slate-800 rounded-full peer-focus:outline-none peer peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:bg-white shadow-inner"></div>
+                                    <span className="ml-2 text-[10px] text-slate-400 font-semibold">Env</span>
+                                </label>
+                            </div>
+
+                            <div className="relative">
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={200}
+                                    step={1}
+                                    value={additiveGain}
+                                    onChange={(e) => setAdditiveGain(parseInt(e.target.value, 10))}
+                                    className="w-full accent-accent"
+                                />
+                                <div className="pointer-events-none absolute inset-0 flex items-center">
+                                    <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                                        <div className="h-full bg-accent/40" style={{ width: `${effectivePercent}%` }}></div>
+                                    </div>
+                                    <div
+                                        className="absolute top-1/2 w-2.5 h-2.5 -mt-[5px] rounded-full bg-accent shadow-[0_0_10px_rgba(168,85,247,0.6)]"
+                                        style={{ left: `calc(${effectivePercent}% - 5px)` }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <div className="text-[9px] text-slate-500 flex justify-between mb-1">
+                                        <span>Depth</span>
+                                        <span className="text-slate-400">{depthPercent}%</span>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={100}
+                                        step={1}
+                                        value={Math.round(additiveEnvConfig.depth * 100)}
+                                        onChange={(e) => updateEnvFollower({ depth: parseInt(e.target.value, 10) / 100 })}
+                                        className="w-full accent-accent"
+                                        disabled={!additiveEnvConfig.enabled}
+                                    />
+                                </div>
+                                <div className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 flex items-center justify-between">
+                                    <div className="text-[9px] text-slate-500">Source</div>
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => updateEnvFollower({ source: 'RMS' })}
+                                            className={`px-2 py-1 rounded text-[10px] font-semibold border ${additiveEnvConfig.source === 'RMS' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                                            disabled={!additiveEnvConfig.enabled}
+                                        >
+                                            RMS
+                                        </button>
+                                        <button
+                                            onClick={() => updateEnvFollower({ source: 'PEAK' })}
+                                            className={`px-2 py-1 rounded text-[10px] font-semibold border ${additiveEnvConfig.source === 'PEAK' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                                            disabled={!additiveEnvConfig.enabled}
+                                        >
+                                            Peak
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-2">
+                                <button
+                                    onClick={() => setShowEnvAdvanced(!showEnvAdvanced)}
+                                    className="px-3 py-2 rounded-lg text-[10px] font-semibold bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-2"
+                                >
+                                    <span className="w-1 h-1 rounded-full" style={{ backgroundColor: envActive ? '#a855f7' : '#475569' }}></span>
+                                    {showEnvAdvanced ? 'Hide Advanced' : 'Advanced'}
+                                </button>
+                                <div className={`text-[9px] ${envActive ? 'text-accent' : 'text-slate-500'}`}>
+                                    {envActive ? 'Following envelope' : 'Static mix'}
+                                </div>
+                            </div>
+
+                            {showEnvAdvanced && (
+                                <div className={`space-y-3 ${!additiveEnvConfig.enabled ? 'opacity-60' : ''}`}>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <Knob
+                                            label="Attack"
+                                            value={additiveEnvConfig.attackMs}
+                                            min={0.5}
+                                            max={200}
+                                            step={0.5}
+                                            onChange={(v) => updateEnvFollower({ attackMs: v })}
+                                            format={(v) => `${v.toFixed(1)}ms`}
+                                            color="#a855f7"
+                                        />
+                                        <Knob
+                                            label="Release"
+                                            value={additiveEnvConfig.releaseMs}
+                                            min={10}
+                                            max={2000}
+                                            step={10}
+                                            onChange={(v) => updateEnvFollower({ releaseMs: v })}
+                                            format={(v) => `${Math.round(v)}ms`}
+                                            color="#a855f7"
+                                        />
+                                        <Knob
+                                            label="Delay"
+                                            value={additiveEnvConfig.delayMs}
+                                            min={0}
+                                            max={200}
+                                            step={1}
+                                            onChange={(v) => updateEnvFollower({ delayMs: v })}
+                                            format={(v) => `${Math.round(v)}ms`}
+                                            color="#22d3ee"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-3">
+                                        <Knob
+                                            label="Gain"
+                                            value={additiveEnvConfig.gain}
+                                            min={0}
+                                            max={2}
+                                            step={0.05}
+                                            onChange={(v) => updateEnvFollower({ gain: v })}
+                                            format={(v) => `${Math.round(v * 100)}%`}
+                                            color="#22d3ee"
+                                        />
+                                        <Knob
+                                            label="Offset"
+                                            value={additiveEnvConfig.offset}
+                                            min={-1}
+                                            max={1}
+                                            step={0.05}
+                                            onChange={(v) => updateEnvFollower({ offset: v })}
+                                            format={(v) => `${Math.round(v * 50)}%`}
+                                            color="#38bdf8"
+                                        />
+                                        <div className="bg-black/30 border border-white/10 rounded-lg px-3 py-2 flex flex-col justify-between">
+                                            <div className="text-[9px] text-slate-500 mb-1">Mode</div>
+                                            <div className="flex gap-1">
+                                                <button
+                                                    onClick={() => updateEnvFollower({ mode: 'normal' })}
+                                                    className={`flex-1 py-1 rounded text-[10px] font-semibold border ${additiveEnvConfig.mode === 'normal' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                                                    disabled={!additiveEnvConfig.enabled}
+                                                >
+                                                    Normal
+                                                </button>
+                                                <button
+                                                    onClick={() => updateEnvFollower({ mode: 'invert' })}
+                                                    className={`flex-1 py-1 rounded text-[10px] font-semibold border ${additiveEnvConfig.mode === 'invert' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                                                    disabled={!additiveEnvConfig.enabled}
+                                                >
+                                                    Invert
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-black/30 border border-white/10 rounded-lg px-3 py-2">
+                                        <div className="flex justify-between text-[9px] text-slate-500 mb-1">
+                                            <span>Shape</span>
+                                            <span className="text-slate-400">{additiveEnvConfig.shape >= 0 ? 'Sharp' : 'Smooth'}</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min={-1}
+                                            max={1}
+                                            step={0.05}
+                                            value={additiveEnvConfig.shape}
+                                            onChange={(e) => updateEnvFollower({ shape: parseFloat(e.target.value) })}
+                                            className="w-full accent-accent"
+                                            disabled={!additiveEnvConfig.enabled}
+                                        />
+                                        <div className="flex justify-between text-[8px] text-slate-500">
+                                            <span>Smooth</span>
+                                            <span>Sharp</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mt-2">
+                                <div className="text-[9px] text-slate-500 mb-1">Envelope Preview (1s)</div>
+                                <canvas ref={envCanvasRef} className="w-full h-16 rounded-lg border border-white/10 bg-black/40" />
+                            </div>
                         </div>
                     </section>
                 </div>

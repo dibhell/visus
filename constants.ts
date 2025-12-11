@@ -66,6 +66,66 @@ export interface FxState {
 
 
 
+export type AdditiveEnvSource = 'RMS' | 'PEAK';
+
+
+
+export type AdditiveEnvMode = 'normal' | 'invert';
+
+
+
+export interface AdditiveEnvConfig {
+
+  enabled: boolean;
+
+  source: AdditiveEnvSource;
+
+  attackMs: number;
+
+  releaseMs: number;
+
+  shape: number;
+
+  gain: number;
+
+  offset: number;
+
+  delayMs: number;
+
+  depth: number;
+
+  mode: AdditiveEnvMode;
+
+}
+
+
+
+export const DEFAULT_ADDITIVE_ENV_CONFIG: AdditiveEnvConfig = {
+
+  enabled: false,
+
+  source: 'RMS',
+
+  attackMs: 10,
+
+  releaseMs: 200,
+
+  shape: 0,
+
+  gain: 1,
+
+  offset: 0,
+
+  delayMs: 0,
+
+  depth: 0,
+
+  mode: 'normal',
+
+};
+
+
+
 export interface ShaderDefinition {
 
   id: number;

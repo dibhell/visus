@@ -103,7 +103,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                                                             // 3. Spectrum Fill - hi-res, bass-biased FFT
             const aeAny: any = ae;
 
-            // 3.1 FFT z silnika – zawsze hi-res z master bus
+            // 3.1 FFT z silnika ÔÇô zawsze hi-res z master bus
             let usedFFT: Uint8Array | null = null;
             let debugSource = 'none';
             if (aeAny?.getSpectrum) {
@@ -138,7 +138,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const drawSpectrum = (sampler: (i: number, bars: number) => number) => {
                 const dbg = spectrumDebugRef.current;
 
-                // dense sampling for more detail (bliżej Ableton)
+                // dense sampling for more detail (bli┼╝ej Ableton)
                 const bars = Math.min(4096, Math.max(1024, Math.floor(W * 4.0)));
 
                 const minHeight = H * dbg.minHeightFrac;
@@ -185,19 +185,19 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.stroke();
             };
 
-            // 3.4 FFT (logarytmiczna mapa częstotliwości + auto-gain, bez uśredniania zakresów)
+            // 3.4 FFT (logarytmiczna mapa cz─Östotliwo┼Ťci + auto-gain, bez u┼Ťredniania zakres├│w)
             let fftUsed = false;
 
             if (enabled && usedFFT && usedFFT.length > 0) {
                 const dbg = spectrumDebugRef.current;
 
-                // peak z całego FFT
+                // peak z ca┼éego FFT
                 let peak = 0;
                 for (let i = 0; i < usedFFT.length; i++) {
                     if (usedFFT[i] > peak) peak = usedFFT[i];
                 }
 
-                // jeśli FFT praktycznie martwe – nie używamy go
+                // je┼Ťli FFT praktycznie martwe ÔÇô nie u┼╝ywamy go
                 if (peak > 1) {
                     const normPeak = peak / 255;
                     const gain = Math.min(
@@ -209,7 +209,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const sampleRate = aeAny?.ctx?.sampleRate || 48000;
                     const nyquist = sampleRate / 2;
 
-                    // pomocnicza funkcja: mapuje częstotliwość na indeks binu
+                    // pomocnicza funkcja: mapuje cz─Östotliwo┼Ť─ç na indeks binu
                     const binForFreq = (freqHz: number) => {
                         const f = Math.max(20, Math.min(20000, freqHz));
                         const idxFloat = (f / nyquist) * len;
@@ -217,19 +217,19 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         return Math.min(len - 1, Math.max(0, idx));
                     };
 
-                    // zakres spektrum – taki sam jak grid (20 Hz – 20 kHz)
+                    // zakres spektrum ÔÇô taki sam jak grid (20 Hz ÔÇô 20 kHz)
                     const minFreq = 20;
                     const maxFreq = 20000;
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
-                    // sampler: dla każdej „kolumny” bierzemy JEDEN bin FFT, z biasem na bas
+                    // sampler: dla ka┼╝dej ÔÇ×kolumnyÔÇŁ bierzemy JEDEN bin FFT, z biasem na bas
                     drawSpectrum((i, bars) => {
-                        // bias na bas: więcej punktów w dole pasma
+                        // bias na bas: wi─Öcej punkt├│w w dole pasma
                         const tLinear = bars > 1 ? i / (bars - 1) : 0;
                         const t = Math.pow(tLinear, 2.5);
 
-                        // logarytmiczna oś częstotliwości
+                        // logarytmiczna o┼Ť cz─Östotliwo┼Ťci
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
 
@@ -237,7 +237,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const val = usedFFT[bin] || 0;
 
                         let energy = (val / 255) * gain;
-                        // delikatny floor, żeby cisza nie dawała linii 0 px
+                        // delikatny floor, ┼╝eby cisza nie dawa┼éa linii 0 px
                         if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;

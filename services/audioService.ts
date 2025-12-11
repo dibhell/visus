@@ -1,6 +1,6 @@
 
 
-import { FilterBand, SyncParam, BandsData } from '../constants';
+import { FilterBand, SyncParam, BandsData, AdditiveEnvConfig, DEFAULT_ADDITIVE_ENV_CONFIG } from '../constants';
 
 export class AudioEngine {
     ctx: AudioContext | null = null;
@@ -45,6 +45,10 @@ export class AudioEngine {
     vuWorkletBuckets: Record<'video' | 'music' | 'mic', Float32Array | null> = { video: null, music: null, mic: null };
     vuWorkletReady = false;
     useWorkletFFT = true;
+    additiveEnvNode: AudioWorkletNode | null = null;
+    additiveEnvReady = false;
+    additiveEnvValue = 0.5;
+    additiveEnvConfig: AdditiveEnvConfig = { ...DEFAULT_ADDITIVE_ENV_CONFIG };
     
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: Uint8Array = new Uint8Array(1024);
@@ -127,9 +131,18 @@ export class AudioEngine {
                 console.warn('VU worklet not available, falling back to analyser nodes', err);
                 this.vuWorkletReady = false;
             }
+
+            try {
+                await this.ctx.audioWorklet.addModule(new URL('./worklets/additive-env-processor.js', import.meta.url));
+                this.additiveEnvReady = true;
+            } catch (err) {
+                console.warn('Additive envelope worklet not available, using static value', err);
+                this.additiveEnvReady = false;
+            }
             
             // Initialize Channels
             this.initChannelNodes();
+            this.setupAdditiveEnvFollower();
         }
 
         if (this.ctx.state === 'suspended') {
@@ -222,6 +235,34 @@ export class AudioEngine {
         this.micGain = mic.gain;
         this.micAnalyser = mic.analyser;
         this.micTapAnalyser = mic.tap;
+    }
+
+    setupAdditiveEnvFollower() {
+        if (!this.ctx || !this.masterMix || !this.additiveEnvReady) return;
+        if (this.additiveEnvNode) return;
+
+        try {
+            const node = new AudioWorkletNode(this.ctx, 'additive-env-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] });
+            node.port.onmessage = (ev) => {
+                if (ev.data && typeof ev.data.additiveEnv === 'number') {
+                    this.additiveEnvValue = ev.data.additiveEnv;
+                }
+            };
+            this.masterMix.connect(node);
+            if (this.analysisSink) {
+                node.connect(this.analysisSink);
+            } else {
+                const silent = this.ctx.createGain();
+                silent.gain.value = 0;
+                node.connect(silent);
+                silent.connect(this.ctx.destination);
+            }
+            node.port.postMessage({ type: 'config', config: this.additiveEnvConfig });
+            this.additiveEnvNode = node;
+        } catch (err) {
+            console.warn('Additive envelope node unavailable', err);
+            this.additiveEnvReady = false;
+        }
     }
 
     // --- SOURCE CONNECTORS ---
@@ -328,6 +369,25 @@ export class AudioEngine {
     }
 
     // --- CONTROLS ---
+
+    updateAdditiveEnvConfig(config: Partial<AdditiveEnvConfig>) {
+        const next = { ...this.additiveEnvConfig, ...config };
+        next.depth = Math.max(0, Math.min(1, next.depth));
+        this.additiveEnvConfig = next;
+        if (!next.enabled || next.depth <= 0) {
+            this.additiveEnvValue = 0.5;
+        }
+        if (this.additiveEnvReady && !this.additiveEnvNode) {
+            this.setupAdditiveEnvFollower();
+        }
+        if (this.additiveEnvNode) {
+            this.additiveEnvNode.port.postMessage({ type: 'config', config: next });
+        }
+    }
+
+    getAdditiveEnvValue() {
+        return this.additiveEnvValue;
+    }
 
     setVolume(channel: 'video' | 'music' | 'mic', val: number) {
         // Linear input (0-1) to Exponential Audio Param
