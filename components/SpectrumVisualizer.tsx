@@ -205,53 +205,54 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     if (usedFFT[i] > peak) peak = usedFFT[i];
                 }
 
-                const normPeak = Math.max(dbg.minPeak, (peak / 255) || 0);
-                const gain = Math.min(dbg.maxGain, dbg.targetPeak / normPeak);
+                // Only use FFT if there is any energy at all
+                if (peak > 0) {
+                    const normPeak = Math.max(dbg.minPeak, (peak / 255) || 0);
+                    const gain = Math.min(dbg.maxGain, dbg.targetPeak / Math.max(normPeak, dbg.minPeak));
 
-                const len = usedFFT.length;
-                const sampleRate = aeAny?.ctx?.sampleRate || 48000;
-                const nyquist = sampleRate / 2;
-                const minFreq = 20;
-                const maxFreq = 20000;
-                const minLog = Math.log10(minFreq);
-                const maxLog = Math.log10(maxFreq);
+                    const len = usedFFT.length;
+                    const sampleRate = aeAny?.ctx?.sampleRate || 48000;
+                    const nyquist = sampleRate / 2;
+                    const minFreq = 20;
+                    const maxFreq = 20000;
+                    const minLog = Math.log10(minFreq);
+                    const maxLog = Math.log10(maxFreq);
 
-                const bassBias = 2.2; // >1 means more points in bass
+                    const bassBias = 2.2; // >1 means more points in bass
 
-                drawSpectrum((i, bars) => {
-                    const u0 = i / bars;
-                    const u1 = (i + 1) / bars;
+                    drawSpectrum((i, bars) => {
+                        const u0 = i / bars;
+                        const u1 = (i + 1) / bars;
 
-                    const t0 = Math.pow(u0, bassBias);
-                    const t1 = Math.pow(u1, bassBias);
+                        const t0 = Math.pow(u0, bassBias);
+                        const t1 = Math.pow(u1, bassBias);
 
-                    const fCenterLog = minLog + ((t0 + t1) * 0.5) * (maxLog - minLog);
-                    const fCenter = Math.pow(10, fCenterLog);
+                        const fCenterLog = minLog + ((t0 + t1) * 0.5) * (maxLog - minLog);
+                        const fCenter = Math.pow(10, fCenterLog);
 
-                    const binCenter = (fCenter / nyquist) * len;
+                        const binCenter = (fCenter / nyquist) * len;
 
-                    let b0 = Math.floor(binCenter - 2);
-                    let b1 = Math.ceil(binCenter + 2);
-                    if (b0 < 0) b0 = 0;
-                    if (b1 >= len) b1 = len - 1;
-                    if (b1 < b0) b1 = b0;
+                        let b0 = Math.floor(binCenter - 2);
+                        let b1 = Math.ceil(binCenter + 2);
+                        if (b0 < 0) b0 = 0;
+                        if (b1 >= len) b1 = len - 1;
+                        if (b1 < b0) b1 = b0;
 
-                    let sum = 0;
-                    let count = 0;
-                    for (let b = b0; b <= b1; b++) {
-                        sum += usedFFT![b];
-                        count++;
-                    }
-                    const avg = count > 0 ? sum / count : 0;
+                        let maxVal = 0;
+                        for (let b = b0; b <= b1; b++) {
+                            const v = usedFFT![b] || 0;
+                            if (v > maxVal) maxVal = v;
+                        }
 
-                    let energy = (avg / 255) * gain;
-                    if (energy < 0) energy = 0;
-                    if (energy > 1) energy = 1;
+                        let energy = (maxVal / 255) * gain;
+                        if (energy < 0) energy = 0;
+                        if (energy > 1) energy = 1;
 
-                    return energy;
-                });
+                        return energy;
+                    });
 
-                fftUsed = true;
+                    fftUsed = true;
+                }
             }
 
             // 3.5 - fallback to bands when FFT is empty
