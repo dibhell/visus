@@ -296,13 +296,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             if (enabled && usedFFT && usedFFT.length > 0) {
                 const dbg = spectrumDebugRef.current;
 
-                // peak z calego FFT
+                // peak z calego FFT - tylko do auto-gain
                 let peak = 0;
                 for (let i = 0; i < usedFFT.length; i++) {
                     if (usedFFT[i] > peak) peak = usedFFT[i];
                 }
 
-                // jeżeli FFT praktycznie martwe – nie używamy go
+                // jeżeli FFT praktycznie martwe - nie używamy go
                 if (peak > 1) {
                     const normPeak = peak / 255;
                     const gain = Math.min(
@@ -314,30 +314,29 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const sampleRate = aeAny?.ctx?.sampleRate || 48000;
                     const nyquist = sampleRate / 2;
 
-                    // pomocnicza funkcja: mapuje czestotliwosc na indeks binu
-                    const binForFreq = (freqHz: number) => {
-                        const f = Math.max(20, Math.min(20000, freqHz));
-                        const idxFloat = (f / nyquist) * len;
-                        const idx = Math.round(idxFloat);
-                        return Math.min(len - 1, Math.max(0, idx));
-                    };
-
-                    // zakres spektrum – taki sam jak grid (20 Hz – 20 kHz)
+                    // zakres spektrum - taki sam jak grid (20 Hz - 20 kHz)
                     const minFreq = 20;
                     const maxFreq = 20000;
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
-                    // sampler: dla każdej "kolumny" bierzemy JEDEN bin FFT, z biasem na bas
-                    let visPeakFreq = 0;
-                    let visPeakEnergy = 0;
+                    // 3.4.a - PEAK Hz liczymy z RAW FFT
+                    const peakInfo = findMainPeak(usedFFT, sampleRate, minFreq, maxFreq);
+                    lastPeakFreqRef.current = peakInfo.freq || 0;
 
+                    // pomocnicza funkcja: mapuje czestotliwosc na indeks binu (dla rysowania)
+                    const binForFreq = (freqHz: number) => {
+                        const f = Math.max(minFreq, Math.min(maxFreq, freqHz));
+                        const idxFloat = (f / nyquist) * len;
+                        const idx = Math.round(idxFloat);
+                        return Math.min(len - 1, Math.max(0, idx));
+                    };
+
+                    // 3.4.b - sampler: dla każdej "kolumny" bierzemy JEDEN bin FFT, z biasem na bas
                     drawSpectrum((i, bars) => {
-                        // bias na bas: więcej punktów w dole pasma
                         const tLinear = bars > 1 ? i / (bars - 1) : 0;
-                        const t = Math.pow(tLinear, 2.5);
+                        const t = Math.pow(tLinear, 2.5); // bias na bas
 
-                        // logarytmiczna oś częstotliwości
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
 
@@ -345,27 +344,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const val = usedFFT[bin] || 0;
 
                         let energy = (val / 255) * gain;
-                        // delikatny floor, żeby cisza nie dawała linii 0 px
                         if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
-                        // zapamiętujemy to, co rysujemy jako najwyższy słupek
-                        const mode = spectrumModeRef.current;
-                        const displayEnergy = mode === 'ableton'
-                            ? Math.pow(Math.max(0, energy), dbg.boostExp) * dbg.boostMult
-                            : Math.max(0, Math.min(1, energy));
-                        if (displayEnergy > visPeakEnergy) {
-                            visPeakEnergy = displayEnergy;
-                            visPeakFreq = freq;
-                        }
-
                         return energy;
-                    }, { fft: usedFFT, sampleRate });
-
-                    if (visPeakFreq > 0) {
-                        lastPeakFreqRef.current = visPeakFreq;
-                    }
+                    });
 
                     fftUsed = true;
                 }
