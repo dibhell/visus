@@ -1,7 +1,8 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
 import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE, FallbackReason, AdditiveEnvConfig, DEFAULT_ADDITIVE_ENV_CONFIG } from './constants';
+import { RecordingPreset, RecordingAudioPreset, RECORDING_AUDIO_PRESETS, RECORDING_VIDEO_PRESETS, DEFAULT_RECORDING_AUDIO_PRESET_ID, DEFAULT_RECORDING_VIDEO_PRESET_ID } from './constants/recordingPresets';
 import RenderWorker from './services/renderWorker?worker';
 import FxSlot from './components/FxSlot';
 import BandControls from './components/BandControls';
@@ -314,6 +315,12 @@ const PanelSettings: React.FC<{
     setRecordFps: (v: number) => void;
     recordBitrate: number;
     setRecordBitrate: (v: number) => void;
+    recordResolution: { width: number; height: number };
+    setRecordResolution: (v: { width: number; height: number }) => void;
+    recordingVideoPresetId: string;
+    setRecordingVideoPresetId: (v: string) => void;
+    recordingAudioPresetId: string;
+    setRecordingAudioPresetId: (v: string) => void;
     recordAudioBitrate: number;
     setRecordAudioBitrate: (v: number) => void;
     webCodecsSupported: boolean;
@@ -334,6 +341,9 @@ const PanelSettings: React.FC<{
         uiFpsLimit, setUiFpsLimit,
         recordFps, setRecordFps,
         recordBitrate, setRecordBitrate,
+        recordResolution, setRecordResolution,
+        recordingVideoPresetId, setRecordingVideoPresetId,
+        recordingAudioPresetId, setRecordingAudioPresetId,
         recordAudioBitrate, setRecordAudioBitrate,
         webCodecsSupported, useWebCodecsRecord, setUseWebCodecsRecord,
         autoScale, setAutoScale,
@@ -361,22 +371,6 @@ const PanelSettings: React.FC<{
     ];
 
     const uiFpsOptions = [15, 20, 30];
-    const bitratePresets = [
-        { label: '4K Ultra', note: '30 fps cinematic', value: 56_000_000 },
-        { label: '4K High', note: '30 fps studio', value: 48_000_000 },
-        { label: '1080p High', note: '60 fps action', value: 15_000_000 },
-        { label: '1080p Standard', note: '30 fps', value: 10_000_000 },
-        { label: '1080p Lite', note: 'web upload', value: 8_000_000 },
-        { label: '720p Stream', note: 'bandwidth saver', value: 6_000_000 },
-    ];
-    const audioBitratePresets = [
-        { label: '320 kbps', note: 'HiFi music', value: 320_000 },
-        { label: '256 kbps', note: 'High', value: 256_000 },
-        { label: '192 kbps', note: 'Standard', value: 192_000 },
-        { label: '160 kbps', note: 'Podcast+', value: 160_000 },
-        { label: '128 kbps', note: 'Balanced', value: 128_000 },
-        { label: '64 kbps', note: 'Voice only', value: 64_000 },
-    ];
     const minBitrateMbps = 5;
     const maxBitrateMbps = 80;
     const toMbps = (bits: number) => Number((bits / 1_000_000).toFixed(1));
@@ -392,6 +386,20 @@ const PanelSettings: React.FC<{
         const safeValue = Number.isFinite(kbps) ? kbps : minAudioKbps;
         const clamped = Math.max(minAudioKbps, Math.min(maxAudioKbps, safeValue));
         return Math.round(clamped * 1000);
+    };
+    const findAudioPreset = (bitrate: number) => RECORDING_AUDIO_PRESETS.find(p => p.bitrate === bitrate);
+    const selectVideoPreset = (preset: RecordingPreset) => {
+        setRecordingVideoPresetId(preset.id);
+        setRecordResolution({ width: preset.width, height: preset.height });
+        setRecordFps(preset.fps);
+        setRecordBitrate(preset.videoBitrate);
+        setRecordAudioBitrate(preset.audioBitrate);
+        const matchAudio = findAudioPreset(preset.audioBitrate);
+        setRecordingAudioPresetId(matchAudio?.id ?? 'custom');
+    };
+    const selectAudioPreset = (preset: RecordingAudioPreset) => {
+        setRecordingAudioPresetId(preset.id);
+        setRecordAudioBitrate(preset.bitrate);
     };
 
     const toggleClass = (active: boolean) => active ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10';
@@ -485,14 +493,15 @@ const PanelSettings: React.FC<{
                         <div className="space-y-1">
                             <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality presets</div>
                             <div className="grid grid-cols-2 gap-2">
-                                {bitratePresets.map((preset) => (
+                                {RECORDING_VIDEO_PRESETS.map((preset) => (
                                     <button
                                         key={preset.label}
-                                        onClick={() => setRecordBitrate(preset.value)}
-                                        className={`text-left p-3 rounded-xl border text-[11px] leading-tight ${toggleClass(recordBitrate === preset.value)}`}
+                                        onClick={() => selectVideoPreset(preset)}
+                                        className={`text-left p-3 rounded-xl border text-[11px] leading-tight ${toggleClass(recordingVideoPresetId === preset.id)}`}
                                     >
                                         <div className="font-bold text-slate-200">{preset.label}</div>
-                                        <div className="text-[10px] text-slate-300">{toMbps(preset.value)} Mb/s</div>
+                                        <div className="text-[10px] text-slate-300">{preset.width}x{preset.height} · {preset.fps} fps</div>
+                                        <div className="text-[10px] text-slate-300">{toMbps(preset.videoBitrate)} Mb/s · {toKbps(preset.audioBitrate)} kbps</div>
                                         <div className="text-[9px] text-slate-500">{preset.note}</div>
                                     </button>
                                 ))}
@@ -506,7 +515,10 @@ const PanelSettings: React.FC<{
                                     min={15}
                                     max={60}
                                     value={recordFps}
-                                    onChange={(e) => setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))))}
+                                    onChange={(e) => {
+                                        setRecordingVideoPresetId('custom');
+                                        setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))));
+                                    }}
                                     className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
                                 />
                             </label>
@@ -518,7 +530,10 @@ const PanelSettings: React.FC<{
                                     max={maxBitrateMbps}
                                     step={0.5}
                                     value={toMbps(recordBitrate)}
-                                    onChange={(e) => setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')))}
+                                    onChange={(e) => {
+                                        setRecordingVideoPresetId('custom');
+                                        setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')));
+                                    }}
                                     className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
                                 />
                                 <span className="text-[10px] text-slate-500">Mb/s</span>
@@ -534,11 +549,11 @@ const PanelSettings: React.FC<{
                         <div className="space-y-1">
                             <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio presets</div>
                             <div className="grid grid-cols-3 gap-2">
-                                {audioBitratePresets.map((preset) => (
+                                {RECORDING_AUDIO_PRESETS.map((preset) => (
                                     <button
                                         key={preset.label}
-                                        onClick={() => setRecordAudioBitrate(preset.value)}
-                                        className={`p-3 rounded-xl border text-[10px] leading-tight text-center ${toggleClass(recordAudioBitrate === preset.value)}`}
+                                        onClick={() => selectAudioPreset(preset)}
+                                        className={`p-3 rounded-xl border text-[10px] leading-tight text-center ${toggleClass(recordingAudioPresetId === preset.id)}`}
                                     >
                                         <div className="font-bold text-slate-200">{preset.label}</div>
                                         <div className="text-[9px] text-slate-500">{preset.note}</div>
@@ -554,7 +569,10 @@ const PanelSettings: React.FC<{
                                 max={maxAudioKbps}
                                 step={8}
                                 value={toKbps(recordAudioBitrate)}
-                                onChange={(e) => setRecordAudioBitrate(clampAudioBitrate(parseFloat(e.target.value || '0')))}
+                                onChange={(e) => {
+                                    setRecordingAudioPresetId('custom');
+                                    setRecordAudioBitrate(clampAudioBitrate(parseFloat(e.target.value || '0')));
+                                }}
                                 className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
                             />
                         </label>
@@ -707,6 +725,15 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordedChunksRef = useRef<Blob[]>([]);
+    const recordingPresetRef = useRef<RecordingPreset | null>(null);
+    const recordingLocksRef = useRef<null | {
+        autoScale: boolean;
+        renderScale: number;
+        frameCap: number;
+        frameCapMode: 'dynamic' | 'manual';
+        performanceMode: PerformanceMode;
+        uiFpsLimit: number;
+    }>(null);
 
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
@@ -720,9 +747,17 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [renderMode, setRenderMode] = useState<RenderMode>('webgl-worker');
     const [frameCap, setFrameCap] = useState(getFrameCapValue());
     const [frameCapMode, setFrameCapMode] = useState<'dynamic' | 'manual'>(getFrameCapMode());
-    const [recordFps, setRecordFps] = useState(45);
-    const [recordBitrate, setRecordBitrate] = useState(15_000_000);
-    const [recordAudioBitrate, setRecordAudioBitrate] = useState(192_000);
+    const defaultVideoPreset = RECORDING_VIDEO_PRESETS.find(p => p.id === DEFAULT_RECORDING_VIDEO_PRESET_ID) ?? RECORDING_VIDEO_PRESETS[0];
+    const defaultAudioPreset = RECORDING_AUDIO_PRESETS.find(p => p.id === DEFAULT_RECORDING_AUDIO_PRESET_ID) ?? RECORDING_AUDIO_PRESETS[0];
+    const [recordingVideoPresetId, setRecordingVideoPresetId] = useState<string>(defaultVideoPreset?.id ?? 'custom');
+    const [recordingAudioPresetId, setRecordingAudioPresetId] = useState<string>(defaultAudioPreset?.id ?? 'custom');
+    const [recordResolution, setRecordResolution] = useState<{ width: number; height: number }>({
+        width: defaultVideoPreset?.width ?? 1920,
+        height: defaultVideoPreset?.height ?? 1080,
+    });
+    const [recordFps, setRecordFps] = useState(defaultVideoPreset?.fps ?? 30);
+    const [recordBitrate, setRecordBitrate] = useState(defaultVideoPreset?.videoBitrate ?? 15_000_000);
+    const [recordAudioBitrate, setRecordAudioBitrate] = useState(defaultAudioPreset?.bitrate ?? 192_000);
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(true);
     const [autoScale, setAutoScale] = useState(false);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
@@ -773,6 +808,28 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         fx4: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
         fx5: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
     });
+
+    const activeRecordingPreset = useMemo<RecordingPreset>(() => {
+        const videoPreset = RECORDING_VIDEO_PRESETS.find(p => p.id === recordingVideoPresetId);
+        const fallbackVideo = RECORDING_VIDEO_PRESETS[0];
+        return {
+            id: videoPreset?.id ?? 'custom',
+            label: videoPreset?.label ?? 'Custom',
+            note: videoPreset?.note ?? 'Custom preset',
+            width: recordResolution.width,
+            height: recordResolution.height,
+            fps: recordFps,
+            videoBitrate: recordBitrate,
+            audioBitrate: recordAudioBitrate,
+            codecVideo: videoPreset?.codecVideo ?? fallbackVideo.codecVideo,
+            codecAudio: 'opus',
+            container: 'webm',
+        };
+    }, [recordingVideoPresetId, recordResolution.width, recordResolution.height, recordFps, recordBitrate, recordAudioBitrate]);
+
+    useEffect(() => {
+        recordingPresetRef.current = activeRecordingPreset;
+    }, [activeRecordingPreset]);
 
     type PlaylistItem = {
         id: string;
@@ -986,7 +1043,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         let finalW = wWindow;
         let finalH = hWindow;
 
-        if (aspectRatio === 'native') {
+        const recordingTarget = ((isRecording || recordingLocksRef.current) && recordingPresetRef.current) ? recordingPresetRef.current : null;
+
+        if (recordingTarget) {
+            finalW = recordingTarget.width;
+            finalH = recordingTarget.height;
+        } else if (aspectRatio === 'native') {
             if (videoRef.current && videoRef.current.videoWidth > 0) {
                 finalW = videoRef.current.videoWidth;
                 finalH = videoRef.current.videoHeight;
@@ -1023,7 +1085,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         } else {
             rendererRef.current.resize(renderW, renderH);
         }
-    }, [aspectRatio, panelVisible]);
+    }, [aspectRatio, panelVisible, isRecording, recordResolution.width, recordResolution.height]);
 
     useEffect(() => {
         handleResize();
@@ -1972,6 +2034,83 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         return { stream, cleanup: () => {} };
     };
 
+    const clampRecordingFps = (fps: number) => {
+        if (fps >= 50) return 60;
+        if (fps >= 28) return 30;
+        return 24;
+    };
+
+    const enterRecordingMode = (preset: RecordingPreset) => {
+        if (recordingLocksRef.current) return;
+        recordingPresetRef.current = preset;
+        recordingLocksRef.current = {
+            autoScale,
+            renderScale: renderScaleRef.current,
+            frameCap: frameCapRef.current,
+            frameCapMode: frameCapModeRef.current,
+            performanceMode: performanceModeRef.current,
+            uiFpsLimit: uiFpsLimitRef.current,
+        };
+        const lockedFps = clampRecordingFps(preset.fps);
+        setAutoScale(false);
+        autoScaleHighStreakRef.current = 0;
+        autoScaleLowStreakRef.current = 0;
+        if (frameCapModeRef.current !== 'manual') {
+            setFrameCapMode('manual');
+            frameCapModeRef.current = 'manual';
+        }
+        if (frameCapRef.current !== lockedFps) {
+            frameCapRef.current = lockedFps;
+            setFrameCap(lockedFps);
+        }
+        const targetScale = 1;
+        if (renderScaleRef.current !== targetScale) {
+            renderScaleRef.current = targetScale;
+            setRenderScale(targetScale);
+        }
+        if (performanceModeRef.current !== 'high') {
+            performanceModeRef.current = 'high';
+            setPerformanceMode('high');
+        }
+        if (uiFpsLimitRef.current !== 15) {
+            uiFpsLimitRef.current = 15;
+            setUiFpsLimit(15);
+        }
+        handleResize();
+    };
+
+    const exitRecordingMode = () => {
+        const snapshot = recordingLocksRef.current;
+        recordingPresetRef.current = null;
+        recordingLocksRef.current = null;
+        if (!snapshot) {
+            handleResize();
+            return;
+        }
+        setAutoScale(snapshot.autoScale);
+        if (renderScaleRef.current !== snapshot.renderScale) {
+            renderScaleRef.current = snapshot.renderScale;
+            setRenderScale(snapshot.renderScale);
+        }
+        if (frameCapRef.current !== snapshot.frameCap) {
+            frameCapRef.current = snapshot.frameCap;
+            setFrameCap(snapshot.frameCap);
+        }
+        if (frameCapModeRef.current !== snapshot.frameCapMode) {
+            frameCapModeRef.current = snapshot.frameCapMode;
+            setFrameCapMode(snapshot.frameCapMode);
+        }
+        if (performanceModeRef.current !== snapshot.performanceMode) {
+            performanceModeRef.current = snapshot.performanceMode;
+            setPerformanceMode(snapshot.performanceMode);
+        }
+        if (uiFpsLimitRef.current !== snapshot.uiFpsLimit) {
+            uiFpsLimitRef.current = snapshot.uiFpsLimit;
+            setUiFpsLimit(snapshot.uiFpsLimit);
+        }
+        handleResize();
+    };
+
     const stopWebCodecsRecording = async () => {
         try { await readerRef.current?.cancel(); } catch {}
         if (videoTrackRef.current) videoTrackRef.current.stop();
@@ -1991,16 +2130,23 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        exitRecordingMode();
+        setIsRecording(false);
     };
 
     
-    const startMediaRecorderRecording = async (preferWebCodecs = false): Promise<boolean> => {
+    const startMediaRecorderRecording = async (preset: RecordingPreset, preferWebCodecs = false): Promise<boolean> => {
         if (!canvasRef.current) {
             alert('Canvas not ready yet.');
             return false;
         }
-        const canvasStream = canvasRef.current.captureStream(Math.min(recordFps, 30));
+        const captureFps = clampRecordingFps(preset.fps);
+        const canvasStream = canvasRef.current.captureStream(captureFps);
         const videoTracks = canvasStream.getVideoTracks();
+        videoTracks.forEach((t) => {
+            const constraints: MediaTrackConstraints = { frameRate: captureFps, width: preset.width, height: preset.height };
+            t.applyConstraints(constraints).catch(() => {});
+        });
 
         let audioTracks: MediaStreamTrack[] = [];
         let recordingAudio: { stream: MediaStream | null; cleanup: () => void } = { stream: null, cleanup: () => {} };
@@ -2087,13 +2233,20 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         console.log('[VISUS] REC TRACKS', { video: combinedStream.getVideoTracks().length, audio: combinedStream.getAudioTracks().length });
         try {
             const pickMimeType = () => {
-                const candidates = [
+                const vp9First = [
                     'video/webm;codecs=vp9,opus',
                     'video/webm;codecs=vp8,opus',
                     'video/webm',
                     'video/mp4;codecs=h264,aac',
                     'video/mp4'
                 ];
+                const vp8First = [
+                    'video/webm;codecs=vp8,opus',
+                    'video/webm',
+                    'video/mp4;codecs=h264,aac',
+                    'video/mp4'
+                ];
+                const candidates = preferWebCodecs ? vp9First : vp8First;
                 return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
             };
             const mimeType = pickMimeType();
@@ -2110,8 +2263,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
             const recorder = new MediaRecorder(combinedStream, {
                 mimeType,
-                videoBitsPerSecond: recordBitrate,
-                audioBitsPerSecond: recordAudioBitrate,
+                videoBitsPerSecond: preset.videoBitrate,
+                audioBitsPerSecond: preset.audioBitrate,
             });
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
@@ -2129,29 +2282,50 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
+                exitRecordingMode();
+                setIsRecording(false);
             };
             recorder.start(500);
             mediaRecorderRef.current = recorder;
             setIsRecording(true);
+            console.info('[VISUS] recording start (MediaRecorder)', {
+                preset,
+                canvas: { width: canvasRef.current.width, height: canvasRef.current.height },
+                captureFps,
+                mimeType,
+                videoTrackSettings: videoTracks[0]?.getSettings?.(),
+            });
             return true;
         } catch (e) {
             console.error('[VISUS] MediaRecorder error', e);
             recordingAudio.cleanup?.();
+            exitRecordingMode();
             alert('Recording failed: ' + e);
             return false;
         }
     };
-const toggleRecording = async () => {
+    const stopActiveRecording = async () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+            mediaRecorderRef.current.stop();
+        } else {
+            await stopWebCodecsRecording();
+        }
+    };
+
+    const toggleRecording = async () => {
         if (isRecording) {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-                mediaRecorderRef.current.stop();
-            }
-            setIsRecording(false);
+            await stopActiveRecording();
             return;
         }
 
-        // Force MediaRecorder path while debugging audio
-        await startMediaRecorderRecording(false);
+        const preset = recordingPresetRef.current ?? activeRecordingPreset;
+        enterRecordingMode(preset);
+        const preferWebCodecs = useWebCodecsRecord && webCodecsSupported;
+        const started = await startMediaRecorderRecording(preset, preferWebCodecs);
+        if (!started) {
+            exitRecordingMode();
+            setIsRecording(false);
+        }
     };
 
     const updateSyncParams = useCallback((index: number, changes: Partial<SyncParam>) => {
@@ -2375,6 +2549,12 @@ const toggleRecording = async () => {
                         setRecordFps={setRecordFps}
                         recordBitrate={recordBitrate}
                         setRecordBitrate={setRecordBitrate}
+                        recordResolution={recordResolution}
+                        setRecordResolution={setRecordResolution}
+                        recordingVideoPresetId={recordingVideoPresetId}
+                        setRecordingVideoPresetId={setRecordingVideoPresetId}
+                        recordingAudioPresetId={recordingAudioPresetId}
+                        setRecordingAudioPresetId={setRecordingAudioPresetId}
                         recordAudioBitrate={recordAudioBitrate}
                         setRecordAudioBitrate={setRecordAudioBitrate}
                         webCodecsSupported={webCodecsSupported}
@@ -2595,6 +2775,21 @@ const toggleRecording = async () => {
                         >
                             {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING (WEBM)</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC VIDEO (WEBM)</span>}
                         </button>
+                        {(isRecording || recordingLocksRef.current) && (
+                            <div className="mt-2 text-[10px] text-slate-200 bg-white/5 border border-white/10 rounded-md px-3 py-2 leading-relaxed">
+                                <div className="font-black tracking-[0.16em] text-[9px] text-accent">RECORDING MODE</div>
+                                {(() => {
+                                    const p = recordingPresetRef.current ?? activeRecordingPreset;
+                                    const mbps = (p.videoBitrate / 1_000_000).toFixed(1);
+                                    const kbps = Math.round(p.audioBitrate / 1000);
+                                    return (
+                                        <div className="text-slate-200">
+                                            {p.width}x{p.height} @ {p.fps} fps · {mbps} Mb/s · {kbps} kbps
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
                         {useWebCodecsRecord && webCodecsSupported && (
                             <div className="mt-2 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-md px-3 py-2">
                                 WebCodecs can record video-only when no live audio track is present. Disable WebCodecs to force recording with audio.
