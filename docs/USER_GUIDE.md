@@ -1,71 +1,72 @@
-﻿# VISUS — Podręcznik Użytkownika (v0.2.4)
+# VISUS - Podrecznik Uzytkownika (v0.2.7)
 
 Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 1. Start
 - Wymagania: Chrome/Edge 118+, GPU z WebGL, mikrofon/kamera opcjonalnie.
-- Uruchom: `npm install`, `npm run dev` (lokalnie) lub wejdź na hostowany build.
-- Uprawnienia: przy pierwszym użyciu zezwól na kamerę/mikrofon (ikona kłódki w pasku adresu).
+- Uruchomienie: `npm install`, `npm run dev` (lokalnie) lub wejscie na hostowany build.
+- Uprawnienia: przy pierwszym uruchomieniu zezwol na kamere/mikrofon (ikona klodki w pasku adresu).
 
 ## 2. Interfejs
-- Panel boczny (L): źródła (video/music/mic), nagrywanie, FX, geometry.
-- Podgląd (P): canvas z efektem końcowym; na mobile canvas jest widoczny nad panelem (FX live).
-- Pasek statusu (P↑): FPS (wygładzony), rozdzielczość canvasu, skala renderu.
+- Panel boczny (L): zrodla (video/music/mic), nagrywanie, FX, geometry.
+- Podglad (P): canvas z efektem koncowym; na mobile canvas jest nad panelem (FX live).
+- Pasek statusu (P): FPS (wygladzony), rozdzielczosc canvasu, skala renderu.
 
-## 3. Źródła
+## 3. Zrodla
 - **Video**: plik (ikona folderu), kamera (ikona kamery), URL (ikona globu). Front/Back na mobile przez przyciski w selektorze.
-- **Music**: plik lub katalog (ikona folderu/globu). Domyślnie loop + crossOrigin.
-- **Mic**: włącz kanał Mic i przyznaj uprawnienie; audio idzie do miksu, nie na głośniki (brak feedbacku).
+- **Music**: plik lub katalog (folder/glob). Domyslnie loop + crossOrigin.
+- **Mic**: wlacz kanal Mic i przyznaj uprawnienie; audio trafia do miksu (brak feedbacku na glosniki).
 
 ## 4. Miks i geometria
-- Fadery: głośności kanałów (video/music/mic). Mute = przełącznik na górze.
-- Geometry: Scale / Pan X / Pan Y; Mirror — odbicie w poziomie.
-- Aspect: Native, 16:9, 9:16, 4:5, 1:1, Fit. Canvas skaluje się do wolnej przestrzeni (uwzględnia panel).
+- Fadery: glosnosc kanalow (video/music/mic). Mute to przelacznik na gorze.
+- Geometry: Scale / Pan X / Pan Y; Mirror - odbicie w poziomie.
+- Aspect: Native, 16:9, 9:16, 4:5, 1:1, Fit. Canvas skaluje sie do dostepnej przestrzeni (uwzglednia panel).
 
 ## 5. FX i audio-reactive
-- FX główny + 5 warstw addytywnych. Każdy slot: wybór shaderu, routing (off/bpm/sync1/2/3), gain, mix.
-- Sync1/2/3 to pasma z filtrów Biquad; parametry w sekcji Spectrum/Bands.
+- FX glowny + 5 warstw addytywnych. Kazdy slot: shader, routing (off/bpm/sync1/2/3), gain, mix.
+- Sync1/2/3: pasma z filtrow Biquad (analyser 256, smoothing 0.45 + ~50% wygladzania); parametry w sekcji Spectrum/Bands.
+- Spectrum: hi-res FFT 16384 z biasem na bas, sampler max w oknie log-freq, auto-gain bez twardego progu, fallback na bands; panel Auto gain/Shape zawsze widoczny.
+- Mapowanie: FX pow(0.7) + smoothing 35% (sufit 24), VU pow(0.8) + smoothing 45% (sufit 10).
 - BPM/Offset: zegar do routingu BPM (faza).
 
 ## 6. Nagrywanie
-- Przycisk **REC VIDEO (WEBM/MP4)**: zapisuje canvas + miks audio.
-- Audio w pliku: nagrywany jest miks master (VIDEO/MUSIC/MIC). Je?li miks nie ma ?ywych tor?w ? nagrywanie zostaje przerwane z alertem.
-- MIME: preferencja WebM/Opus; MP4 tylko je?li wspierane. WebCodecs mo?e by? wideo-only gdy audio niewspierane.
-- Wydajność nagrywania: Recording FPS domyślnie 45 (clamp do 30 przy capture), bitrate wideo domyślnie 8 Mbps; audio 192 kbps.
+- Przycisk **REC VIDEO (WEBM/MP4)** zapisuje canvas + miks audio (master VIDEO/MUSIC/MIC). Brak aktywnych torow przerywa nagrywanie z alertem.
+- MIME: preferencja WebM/Opus; MP4 tylko jesli wspierane. WebCodecs moze byc video-only gdy audio niewspierane.
+- Wydajnosc nagrywania: Recording FPS domyslnie 45 (clamp do 30 przy capture), bitrate wideo domyslnie 8 Mbps; audio 192 kbps.
 
 ## 7. Performance Lab
-- **Render Scale**: Low/Medium/High/Ultra Low (35%) + blokada rozdzielczo?ci 0.5x dla s?abych GPU.
-- **Frame Cap**: manualne warto?ci lub tryb Auto (60?30?24 gdy FPS spada).
-- **Performance Mode**: High (FFT co klatk?) / Medium (co 2) / Low (co 3) ? obni?a koszt audio/FX.
-- **UI Limit**: ogranicza od?wie?anie UI/VU (domy?lnie 20 FPS) dla mniejszej presji GC.
-- **Auto Scale (LOD)**: adaptuje renderScale do FPS (wygaszane przy lock resolution).
-- **WebCodecs**: preferuj wideo hardware (gdy audio unsupported).
+- Render Scale: Low/Medium/High/Ultra Low (35%) + blokada rozdzielczosci 0.5x dla slabszych GPU.
+- Frame Cap: wartosci manualne lub tryb Auto (60->30->24 przy spadkach FPS).
+- Performance Mode: High/Medium/Low ustawia stride FFT co 1/2/3 klatki.
+- UI Limit: ogranicza odswiezanie UI/VU (domyslnie 20 FPS).
+- Auto Scale (LOD): adaptuje renderScale do FPS; respektuje blokade rozdzielczosci.
+- WebCodecs: preferuj hardware video (gdy audio niewspierane, fallback MediaRecorder).
 
 ## 8. Mobile
-- UI schowaj gestem (drag handle) by odsłonić pełny podgląd.
-- Canvas jest nad panelem, więc efekty widać na żywo nawet podczas strojenia ustawień.
+- UI schowasz gestem (drag handle), by odslonic pelny podglad.
+- Canvas jest nad panelem, wiec efekty widac na zywo podczas strojenia ustawien.
 - FacingMode: w selektorze kamery wybierz Front/Back.
 
-## 9. Rozwiązywanie problemów
-- Brak audio w nagraniu: upewnij się, że kanał Music/Video/Mic jest aktywny; zobacz log `Recording tracks` w konsoli (audioTracks > 0). W Chrome używaj WebM/Opus.
-- Kamera na mobile: jeśli obraz pojawia się dopiero po zamknięciu menu, sprawdź uprawnienia i tryb Facing (Front/Back).
-- Niskie FPS: obniż Render Scale, Frame Cap do 30, wyłącz zbędne FX.
-- Błąd uprawnień: sprawdź ustawienia kłódki (kamera/mic), odśwież stronę po przyznaniu.
+## 9. Rozwiazywanie problemow
+- Brak audio w nagraniu: upewnij sie, ze kanal Music/Video/Mic jest aktywny; sprawdz log `Recording tracks` (audioTracks > 0). W Chrome uzywaj WebM/Opus.
+- Kamera na mobile: jesli obraz pojawia sie dopiero po zamknieciu menu, sprawdz uprawnienia i tryb Facing (Front/Back).
+- Niskie FPS: obniz Render Scale, Frame Cap do 30, wylacz zbedne FX.
+- Blad uprawnien: sprawdz ustawienia klodki (kamera/mic), odswiez strone po przyznaniu.
 
 ## 10. Hotkeys (desktop)
-- Spacja: start/stop wideo (jeśli aktywne).
+- Spacja: start/stop video (jesli aktywne).
 - M: mute/unmute muzyka.
 - R: toggle nagrywanie.
-- F: przełącz panel boczny.
+- F: przelacz panel boczny.
 
 ## 11. Eksport / pliki
 - Nagrania zapisywane jako `VISUS_<ISO-datetime>.(webm|mp4)`.
-- Presety/playlisty — planowane; na razie ustawienia w pamięci sesji.
+- Presety/playlisty - planowane; na razie ustawienia w pamieci sesji.
 
 ## 12. Kontakt
-- Autor: Studio Popłoch / Pan Grzyb — ptr@o2.pl
-- Wersja: 0.2.4
+- Autor: Studio Poploch / Pan Grzyb - ptr@o2.pl
+- Wersja: 0.2.7
 
 ---
 
-> PDF: plik można przekonwertować lokalnie poleceniem `npx tailwindcss -i ./index.css -o /tmp/visus.css && pandoc docs/USER_GUIDE.md -c /tmp/visus.css -o visus_user_guide.pdf` (wymaga pandoc).
+> PDF: plik mozna skonwertowac lokalnie: `npx tailwindcss -i ./index.css -o /tmp/visus.css && pandoc docs/USER_GUIDE.md -c /tmp/visus.css -o visus_user_guide.pdf` (wymaga pandoc).

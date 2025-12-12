@@ -9,8 +9,10 @@ import SpectrumVisualizer from './components/SpectrumVisualizer';
 import MusicCatalog from './components/MusicCatalog';
 import Knob from './components/Knob';
 import MixerChannel from './components/MixerChannel';
+import packageJson from './package.json';
 
 const ICON_PNG = '/visus/icon.png';
+const APP_VERSION = packageJson.version;
 
 const ICONS = {
     Video: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>,
@@ -140,7 +142,7 @@ const Credits: React.FC = () => (
     <div className="fixed bottom-3 left-4 z-[120] text-[10px] text-slate-200 bg-black/70 border border-white/10 px-4 py-2 rounded-full backdrop-blur pointer-events-none flex items-center gap-2">
         <span className="opacity-90">Studio Popech (c) 2025 * Pan Grzyb *</span>
         <a className="underline pointer-events-auto" href="mailto:ptr@o2.pl">ptr@o2.pl</a>
-        <span className="opacity-90">* v0.2.5</span>
+        <span className="opacity-90">* v{APP_VERSION}</span>
     </div>
 );
 
