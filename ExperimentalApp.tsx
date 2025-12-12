@@ -476,7 +476,7 @@ const PanelSettings: React.FC<{
 
             <div className="space-y-3">
                 <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Recording</div>
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="space-y-3">
                     <div className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-3">
                         <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
                             <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
