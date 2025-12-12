@@ -115,7 +115,7 @@ export class AudioEngine {
 
             // Główny analyser do FX/spectrum
             this.mainAnalyser = ctx.createAnalyser();
-            this.mainAnalyser.fftSize = 16384;
+            this.mainAnalyser.fftSize = 8192;
             this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount) as ByteArray;
 
@@ -164,7 +164,10 @@ export class AudioEngine {
             this.initChannelNodes();
             this.setupAdditiveEnvFollower();
 
-            console.info('[AudioEngine] initContext ok, masterMix -> destination active');
+            console.info(
+                `[AudioEngine] initContext ok, masterMix -> destination active | ` +
+                `[SPECTRUM CAL] sr=${ctx.sampleRate} fftSize=${this.mainAnalyser.fftSize} bins=${this.mainAnalyser.frequencyBinCount}`
+            );
         }
 
         if (this.ctx.state === 'suspended') {

@@ -35,11 +35,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         minHeightFrac: 0.0,
         maxHeightFrac: 0.81,
     });
-    const [spectrumMode, setSpectrumMode] = useState<'ableton' | 'raw'>('ableton');
-    const spectrumModeRef = useRef<'ableton' | 'raw'>('ableton');
+    const [spectrumMode, setSpectrumMode] = useState<'ableton' | 'raw' | 'cal'>('ableton');
+    const spectrumModeRef = useRef<'ableton' | 'raw' | 'cal'>('ableton');
 
     const spectrumDebugRef = useRef(spectrumDebug);
     const lastPeakFreqRef = useRef<number | null>(null);
+    const bandPeakFreqsRef = useRef<number[]>([0, 0, 0]);
     const freqRangeRef = useRef<{ min: number; max: number }>({ min: 20, max: 20000 });
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -80,8 +81,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const nyquist = sampleRate / 2;
         const len = fft.length;
 
-        const minBin = Math.max(1, Math.round((minFreq / nyquist) * len));
-        const maxBin = Math.min(len - 1, Math.round((maxFreq / nyquist) * len));
+        const denom = Math.max(1, len - 1);
+        const minBin = Math.max(1, Math.round((minFreq / nyquist) * denom));
+        const maxBin = Math.min(len - 1, Math.round((maxFreq / nyquist) * denom));
 
         let bestBin = minBin;
         let bestVal = 0;
@@ -94,7 +96,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             }
         }
 
-        const freq = (bestBin / len) * nyquist;
+        const freq = (bestBin / denom) * nyquist;
         return { freq, value: bestVal };
     };
 
@@ -163,6 +165,17 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             const formatFreq = (f: number) =>
                 f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 1 : 2)}kHz` : `${f.toFixed(1)}Hz`;
+
+            // Grid roundtrip debug: log mapping -> inverse mapping
+            const gridCalEntries = markerPool.map((m) => {
+                const x = getLogX(m, W);
+                const fBack = getFreqFromX(x, W);
+                if (m >= 1000) {
+                    return `${(m / 1000).toFixed(1)}k->${(fBack / 1000).toFixed(2)}k`;
+                }
+                return `${m}->${fBack.toFixed(1)}`;
+            });
+            const gridCalDebug = `GRID CAL: ${gridCalEntries.join(' | ')}`;
 
             const drawBandWindows = () => {
                 const bands = syncParamsRef.current;
@@ -363,11 +376,16 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const bandPeak = findMainPeak(usedFFT, sampleRate, bandMin, bandMax);
                         bandPeakFreqs[idx] = bandPeak.freq || null;
                     });
+                    bandPeakFreqsRef.current = [
+                        bandPeakFreqs[0] || 0,
+                        bandPeakFreqs[1] || 0,
+                        bandPeakFreqs[2] || 0,
+                    ];
 
                     // pomocnicza funkcja: mapuje czestotliwosc na indeks binu (dla rysowania)
                     const binForFreq = (freqHz: number) => {
                         const f = Math.max(minFreq, Math.min(maxFreq, freqHz));
-                        const idxFloat = (f / nyquist) * len;
+                        const idxFloat = (f / nyquist) * Math.max(1, len - 1);
                         const idx = Math.round(idxFloat);
                         return Math.min(len - 1, Math.max(0, idx));
                     };
@@ -517,6 +535,52 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.restore();
             } catch {
                 // overlay nie jest krytyczny
+            }
+
+            // 3.8 - grid roundtrip debug (logX -> freqFromX)
+            try {
+                ctx.save();
+                ctx.font = '10px JetBrains Mono, monospace';
+                ctx.textBaseline = 'middle';
+                const text = gridCalDebug;
+                const textW = ctx.measureText(text).width;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                ctx.fillRect(6, 56, Math.min(textW + 10, W - 12), 16);
+                ctx.fillStyle = '#bae6fd';
+                ctx.fillText(text, 10, 64);
+                ctx.restore();
+            } catch {
+                // ignore
+            }
+
+            // 3.9 - CAL mode overlay
+            if (spectrumModeRef.current === 'cal') {
+                try {
+                    const peakFreq = lastPeakFreqRef.current || 0;
+                    let nearestGrid = markerPool[0];
+                    let nearestDelta = Infinity;
+                    markerPool.forEach((m) => {
+                        const d = Math.abs((peakFreq || 0) - m);
+                        if (d < nearestDelta) {
+                            nearestDelta = d;
+                            nearestGrid = m;
+                        }
+                    });
+                    const peakLabel = peakFreq > 0 ? formatFreq(peakFreq) : '---';
+                    const gridLabel = formatFreq(nearestGrid);
+                    const text = `CAL MODE – feed pure sine 50/100/440/1k/2k/5k | Peak ${peakLabel} | nearest grid ${gridLabel}`;
+                    ctx.save();
+                    ctx.font = '10px JetBrains Mono, monospace';
+                    ctx.textBaseline = 'middle';
+                    const textW = ctx.measureText(text).width;
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                    ctx.fillRect(6, 76, Math.min(textW + 10, W - 12), 16);
+                    ctx.fillStyle = '#facc15';
+                    ctx.fillText(text, 10, 84);
+                    ctx.restore();
+                } catch {
+                    // ignore
+                }
             }
             // 4. Interactive Points
             
@@ -677,6 +741,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         });
 
         if (closest !== -1) {
+            // W trybie CAL pozwalamy "przysnapować" band do faktycznego piku FFT
+            if (spectrumModeRef.current === 'cal') {
+                const peak = bandPeakFreqsRef.current[closest] || 0;
+                if (peak > 0) {
+                    onParamChange(closest, { freq: peak });
+                }
+            }
+
             isDragging.current = closest;
             setHoveredBand(closest);
             const params = syncParams[closest];
@@ -804,6 +876,18 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                             onClick={() => setSpectrumMode('raw')}
                         >
                             RAW
+                        </button>
+                        <button
+                            type="button"
+                            className={
+                                'px-2 py-[2px] rounded border text-[9px] ' +
+                                (spectrumMode === 'cal'
+                                    ? 'bg-amber-500/20 border-amber-400 text-amber-200'
+                                    : 'bg-slate-800 border-slate-600 text-slate-300')
+                            }
+                            onClick={() => setSpectrumMode('cal')}
+                        >
+                            CAL
                         </button>
                     </div>
                 </div>
