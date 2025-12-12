@@ -350,9 +350,9 @@ const PanelSettings: React.FC<{
     ];
 
     const perfOptions: { key: PerformanceMode; label: string }[] = [
-        { key: 'high', label: 'High' },
-        { key: 'medium', label: 'Medium' },
-        { key: 'low', label: 'Low' },
+        { key: 'high', label: 'Hi' },
+        { key: 'medium', label: 'Med' },
+        { key: 'low', label: 'Lo' },
     ];
 
     const uiFpsOptions = [15, 20, 30];
@@ -508,7 +508,7 @@ const PanelSettings: React.FC<{
                                 className="accent-sky-400"
                             />
                             <span className="leading-tight break-words">
-                                requestVideoFrameCallback
+                                req
                             </span>
                         </label>
                     </div>
