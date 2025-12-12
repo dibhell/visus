@@ -65,10 +65,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const userMax = axisMaxHzRef.current;
         const minF = Math.max(5, userMin || freqRangeRef.current.min);
         const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
-        const effMax = Math.max(minF + 1, maxF / Math.max(0.05, specStretchRef.current));
         const minLog = Math.log10(minF);
-        const maxLog = Math.log10(effMax);
-        const valLog = Math.log10(Math.max(minF, Math.min(effMax, freq * freqCalibRef.current)));
+        const maxLog = Math.log10(maxF);
+        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq * freqCalibRef.current)));
         const base = (valLog - minLog) / (maxLog - minLog);
         return Math.min(width, Math.max(0, base * width));
     };
@@ -78,9 +77,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const userMax = axisMaxHzRef.current;
         const minF = Math.max(5, userMin || freqRangeRef.current.min);
         const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
-        const effMax = Math.max(minF + 1, maxF / Math.max(0.05, specStretchRef.current));
         const minLog = Math.log10(minF);
-        const maxLog = Math.log10(effMax);
+        const maxLog = Math.log10(maxF);
         const t = Math.min(1, Math.max(0, x / width));
         return Math.pow(10, minLog + t * (maxLog - minLog));
     };
@@ -395,7 +393,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const t = Math.pow(tLinear, 2.5); // bias na bas
 
                         const logF = minLog + t * (maxLog - minLog);
-                        const freq = Math.pow(10, logF);
+                        const freq = Math.pow(10, logF) / Math.max(0.05, specStretchRef.current);
 
                     const bin = binForFreq(freq);
                     const val = usedFFT[bin] || 0;
