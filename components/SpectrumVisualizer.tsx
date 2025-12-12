@@ -45,10 +45,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const freqCalibRef = useRef(freqCalib);
     const [specStretch, setSpecStretch] = useState(1.0);
     const specStretchRef = useRef(specStretch);
-    const [axisMinHz, setAxisMinHz] = useState<number | null>(null);
-    const [axisMaxHz, setAxisMaxHz] = useState<number | null>(null);
-    const axisMinHzRef = useRef<number | null>(null);
-    const axisMaxHzRef = useRef<number | null>(null);
+    const [axisMinHz, setAxisMinHz] = useState<number | null>(20);
+    const [axisMaxHz, setAxisMaxHz] = useState<number | null>(20000);
+    const axisMinHzRef = useRef<number | null>(20);
+    const axisMaxHzRef = useRef<number | null>(20000);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
@@ -60,6 +60,104 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     useEffect(() => { axisMaxHzRef.current = axisMaxHz; }, [axisMaxHz]);
 
     // --- MATH HELPERS ---
+    const FREQ_ANCHORS = [20, 30, 50, 80, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    const [segmentStretch, setSegmentStretch] = useState<number[]>(
+        Array(FREQ_ANCHORS.length - 1).fill(1)
+    );
+    const segmentStretchRef = useRef<number[]>(segmentStretch);
+    useEffect(() => { segmentStretchRef.current = segmentStretch; }, [segmentStretch]);
+
+    const freqToNorm = (freq: number) => {
+        const fScaled = freq * freqCalibRef.current;
+        const anchors = FREQ_ANCHORS;
+        const stretches = segmentStretchRef.current;
+        const minF = Math.max(anchors[0], axisMinHzRef.current ?? anchors[0]);
+        const maxF = Math.min(anchors[anchors.length - 1], axisMaxHzRef.current ?? anchors[anchors.length - 1]);
+        const clamped = Math.max(minF, Math.min(maxF, fScaled));
+
+        // Build spans with stretch
+        const logs = anchors.map((a) => Math.log10(a));
+        const spans = [];
+        for (let i = 0; i < anchors.length - 1; i++) {
+            const a0 = anchors[i];
+            const a1 = anchors[i + 1];
+            if (a1 < minF || a0 > maxF) {
+                spans.push(0);
+                continue;
+            }
+            const segMin = Math.max(a0, minF);
+            const segMax = Math.min(a1, maxF);
+            const span = Math.log10(segMax) - Math.log10(segMin);
+            spans.push(Math.max(0, span) * (stretches[i] || 1));
+        }
+        const totalSpan = spans.reduce((a, b) => a + b, 0) || 1;
+
+        // find segment
+        let acc = 0;
+        for (let i = 0; i < anchors.length - 1; i++) {
+            const a0 = anchors[i];
+            const a1 = anchors[i + 1];
+            if (clamped < a0 || clamped > a1) {
+                acc += spans[i];
+                continue;
+            }
+            const segMin = Math.max(a0, minF);
+            const segMax = Math.min(a1, maxF);
+            const segLogMin = Math.log10(segMin);
+            const segLogMax = Math.log10(segMax);
+            const segBaseSpan = segLogMax - segLogMin;
+            const segAdjSpan = segBaseSpan * (stretches[i] || 1);
+            const localT = segBaseSpan > 0 ? (Math.log10(clamped) - segLogMin) / segBaseSpan : 0;
+            return (acc + localT * segAdjSpan) / totalSpan;
+        }
+        return acc / totalSpan;
+    };
+
+    const normToFreq = (norm: number) => {
+        const anchors = FREQ_ANCHORS;
+        const stretches = segmentStretchRef.current;
+        const minF = Math.max(anchors[0], axisMinHzRef.current ?? anchors[0]);
+        const maxF = Math.min(anchors[anchors.length - 1], axisMaxHzRef.current ?? anchors[anchors.length - 1]);
+        const logs = anchors.map((a) => Math.log10(a));
+        const spans = [];
+        for (let i = 0; i < anchors.length - 1; i++) {
+            const a0 = anchors[i];
+            const a1 = anchors[i + 1];
+            if (a1 < minF || a0 > maxF) {
+                spans.push(0);
+                continue;
+            }
+            const segMin = Math.max(a0, minF);
+            const segMax = Math.min(a1, maxF);
+            const span = Math.log10(segMax) - Math.log10(segMin);
+            spans.push(Math.max(0, span) * (stretches[i] || 1));
+        }
+        const totalSpan = spans.reduce((a, b) => a + b, 0) || 1;
+
+        let acc = 0;
+        for (let i = 0; i < anchors.length - 1; i++) {
+            const a0 = anchors[i];
+            const a1 = anchors[i + 1];
+            if (a1 < minF || a0 > maxF) {
+                continue;
+            }
+            const segMin = Math.max(a0, minF);
+            const segMax = Math.min(a1, maxF);
+            const segBaseSpan = Math.log10(segMax) - Math.log10(segMin);
+            const segAdjSpan = segBaseSpan * (stretches[i] || 1);
+            const segStart = acc / totalSpan;
+            const segEnd = (acc + segAdjSpan) / totalSpan;
+            if (norm >= segStart && norm <= segEnd) {
+                const tLocal = segAdjSpan > 0 ? (norm - segStart) / segAdjSpan : 0;
+                const logVal = Math.log10(segMin) + tLocal * segBaseSpan;
+                const f = Math.pow(10, logVal) / freqCalibRef.current;
+                return Math.max(minF, Math.min(maxF, f));
+            }
+            acc += segAdjSpan;
+        }
+        return maxF;
+    };
+
     const getLogX = (freq: number, width: number) => {
         const userMin = axisMinHzRef.current;
         const userMax = axisMaxHzRef.current;
@@ -67,20 +165,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
         const minLog = Math.log10(minF);
         const maxLog = Math.log10(maxF);
-        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq * freqCalibRef.current)));
-        const base = (valLog - minLog) / (maxLog - minLog);
+        const base = freqToNorm(freq);
         return Math.min(width, Math.max(0, base * width));
     };
 
     const getFreqFromX = (x: number, width: number) => {
-        const userMin = axisMinHzRef.current;
-        const userMax = axisMaxHzRef.current;
-        const minF = Math.max(5, userMin || freqRangeRef.current.min);
-        const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
-        const minLog = Math.log10(minF);
-        const maxLog = Math.log10(maxF);
         const t = Math.min(1, Math.max(0, x / width));
-        return Math.pow(10, minLog + t * (maxLog - minLog));
+        return normToFreq(t);
     };
 
     const findMainPeak = (
@@ -986,6 +1077,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     </label>
                     <div className="flex flex-wrap gap-1 mt-1">
                         {[
+                            [20, 20000],
                             [20, 30],
                             [30, 50],
                             [50, 80],
@@ -1010,6 +1102,35 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                                 {mn >= 1000 ? `${mn / 1000}k` : mn}-{mx >= 1000 ? `${mx / 1000}k` : mx}
                             </button>
                         ))}
+                    </div>
+                    <div className="mt-2 text-[9px] text-slate-500">
+                        Per-range stretch (20-30, 30-50, ...):
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-[9px]">
+                        {segmentStretch.map((v, i) => {
+                            const a0 = FREQ_ANCHORS[i];
+                            const a1 = FREQ_ANCHORS[i + 1];
+                            return (
+                                <label key={i} className="flex items-center gap-1 bg-slate-800/50 px-1 py-[2px] rounded border border-slate-700">
+                                    <span className="text-slate-400">
+                                        {a0 >= 1000 ? `${a0 / 1000}k` : a0}-{a1 >= 1000 ? `${a1 / 1000}k` : a1}
+                                    </span>
+                                    <input
+                                        type="number"
+                                        min={0.1}
+                                        max={5}
+                                        step={0.1}
+                                        className="w-14 bg-slate-900 border border-slate-600 rounded px-1 py-[1px] text-white"
+                                        value={v}
+                                        onChange={(e) => {
+                                            const next = [...segmentStretch];
+                                            next[i] = Number(e.target.value) || 1;
+                                            setSegmentStretch(next);
+                                        }}
+                                    />
+                                </label>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
