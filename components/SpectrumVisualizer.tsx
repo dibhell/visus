@@ -390,8 +390,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const bandsForPeak = syncParamsRef.current;
                     bandsForPeak.slice(0, 3).forEach((b, idx) => {
                         if (!b) return;
-                        const bandMin = Math.max(minFreq, b.freq * Math.max(0.05, 1 - b.width / 100));
-                        const bandMax = Math.min(maxFreq, b.freq * (1 + b.width / 100));
+                        const stretch = specStretchRef.current * getSegmentStretch(b.freq);
+                        const bandMin = Math.max(minFreq, (b.freq / Math.max(0.05, stretch)) * Math.max(0.05, 1 - b.width / 100));
+                        const bandMax = Math.min(maxFreq, (b.freq / Math.max(0.05, stretch)) * (1 + b.width / 100));
                         const bandPeak = findMainPeak(usedFFT, sampleRate, bandMin, bandMax);
                         bandPeakFreqs[idx] = bandPeak.freq || null;
                     });
@@ -410,13 +411,15 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const t = Math.pow(tLinear, 2.5); // bias na bas
 
                         const logF = minLog + t * (maxLog - minLog);
-                        const freq = Math.pow(10, logF) / Math.max(0.05, specStretchRef.current);
+                        const freq = Math.pow(10, logF);
+                        const stretch = specStretchRef.current * getSegmentStretch(freq);
+                        const freqSample = freq / Math.max(0.05, stretch);
 
-                    const bin = binForFreq(freq);
-                    const val = usedFFT[bin] || 0;
+                        const bin = binForFreq(freqSample);
+                        const val = usedFFT[bin] || 0;
 
-                    let energy = (val / 255) * gain;
-                    if (energy < 0.02) energy = 0.02;
+                        let energy = (val / 255) * gain;
+                        if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
