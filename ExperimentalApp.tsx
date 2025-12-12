@@ -492,57 +492,55 @@ const PanelSettings: React.FC<{
                         </div>
                         <div className="space-y-1">
                             <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality preset</div>
-                            <select
-                                className="w-full bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-[11px] text-slate-200 focus:outline-none focus:border-accent/70"
-                                value={recordingVideoPresetId}
-                                onChange={(e) => {
-                                    const p = RECORDING_VIDEO_PRESETS.find(v => v.id === e.target.value);
-                                    if (p) selectVideoPreset(p); else setRecordingVideoPresetId('custom');
-                                }}
-                            >
-                                {RECORDING_VIDEO_PRESETS.map((preset) => (
-                                    <option key={preset.id} value={preset.id}>
-                                        {preset.label} · {preset.width}x{preset.height} · {preset.fps} fps · {toMbps(preset.videoBitrate)} Mb/s / {toKbps(preset.audioBitrate)} kbps
-                                    </option>
-                                ))}
-                                <option value="custom">Custom</option>
-                            </select>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-[11px] text-slate-100 focus:outline-none focus:border-accent/70 appearance-none"
+                                    value={recordingVideoPresetId}
+                                    onChange={(e) => {
+                                        const p = RECORDING_VIDEO_PRESETS.find(v => v.id === e.target.value);
+                                        if (p) selectVideoPreset(p); else setRecordingVideoPresetId('custom');
+                                    }}
+                                >
+                                    {RECORDING_VIDEO_PRESETS.map((preset) => (
+                                        <option key={preset.id} value={preset.id} className="bg-slate-900 text-slate-100">
+                                            {preset.label} — {preset.width}x{preset.height} — {preset.fps} fps — {toMbps(preset.videoBitrate)} Mb/s / {toKbps(preset.audioBitrate)} kbps
+                                        </option>
+                                    ))}
+                                    <option value="custom" className="bg-slate-900 text-slate-100">Custom</option>
+                                </select>
+                                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">▾</div>
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <label className="flex items-center gap-2 text-[11px] text-slate-300">
                                 <span className="w-16">FPS</span>
-                                <div className="flex-1 relative">
-                                    <input
-                                        type="number"
-                                        min={15}
-                                        max={60}
-                                        value={recordFps}
-                                        onChange={(e) => {
-                                            setRecordingVideoPresetId('custom');
-                                            setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))));
-                                        }}
-                                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100 pr-10"
-                                    />
-                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">fps</span>
-                                </div>
+                                <input
+                                    type="number"
+                                    min={15}
+                                    max={60}
+                                    value={recordFps}
+                                    onChange={(e) => {
+                                        setRecordingVideoPresetId('custom');
+                                        setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))));
+                                    }}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                                />
                             </label>
                             <label className="flex items-center gap-2 text-[11px] text-slate-300">
                                 <span className="w-20">Bitrate</span>
-                                <div className="flex-1 relative">
-                                    <input
-                                        type="number"
-                                        min={minBitrateMbps}
-                                        max={maxBitrateMbps}
-                                        step={0.5}
-                                        value={toMbps(recordBitrate)}
-                                        onChange={(e) => {
-                                            setRecordingVideoPresetId('custom');
-                                            setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')));
-                                        }}
-                                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100 pr-12"
-                                    />
-                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">Mb/s</span>
-                                </div>
+                                <input
+                                    type="number"
+                                    min={minBitrateMbps}
+                                    max={maxBitrateMbps}
+                                    step={0.5}
+                                    value={toMbps(recordBitrate)}
+                                    onChange={(e) => {
+                                        setRecordingVideoPresetId('custom');
+                                        setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')));
+                                    }}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                                />
+                                <span className="text-[10px] text-slate-500">Mb/s</span>
                             </label>
                         </div>
                     </div>
@@ -554,21 +552,24 @@ const PanelSettings: React.FC<{
                         </div>
                         <div className="space-y-1">
                             <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio preset</div>
-                            <select
-                                className="w-full bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-[11px] text-slate-200 focus:outline-none focus:border-accent/70"
-                                value={recordingAudioPresetId}
-                                onChange={(e) => {
-                                    const p = RECORDING_AUDIO_PRESETS.find(v => v.id === e.target.value);
-                                    if (p) selectAudioPreset(p); else setRecordingAudioPresetId('custom');
-                                }}
-                            >
-                                {RECORDING_AUDIO_PRESETS.map((preset) => (
-                                    <option key={preset.id} value={preset.id}>
-                                        {preset.label} · {preset.note}
-                                    </option>
-                                ))}
-                                <option value="custom">Custom</option>
-                            </select>
+                            <div className="relative">
+                                <select
+                                    className="w-full bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-[11px] text-slate-100 focus:outline-none focus:border-accent/70 appearance-none"
+                                    value={recordingAudioPresetId}
+                                    onChange={(e) => {
+                                        const p = RECORDING_AUDIO_PRESETS.find(v => v.id === e.target.value);
+                                        if (p) selectAudioPreset(p); else setRecordingAudioPresetId('custom');
+                                    }}
+                                >
+                                    {RECORDING_AUDIO_PRESETS.map((preset) => (
+                                        <option key={preset.id} value={preset.id} className="bg-slate-900 text-slate-100">
+                                            {preset.label} — {preset.note}
+                                        </option>
+                                    ))}
+                                    <option value="custom" className="bg-slate-900 text-slate-100">Custom</option>
+                                </select>
+                                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">▾</div>
+                            </div>
                         </div>
                         <label className="flex items-center gap-2 text-[11px] text-slate-300">
                             <span className="w-24">Audio (kbps)</span>
@@ -2603,7 +2604,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
 
-                    <section className="space-y-2">
+                    <section className="space-y-2 sticky top-0 z-50 bg-[#0b1222] pb-2">
                         <button
                             onClick={toggleRecording}
                             className={`w-full py-3 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
