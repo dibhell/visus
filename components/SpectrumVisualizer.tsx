@@ -40,6 +40,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     const spectrumDebugRef = useRef(spectrumDebug);
     const lastPeakFreqRef = useRef<number | null>(null);
+    const freqRangeRef = useRef<{ min: number; max: number }>({ min: 20, max: 20000 });
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
@@ -48,15 +49,19 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     // --- MATH HELPERS ---
     const getLogX = (freq: number, width: number) => {
-        const minLog = Math.log10(20);
-        const maxLog = Math.log10(20000);
-        const valLog = Math.log10(Math.max(20, Math.min(20000, freq)));
+        const minF = freqRangeRef.current.min;
+        const maxF = freqRangeRef.current.max;
+        const minLog = Math.log10(minF);
+        const maxLog = Math.log10(maxF);
+        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq)));
         return ((valLog - minLog) / (maxLog - minLog)) * width;
     };
 
     const getFreqFromX = (x: number, width: number) => {
-        const minLog = Math.log10(20);
-        const maxLog = Math.log10(20000);
+        const minF = freqRangeRef.current.min;
+        const maxF = freqRangeRef.current.max;
+        const minLog = Math.log10(minF);
+        const maxLog = Math.log10(maxF);
         const t = x / width;
         return Math.pow(10, minLog + t * (maxLog - minLog));
     };
@@ -139,9 +144,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.fillText(label, x + 4, H - 6);
             };
 
-            drawGridLine(100, '100');
-            drawGridLine(1000, '1k');
-            drawGridLine(10000, '10k');
+            // dynamic grid markers up to current max freq
+            const markerPool = [20, 30, 50, 80, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+            const maxMarker = freqRangeRef.current.max;
+            markerPool
+                .filter((m) => m <= maxMarker * 1.05) // small slack
+                .forEach((m) => drawGridLine(m, m >= 1000 ? `${m / 1000}k` : `${m}`));
 
             const formatFreq = (f: number) =>
                 f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 1 : 2)}kHz` : `${f.toFixed(1)}Hz`;
@@ -150,8 +158,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 const bands = syncParamsRef.current;
                 bands.slice(0, 3).forEach((b, i) => {
                     if (!b) return;
-                    const bandMin = Math.max(20, b.freq * Math.max(0.05, 1 - b.width / 100));
-                    const bandMax = Math.min(20000, b.freq * (1 + b.width / 100));
+                    const bandMin = Math.max(freqRangeRef.current.min, b.freq * Math.max(0.05, 1 - b.width / 100));
+                    const bandMax = Math.min(freqRangeRef.current.max, b.freq * (1 + b.width / 100));
                     const x1 = getLogX(bandMin, W);
                     const x2 = getLogX(bandMax, W);
                     const left = Math.min(x1, x2);
@@ -166,7 +174,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             // 3. Spectrum Fill - hi-res, bass-biased FFT
             const aeAny: any = ae;
 
-            // 3.1 FFT z silnika - zawsze hi-res z master bus
+            // 3.1 FFT z silnika – zawsze hi-res z master bus
             let usedFFT: Uint8Array | null = null;
             let debugSource = 'none';
 
@@ -327,10 +335,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const len = usedFFT.length;
                     const sampleRate = aeAny?.ctx?.sampleRate || 48000;
                     const nyquist = sampleRate / 2;
-
-                    // zakres spektrum - taki sam jak grid (20 Hz - 20 kHz)
-                    const minFreq = 20;
-                    const maxFreq = 20000;
+                    const minFreq = freqRangeRef.current.min;
+                    const maxFreq = Math.max(minFreq + 100, Math.min(20000, nyquist));
+                    freqRangeRef.current = { min: minFreq, max: maxFreq };
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
