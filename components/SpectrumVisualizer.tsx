@@ -984,6 +984,33 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                             onChange={e => setAxisMaxHz(e.target.value === '' ? null : Number(e.target.value) || 20000)}
                         />
                     </label>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                        {[
+                            [20, 30],
+                            [30, 50],
+                            [50, 80],
+                            [80, 100],
+                            [100, 200],
+                            [200, 500],
+                            [500, 1000],
+                            [1000, 2000],
+                            [2000, 5000],
+                            [5000, 10000],
+                            [10000, 20000],
+                        ].map(([mn, mx]) => (
+                            <button
+                                key={`${mn}-${mx}`}
+                                type="button"
+                                className="px-2 py-[2px] text-[9px] rounded bg-slate-800 border border-slate-600 text-slate-200 hover:border-accent hover:text-white transition"
+                                onClick={() => {
+                                    setAxisMinHz(mn);
+                                    setAxisMaxHz(mx);
+                                }}
+                            >
+                                {mn >= 1000 ? `${mn / 1000}k` : mn}-{mx >= 1000 ? `${mx / 1000}k` : mx}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
             <div className="absolute top-2 left-3 text-[9px] text-slate-500 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
