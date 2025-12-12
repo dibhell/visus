@@ -124,7 +124,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
-                ctx.lineTo(x, H * 0.7);
+                ctx.lineTo(x, H);
                 ctx.stroke();
                 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
@@ -252,14 +252,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 // --- KALIBRACJA: linie częstotliwości + opis piku ---
                 ctx.save();
                 ctx.lineWidth = 1;
-                ctx.globalAlpha = 0.2;
+                ctx.globalAlpha = 0.12;
                 ctx.strokeStyle = '#ffffff';
 
                 SPECTRUM_CALIB_MARKERS.forEach((markerHz) => {
                     const x = getLogX(markerHz, W);
                     ctx.beginPath();
                     ctx.moveTo(x + 0.5, 0);
-                    ctx.lineTo(x + 0.5, H * 0.8);
+                    ctx.lineTo(x + 0.5, H);
                     ctx.stroke();
 
                     // mały opis nad osią
