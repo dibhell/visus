@@ -438,12 +438,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 // overlay nie jest krytyczny
             }
 
-            // 3.7 - overlay z wartościami: peak FFT + freq punktu (hover/drag) + podgląd pasm
+            // 3.7 - overlay z wartościami: peak FFT + podgląd pasm
             try {
                 const peakFreq = lastPeakFreqRef.current;
-                const hoverIdx = hoveredBandRef.current;
                 const bands = syncParamsRef.current;
-                const hoverFreq = hoverIdx !== null && bands[hoverIdx] ? bands[hoverIdx].freq : null;
                 const bandLabels = bands.slice(0, 3).map((b, i) => {
                     const f = b?.freq || 0;
                     const text = f >= 1000 ? `${(f / 1000).toFixed(2)}kHz` : `${Math.round(f)}Hz`;
@@ -452,7 +450,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                 ctx.save();
                 ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                ctx.fillRect(6, 26, 235, 44);
+                ctx.fillRect(6, 26, 235, 28);
                 ctx.font = '11px JetBrains Mono, monospace';
                 ctx.textBaseline = 'middle';
 
@@ -460,17 +458,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     peakFreq && peakFreq > 0
                         ? (peakFreq >= 1000 ? `${(peakFreq / 1000).toFixed(2)}kHz` : `${peakFreq.toFixed(1)}Hz`)
                         : '---';
-                const hoverLabel =
-                    hoverFreq && hoverFreq > 0
-                        ? (hoverFreq >= 1000 ? `${(hoverFreq / 1000).toFixed(2)}kHz` : `${hoverFreq.toFixed(1)}Hz`)
-                        : '---';
 
                 ctx.fillStyle = '#fbbf24';
                 ctx.fillText(`Peak (FFT): ${peakLabel}`, 12, 40);
-                ctx.fillStyle = '#a5b4fc';
-                ctx.fillText(`Param (set): ${hoverLabel}`, 12, 56);
                 ctx.fillStyle = 'rgba(255,255,255,0.75)';
-                ctx.fillText(`Bands: ${bandLabels.join(' | ')}`, 125, 56);
+                ctx.fillText(`Bands: ${bandLabels.join(' | ')}`, 125, 40);
                 ctx.restore();
             } catch {
                 // overlay nie jest krytyczny
@@ -540,17 +532,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.fillText(`Param: ${Math.round(param.freq)}Hz`, x, tooltipY - 12);
                     ctx.fillStyle = '#fff';
                     ctx.fillText(`G:${param.gain.toFixed(1)}`, x, tooltipY - 2);
-                } else {
-                    // stały, mały opis częstotliwości pasma (bez hover)
-                    ctx.fillStyle = colors[i];
-                    ctx.font = '9px JetBrains Mono, monospace';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'top';
-                    const bandLabel =
-                        param.freq >= 1000
-                            ? `${(param.freq / 1000).toFixed(2)}k`
-                            : `${Math.round(param.freq)}Hz`;
-                    ctx.fillText(bandLabel, x, anchorY - 14);
                 }
             });
         }
