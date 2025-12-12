@@ -553,6 +553,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const envCanvasRef = useRef<HTMLCanvasElement>(null);
+    const additiveSliderRef = useRef<HTMLDivElement | null>(null);
+    const additiveDraggingRef = useRef(false);
+    const additiveDragOffsetRef = useRef(0);
     const spectrumRef = useRef<Uint8Array | null>(null);
     const frameStateRef = useRef<{ spectrum: Uint8Array | null }>({ spectrum: null });
     const ensureAudioContext = useCallback(async () => {
@@ -1338,9 +1341,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             const baseAdditive = Math.max(0, Math.min(1, additiveGainRef.current / 100));
 
-            // Env moduluje bazę zamiast ją całkowicie zastępować:
-            // depth=0   → final = base
-            // depth=1   → final = base * env
+            // Env modulates the base instead of fully replacing it:
+            // depth=0   -> final = base
+            // depth=1   -> final = base * env
             let effectiveAdditive = baseAdditive;
             if (envDepth > 0) {
                 const mod = (1 - envDepth) + envDepth * envValue;
@@ -1899,6 +1902,55 @@ const toggleRecording = async () => {
         setAdditiveEnvConfig(prev => ({ ...prev, ...changes }));
     };
 
+    const setAdditiveFromPointer = useCallback((clientX: number, applyOffset = false) => {
+        const slider = additiveSliderRef.current;
+        if (!slider) return;
+        const rect = slider.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const pointerRatio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const ratio = applyOffset ? pointerRatio + additiveDragOffsetRef.current : pointerRatio;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        setAdditiveGain(Math.round(clamped * 100));
+    }, []);
+
+    const handleAdditivePointerMove = useCallback((ev: PointerEvent) => {
+        if (!additiveDraggingRef.current) return;
+        ev.preventDefault();
+        setAdditiveFromPointer(ev.clientX, true);
+    }, [setAdditiveFromPointer]);
+
+    const handleAdditivePointerUp = useCallback(() => {
+        additiveDraggingRef.current = false;
+        window.removeEventListener('pointermove', handleAdditivePointerMove);
+        window.removeEventListener('pointerup', handleAdditivePointerUp);
+        window.removeEventListener('pointercancel', handleAdditivePointerUp);
+    }, [handleAdditivePointerMove]);
+
+    const handleAdditivePointerDown = useCallback((ev: React.PointerEvent<HTMLDivElement>) => {
+        if (ev.button !== 0) return;
+        ev.preventDefault();
+        const slider = additiveSliderRef.current;
+        if (!slider) return;
+        const rect = slider.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const pointerRatio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+        const currentRatio = Math.max(0, Math.min(1, additiveGainRef.current / 100));
+        additiveDragOffsetRef.current = currentRatio - pointerRatio;
+        additiveDraggingRef.current = true;
+        setAdditiveFromPointer(ev.clientX, true);
+        window.addEventListener('pointermove', handleAdditivePointerMove);
+        window.addEventListener('pointerup', handleAdditivePointerUp);
+        window.addEventListener('pointercancel', handleAdditivePointerUp);
+    }, [handleAdditivePointerMove, handleAdditivePointerUp, setAdditiveFromPointer]);
+
+    useEffect(() => {
+        return () => {
+            window.removeEventListener('pointermove', handleAdditivePointerMove);
+            window.removeEventListener('pointerup', handleAdditivePointerUp);
+            window.removeEventListener('pointercancel', handleAdditivePointerUp);
+        };
+    }, [handleAdditivePointerMove, handleAdditivePointerUp]);
+
     const exitToLanding = () => {
         if (isRecording) toggleRecording();
         if (videoRef.current && videoRef.current.srcObject) {
@@ -1910,7 +1962,7 @@ const toggleRecording = async () => {
     const baseNormalizedUi = Math.max(0, Math.min(1, additiveGain / 100));
     const appliedDepth = additiveEnvConfig.enabled ? additiveEnvConfig.depth : 0;
 
-    // ten sam wzór co w renderLoop:
+    // same formula as renderLoop:
     let effectiveAdditiveUi = baseNormalizedUi;
     if (appliedDepth > 0) {
         const modUi = (1 - appliedDepth) + appliedDepth * additiveEnvValue;
@@ -2221,7 +2273,7 @@ const toggleRecording = async () => {
                                 <div>
                                     <div className="text-[10px] text-slate-400 uppercase tracking-[0.25em]">Additive Master</div>
                                     <div className="text-sm font-semibold text-white">Effective {effectivePercent}%</div>
-                                    <div className="text-[9px] text-slate-500">Env {envPercent}% · Base {basePercent}%</div>
+                                    <div className="text-[9px] text-slate-500">Env {envPercent}% | Base {basePercent}%</div>
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
                                     <input
@@ -2235,18 +2287,12 @@ const toggleRecording = async () => {
                                 </label>
                             </div>
 
-                            <div className="relative h-8">
-                                <input
-                                    type="range"
-                                    min={0}
-                                    max={200}
-                                    step={1}
-                                    value={additiveGain}
-                                    onChange={(e) => setAdditiveGain(parseInt(e.target.value, 10))}
-                                    className="absolute inset-0 w-full h-8 cursor-pointer opacity-0 z-10"
-                                    style={{ WebkitAppearance: 'none', appearance: 'none', background: 'transparent' }}
-                                />
-                                <div className="pointer-events-none absolute inset-0 flex items-center">
+                            <div
+                                className="relative h-8 cursor-pointer select-none"
+                                ref={additiveSliderRef}
+                                onPointerDown={handleAdditivePointerDown}
+                            >
+                                <div className="absolute inset-0 flex items-center">
                                     <div className="relative w-full h-1 bg-slate-800/80 rounded-full overflow-visible">
                                         <div className="absolute inset-y-0 left-0 rounded-full bg-accent/30" style={{ width: `${basePercent}%` }}></div>
                                         <div

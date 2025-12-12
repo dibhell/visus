@@ -96,7 +96,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const draw = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
-            
+
             const dpr = window.devicePixelRatio || 1;
             const rect = canvas.getBoundingClientRect();
             
@@ -112,6 +112,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const ae = audioServiceRef.current;
             const W = rect.width;
             const H = rect.height;
+            const bandPeakFreqs: Array<number | null> = [null, null, null];
             // 1. Background
             ctx.clearRect(0, 0, W, H);
             ctx.fillStyle = 'rgba(15, 23, 42, 0.3)'; // Slate dark
@@ -311,6 +312,16 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const peakInfo = findMainPeak(usedFFT, sampleRate, minFreq, maxFreq);
                     lastPeakFreqRef.current = peakInfo.freq || 0;
 
+                    // per-band FFT peak (zgodnie z ustawionymi freq/width)
+                    const bandsForPeak = syncParamsRef.current;
+                    bandsForPeak.slice(0, 3).forEach((b, idx) => {
+                        if (!b) return;
+                        const bandMin = Math.max(minFreq, b.freq * Math.max(0.05, 1 - b.width / 100));
+                        const bandMax = Math.min(maxFreq, b.freq * (1 + b.width / 100));
+                        const bandPeak = findMainPeak(usedFFT, sampleRate, bandMin, bandMax);
+                        bandPeakFreqs[idx] = bandPeak.freq || null;
+                    });
+
                     // pomocnicza funkcja: mapuje czestotliwosc na indeks binu (dla rysowania)
                     const binForFreq = (freqHz: number) => {
                         const f = Math.max(minFreq, Math.min(maxFreq, freqHz));
@@ -443,8 +454,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 const peakFreq = lastPeakFreqRef.current;
                 const bands = syncParamsRef.current;
                 const bandLabels = bands.slice(0, 3).map((b, i) => {
-                    const f = b?.freq || 0;
-                    const text = f >= 1000 ? `${(f / 1000).toFixed(2)}kHz` : `${Math.round(f)}Hz`;
+                    const f = bandPeakFreqs[i] || 0;
+                    const text = f >= 1000 ? `${(f / 1000).toFixed(2)}kHz` : `${f.toFixed(1)}Hz`;
                     return `${i + 1}:${text}`;
                 });
 
@@ -529,9 +540,18 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.fillStyle = colors[i];
                     ctx.font = '10px JetBrains Mono, monospace';
                     ctx.textAlign = 'center';
-                    ctx.fillText(`Param: ${Math.round(param.freq)}Hz`, x, tooltipY - 12);
+                    const bandPeak = bandPeakFreqs[i];
+                    const fftLabel =
+                        bandPeak && bandPeak > 0
+                            ? (bandPeak >= 1000 ? `${(bandPeak / 1000).toFixed(2)}kHz` : `${bandPeak.toFixed(1)}Hz`)
+                            : '---';
+                    ctx.fillText(`FFT: ${fftLabel}`, x, tooltipY - 12);
                     ctx.fillStyle = '#fff';
-                    ctx.fillText(`G:${param.gain.toFixed(1)}`, x, tooltipY - 2);
+                    const paramLabel =
+                        param.freq >= 1000
+                            ? `${(param.freq / 1000).toFixed(2)}kHz`
+                            : `${Math.round(param.freq)}Hz`;
+                    ctx.fillText(`Set: ${paramLabel}`, x, tooltipY - 2);
                 }
             });
         }
