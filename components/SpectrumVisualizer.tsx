@@ -41,11 +41,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const spectrumDebugRef = useRef(spectrumDebug);
     const lastPeakFreqRef = useRef<number | null>(null);
     const freqRangeRef = useRef<{ min: number; max: number }>({ min: 20, max: 20000 });
+    const [freqCalib, setFreqCalib] = useState(1.0);
+    const freqCalibRef = useRef(freqCalib);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
     useEffect(() => { spectrumDebugRef.current = spectrumDebug; }, [spectrumDebug]);
     useEffect(() => { spectrumModeRef.current = spectrumMode; }, [spectrumMode]);
+    useEffect(() => { freqCalibRef.current = freqCalib; }, [freqCalib]);
 
     // --- MATH HELPERS ---
     const getLogX = (freq: number, width: number) => {
@@ -53,7 +56,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const maxF = freqRangeRef.current.max;
         const minLog = Math.log10(minF);
         const maxLog = Math.log10(maxF);
-        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq)));
+        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq * freqCalibRef.current)));
         return ((valLog - minLog) / (maxLog - minLog)) * width;
     };
 
@@ -917,6 +920,18 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                                 ...d,
                                 maxHeightFrac: Number(e.target.value) || 0
                             }))}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1 mb-1">
+                        <span>axisCalib</span>
+                        <input
+                            type="number"
+                            step={0.05}
+                            min={0.1}
+                            max={3}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={freqCalib}
+                            onChange={e => setFreqCalib(Number(e.target.value) || 1)}
                         />
                     </label>
                 </div>
