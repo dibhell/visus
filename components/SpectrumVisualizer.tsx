@@ -81,7 +81,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const nyquist = sampleRate / 2;
         const len = fft.length;
 
-        const denom = Math.max(1, len - 1);
+        const denom = Math.max(1, len);
         const minBin = Math.max(1, Math.round((minFreq / nyquist) * denom));
         const maxBin = Math.min(len - 1, Math.round((maxFreq / nyquist) * denom));
 
@@ -385,15 +385,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     // pomocnicza funkcja: mapuje czestotliwosc na indeks binu (dla rysowania)
                     const binForFreq = (freqHz: number) => {
                         const f = Math.max(minFreq, Math.min(maxFreq, freqHz));
-                        const idxFloat = (f / nyquist) * Math.max(1, len - 1);
+                        const idxFloat = (f / nyquist) * Math.max(1, len);
                         const idx = Math.round(idxFloat);
                         return Math.min(len - 1, Math.max(0, idx));
                     };
 
-                    // 3.4.b - sampler: dla każdej "kolumny" bierzemy JEDEN bin FFT, z biasem na bas
+                    // 3.4.b - sampler: dla każdej "kolumny" bierzemy JEDEN bin FFT (bez biasu na bas)
                     drawSpectrum((i, bars) => {
-                        const tLinear = bars > 1 ? i / (bars - 1) : 0;
-                        const t = Math.pow(tLinear, 2.5); // bias na bas
+                        const t = bars > 1 ? i / (bars - 1) : 0;
 
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
