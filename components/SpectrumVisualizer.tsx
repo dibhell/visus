@@ -45,6 +45,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const freqCalibRef = useRef(freqCalib);
     const [specStretch, setSpecStretch] = useState(1.0);
     const specStretchRef = useRef(specStretch);
+    const [axisMinHz, setAxisMinHz] = useState<number | null>(null);
+    const [axisMaxHz, setAxisMaxHz] = useState<number | null>(null);
+    const axisMinHzRef = useRef<number | null>(null);
+    const axisMaxHzRef = useRef<number | null>(null);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
@@ -52,11 +56,15 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     useEffect(() => { spectrumModeRef.current = spectrumMode; }, [spectrumMode]);
     useEffect(() => { freqCalibRef.current = freqCalib; }, [freqCalib]);
     useEffect(() => { specStretchRef.current = specStretch; }, [specStretch]);
+    useEffect(() => { axisMinHzRef.current = axisMinHz; }, [axisMinHz]);
+    useEffect(() => { axisMaxHzRef.current = axisMaxHz; }, [axisMaxHz]);
 
     // --- MATH HELPERS ---
     const getLogX = (freq: number, width: number) => {
-        const minF = freqRangeRef.current.min;
-        const maxF = freqRangeRef.current.max;
+        const userMin = axisMinHzRef.current;
+        const userMax = axisMaxHzRef.current;
+        const minF = Math.max(5, userMin || freqRangeRef.current.min);
+        const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
         const effMax = Math.max(minF + 1, maxF / Math.max(0.05, specStretchRef.current));
         const minLog = Math.log10(minF);
         const maxLog = Math.log10(effMax);
@@ -66,8 +74,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     };
 
     const getFreqFromX = (x: number, width: number) => {
-        const minF = freqRangeRef.current.min;
-        const maxF = freqRangeRef.current.max;
+        const userMin = axisMinHzRef.current;
+        const userMax = axisMaxHzRef.current;
+        const minF = Math.max(5, userMin || freqRangeRef.current.min);
+        const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
         const effMax = Math.max(minF + 1, maxF / Math.max(0.05, specStretchRef.current));
         const minLog = Math.log10(minF);
         const maxLog = Math.log10(effMax);
@@ -950,6 +960,30 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                             className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
                             value={specStretch}
                             onChange={e => setSpecStretch(Number(e.target.value) || 1)}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1">
+                        <span>minHz</span>
+                        <input
+                            type="number"
+                            step={5}
+                            min={5}
+                            max={20000}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={axisMinHz ?? ''}
+                            onChange={e => setAxisMinHz(e.target.value === '' ? null : Number(e.target.value) || 20)}
+                        />
+                    </label>
+                    <label className="flex items-center gap-1">
+                        <span>maxHz</span>
+                        <input
+                            type="number"
+                            step={10}
+                            min={20}
+                            max={48000}
+                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
+                            value={axisMaxHz ?? ''}
+                            onChange={e => setAxisMaxHz(e.target.value === '' ? null : Number(e.target.value) || 20000)}
                         />
                     </label>
                 </div>
