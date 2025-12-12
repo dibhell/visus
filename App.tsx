@@ -26,8 +26,8 @@ const LandingScreen: React.FC<LandingProps> = ({ onInitialize }) => (
                     <span className="relative z-10">INITIALIZE</span>
                 </button>
             </div>
-            <div className="mt-6 text-[11px] text-slate-400">
-                WebGL + Audio startują dopiero po kliknięciu INITIALIZE.
+            <div className="mt-6 text-[11px] text-slate-600">
+                WebGL + Audio only start after you click INITIALIZE.
             </div>
         </div>
     </div>
