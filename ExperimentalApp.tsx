@@ -358,6 +358,22 @@ const PanelSettings: React.FC<{
     ];
 
     const uiFpsOptions = [15, 20, 30];
+    const bitratePresets = [
+        { label: '4K Ultra', note: '30 fps cinematic', value: 56_000_000 },
+        { label: '4K High', note: '30 fps studio', value: 48_000_000 },
+        { label: '1080p High', note: '60 fps action', value: 15_000_000 },
+        { label: '1080p Standard', note: '30 fps', value: 10_000_000 },
+        { label: '1080p Lite', note: 'web upload', value: 8_000_000 },
+        { label: '720p Stream', note: 'bandwidth saver', value: 6_000_000 },
+    ];
+    const minBitrateMbps = 5;
+    const maxBitrateMbps = 80;
+    const toMbps = (bits: number) => Number((bits / 1_000_000).toFixed(1));
+    const clampBitrate = (mbps: number) => {
+        const safeValue = Number.isFinite(mbps) ? mbps : minBitrateMbps;
+        const clamped = Math.max(minBitrateMbps, Math.min(maxBitrateMbps, safeValue));
+        return Math.round(clamped * 1_000_000);
+    };
 
     const toggleClass = (active: boolean) => active ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10';
 
@@ -440,8 +456,24 @@ const PanelSettings: React.FC<{
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
+                <div className="space-y-3">
                     <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">Recording</div>
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality presets</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {bitratePresets.map((preset) => (
+                                <button
+                                    key={preset.label}
+                                    onClick={() => setRecordBitrate(preset.value)}
+                                    className={`text-left p-2 rounded border text-[11px] leading-tight ${toggleClass(recordBitrate === preset.value)}`}
+                                >
+                                    <div className="font-bold text-slate-200">{preset.label}</div>
+                                    <div className="text-[10px] text-slate-300">{toMbps(preset.value)} Mb/s</div>
+                                    <div className="text-[9px] text-slate-500">{preset.note}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                     <label className="flex items-center gap-2 text-[11px] text-slate-300">
                         <span className="w-24">FPS</span>
                         <input
@@ -454,14 +486,14 @@ const PanelSettings: React.FC<{
                         />
                     </label>
                     <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <span className="w-24">Bitrate kbps</span>
+                        <span className="w-24">Bitrate (Mb/s)</span>
                         <input
                             type="number"
-                            min={500}
-                            max={20000}
-                            step={100}
-                            value={recordBitrate}
-                            onChange={(e) => setRecordBitrate(Math.max(500, Math.min(20000, parseInt(e.target.value || '0', 10))))}
+                            min={minBitrateMbps}
+                            max={maxBitrateMbps}
+                            step={0.5}
+                            value={toMbps(recordBitrate)}
+                            onChange={(e) => setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')))}
                             className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
                         />
                     </label>
@@ -627,7 +659,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [frameCap, setFrameCap] = useState(getFrameCapValue());
     const [frameCapMode, setFrameCapMode] = useState<'dynamic' | 'manual'>(getFrameCapMode());
     const [recordFps, setRecordFps] = useState(45);
-    const [recordBitrate, setRecordBitrate] = useState(8000000);
+    const [recordBitrate, setRecordBitrate] = useState(15_000_000);
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(false);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
