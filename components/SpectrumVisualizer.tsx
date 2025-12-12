@@ -67,95 +67,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const segmentStretchRef = useRef<number[]>(segmentStretch);
     useEffect(() => { segmentStretchRef.current = segmentStretch; }, [segmentStretch]);
 
-    const freqToNorm = (freq: number) => {
-        const fScaled = freq * freqCalibRef.current;
-        const anchors = FREQ_ANCHORS;
-        const stretches = segmentStretchRef.current;
-        const minF = Math.max(anchors[0], axisMinHzRef.current ?? anchors[0]);
-        const maxF = Math.min(anchors[anchors.length - 1], axisMaxHzRef.current ?? anchors[anchors.length - 1]);
-        const clamped = Math.max(minF, Math.min(maxF, fScaled));
-
-        // Build spans with stretch
-        const logs = anchors.map((a) => Math.log10(a));
-        const spans = [];
-        for (let i = 0; i < anchors.length - 1; i++) {
-            const a0 = anchors[i];
-            const a1 = anchors[i + 1];
-            if (a1 < minF || a0 > maxF) {
-                spans.push(0);
-                continue;
+    const getSegmentStretch = (freq: number) => {
+        const f = Math.max(FREQ_ANCHORS[0], Math.min(FREQ_ANCHORS[FREQ_ANCHORS.length - 1], freq));
+        for (let i = 0; i < FREQ_ANCHORS.length - 1; i++) {
+            if (f >= FREQ_ANCHORS[i] && f <= FREQ_ANCHORS[i + 1]) {
+                return segmentStretchRef.current[i] || 1;
             }
-            const segMin = Math.max(a0, minF);
-            const segMax = Math.min(a1, maxF);
-            const span = Math.log10(segMax) - Math.log10(segMin);
-            spans.push(Math.max(0, span) * (stretches[i] || 1));
         }
-        const totalSpan = spans.reduce((a, b) => a + b, 0) || 1;
-
-        // find segment
-        let acc = 0;
-        for (let i = 0; i < anchors.length - 1; i++) {
-            const a0 = anchors[i];
-            const a1 = anchors[i + 1];
-            if (clamped < a0 || clamped > a1) {
-                acc += spans[i];
-                continue;
-            }
-            const segMin = Math.max(a0, minF);
-            const segMax = Math.min(a1, maxF);
-            const segLogMin = Math.log10(segMin);
-            const segLogMax = Math.log10(segMax);
-            const segBaseSpan = segLogMax - segLogMin;
-            const segAdjSpan = segBaseSpan * (stretches[i] || 1);
-            const localT = segBaseSpan > 0 ? (Math.log10(clamped) - segLogMin) / segBaseSpan : 0;
-            return (acc + localT * segAdjSpan) / totalSpan;
-        }
-        return acc / totalSpan;
-    };
-
-    const normToFreq = (norm: number) => {
-        const anchors = FREQ_ANCHORS;
-        const stretches = segmentStretchRef.current;
-        const minF = Math.max(anchors[0], axisMinHzRef.current ?? anchors[0]);
-        const maxF = Math.min(anchors[anchors.length - 1], axisMaxHzRef.current ?? anchors[anchors.length - 1]);
-        const logs = anchors.map((a) => Math.log10(a));
-        const spans = [];
-        for (let i = 0; i < anchors.length - 1; i++) {
-            const a0 = anchors[i];
-            const a1 = anchors[i + 1];
-            if (a1 < minF || a0 > maxF) {
-                spans.push(0);
-                continue;
-            }
-            const segMin = Math.max(a0, minF);
-            const segMax = Math.min(a1, maxF);
-            const span = Math.log10(segMax) - Math.log10(segMin);
-            spans.push(Math.max(0, span) * (stretches[i] || 1));
-        }
-        const totalSpan = spans.reduce((a, b) => a + b, 0) || 1;
-
-        let acc = 0;
-        for (let i = 0; i < anchors.length - 1; i++) {
-            const a0 = anchors[i];
-            const a1 = anchors[i + 1];
-            if (a1 < minF || a0 > maxF) {
-                continue;
-            }
-            const segMin = Math.max(a0, minF);
-            const segMax = Math.min(a1, maxF);
-            const segBaseSpan = Math.log10(segMax) - Math.log10(segMin);
-            const segAdjSpan = segBaseSpan * (stretches[i] || 1);
-            const segStart = acc / totalSpan;
-            const segEnd = (acc + segAdjSpan) / totalSpan;
-            if (norm >= segStart && norm <= segEnd) {
-                const tLocal = segAdjSpan > 0 ? (norm - segStart) / segAdjSpan : 0;
-                const logVal = Math.log10(segMin) + tLocal * segBaseSpan;
-                const f = Math.pow(10, logVal) / freqCalibRef.current;
-                return Math.max(minF, Math.min(maxF, f));
-            }
-            acc += segAdjSpan;
-        }
-        return maxF;
+        return 1;
     };
 
     const getLogX = (freq: number, width: number) => {
@@ -165,13 +84,20 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
         const minLog = Math.log10(minF);
         const maxLog = Math.log10(maxF);
-        const base = freqToNorm(freq);
+        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq * freqCalibRef.current)));
+        const base = (valLog - minLog) / (maxLog - minLog);
         return Math.min(width, Math.max(0, base * width));
     };
 
     const getFreqFromX = (x: number, width: number) => {
+        const userMin = axisMinHzRef.current;
+        const userMax = axisMaxHzRef.current;
+        const minF = Math.max(5, userMin || freqRangeRef.current.min);
+        const maxF = Math.max(minF + 1, userMax || freqRangeRef.current.max);
+        const minLog = Math.log10(minF);
+        const maxLog = Math.log10(maxF);
         const t = Math.min(1, Math.max(0, x / width));
-        return normToFreq(t);
+        return Math.pow(10, minLog + t * (maxLog - minLog));
     };
 
     const findMainPeak = (
