@@ -1641,7 +1641,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 if (type === 'video' && videoRef.current) {
                     try {
                         videoRef.current.srcObject = null;
-                        if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
+                        const currentSrc = videoRef.current.src;
+                        const currentInPlaylist = playlistRef.current.some(p => p.url === currentSrc);
+                        if (currentSrc && currentSrc.startsWith('blob:') && !currentInPlaylist) URL.revokeObjectURL(currentSrc);
                         videoRef.current.src = url;
                         videoRef.current.muted = false;
                         videoRef.current.loop = false;
@@ -1706,7 +1708,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (!item || !videoRef.current) return;
 
         try {
-            if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) {
+            const currentSrc = videoRef.current.src;
+            const currentInPlaylist = playlistRef.current.some(p => p.url === currentSrc);
+            if (currentSrc && currentSrc.startsWith('blob:') && !currentInPlaylist) {
                 try { URL.revokeObjectURL(videoRef.current.src); } catch {}
             }
             videoRef.current.srcObject = null;
