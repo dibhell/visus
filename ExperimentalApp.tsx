@@ -2604,33 +2604,35 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
 
             <div className="flex-1 overflow-y-auto px-5 py-6 custom-scrollbar space-y-8 pb-24">
 
-                    <section className="space-y-2 sticky top-0 z-50 bg-[#0b1222] pb-2">
-                        <button
-                            onClick={toggleRecording}
-                            className={`w-full py-3 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
-                        >
-                            {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING (WEBM)</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC VIDEO (WEBM)</span>}
-                        </button>
-                        {(isRecording || recordingLocksRef.current) && (
-                            <div className="text-[10px] text-slate-200 bg-white/5 border border-white/10 rounded-md px-3 py-2 leading-relaxed">
-                                <div className="font-black tracking-[0.16em] text-[9px] text-accent">RECORDING MODE</div>
-                                {(() => {
-                                    const p = recordingPresetRef.current ?? activeRecordingPreset;
-                                    const mbps = (p.videoBitrate / 1_000_000).toFixed(1);
-                                    const kbps = Math.round(p.audioBitrate / 1000);
-                                    return (
-                                        <div className="text-slate-200">
-                                            {p.width}x{p.height} @ {p.fps} fps · {mbps} Mb/s · {kbps} kbps
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                        )}
-                        {useWebCodecsRecord && webCodecsSupported && (
-                            <div className="text-[10px] text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-md px-3 py-2">
-                                WebCodecs can record video-only when no live audio track is present. Disable WebCodecs to force recording with audio.
-                            </div>
-                        )}
+                    <section className="space-y-2 sticky top-0 z-50">
+                        <div className="backdrop-blur bg-white/5 border border-white/10 rounded-2xl p-3 shadow-lg">
+                            <button
+                                onClick={toggleRecording}
+                                className={`w-full py-3 rounded-xl text-[10px] font-black border transition-all flex items-center justify-center gap-3 tracking-widest ${isRecording ? 'bg-red-500/20 text-red-200 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-white/5 text-slate-400 border-white/5 hover:text-white hover:border-white/20'}`}
+                            >
+                                {isRecording ? <span className="animate-pulse flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> RECORDING (WEBM)</span> : <span className="flex items-center gap-2"><span className="w-2 h-2 bg-red-500 rounded-full"></span> REC VIDEO (WEBM)</span>}
+                            </button>
+                            {(isRecording || recordingLocksRef.current) && (
+                                <div className="mt-2 text-[10px] text-slate-200 bg-white/5 border border-white/10 rounded-md px-3 py-2 leading-relaxed">
+                                    <div className="font-black tracking-[0.16em] text-[9px] text-accent">RECORDING MODE</div>
+                                    {(() => {
+                                        const p = recordingPresetRef.current ?? activeRecordingPreset;
+                                        const mbps = (p.videoBitrate / 1_000_000).toFixed(1);
+                                        const kbps = Math.round(p.audioBitrate / 1000);
+                                        return (
+                                            <div className="text-slate-200">
+                                                {p.width}x{p.height} @ {p.fps} fps · {mbps} Mb/s · {kbps} kbps
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                            {useWebCodecsRecord && webCodecsSupported && (
+                                <div className="mt-2 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-400/40 rounded-md px-3 py-2">
+                                    WebCodecs can record video-only when no live audio track is present. Disable WebCodecs to force recording with audio.
+                                </div>
+                            )}
+                        </div>
                     </section>
 
                     <PanelSettings
