@@ -491,21 +491,22 @@ const PanelSettings: React.FC<{
                             Video
                         </div>
                         <div className="space-y-1">
-                            <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality presets</div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality preset</div>
+                            <select
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[11px] text-slate-200"
+                                value={recordingVideoPresetId}
+                                onChange={(e) => {
+                                    const p = RECORDING_VIDEO_PRESETS.find(v => v.id === e.target.value);
+                                    if (p) selectVideoPreset(p); else setRecordingVideoPresetId('custom');
+                                }}
+                            >
                                 {RECORDING_VIDEO_PRESETS.map((preset) => (
-                                    <button
-                                        key={preset.label}
-                                        onClick={() => selectVideoPreset(preset)}
-                                        className={`text-left p-3 rounded-xl border text-[11px] leading-tight ${toggleClass(recordingVideoPresetId === preset.id)}`}
-                                    >
-                                        <div className="font-bold text-slate-200">{preset.label}</div>
-                                        <div className="text-[10px] text-slate-300">{preset.width}x{preset.height} · {preset.fps} fps</div>
-                                        <div className="text-[10px] text-slate-300">{toMbps(preset.videoBitrate)} Mb/s · {toKbps(preset.audioBitrate)} kbps</div>
-                                        <div className="text-[9px] text-slate-500">{preset.note}</div>
-                                    </button>
+                                    <option key={preset.id} value={preset.id}>
+                                        {preset.label} · {preset.width}x{preset.height} · {preset.fps} fps · {toMbps(preset.videoBitrate)} Mb/s / {toKbps(preset.audioBitrate)} kbps
+                                    </option>
                                 ))}
-                            </div>
+                                <option value="custom">Custom</option>
+                            </select>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <label className="flex items-center gap-2 text-[11px] text-slate-300">
@@ -547,19 +548,22 @@ const PanelSettings: React.FC<{
                             Audio
                         </div>
                         <div className="space-y-1">
-                            <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio presets</div>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio preset</div>
+                            <select
+                                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-[11px] text-slate-200"
+                                value={recordingAudioPresetId}
+                                onChange={(e) => {
+                                    const p = RECORDING_AUDIO_PRESETS.find(v => v.id === e.target.value);
+                                    if (p) selectAudioPreset(p); else setRecordingAudioPresetId('custom');
+                                }}
+                            >
                                 {RECORDING_AUDIO_PRESETS.map((preset) => (
-                                    <button
-                                        key={preset.label}
-                                        onClick={() => selectAudioPreset(preset)}
-                                        className={`p-3 rounded-xl border text-[10px] leading-tight text-center ${toggleClass(recordingAudioPresetId === preset.id)}`}
-                                    >
-                                        <div className="font-bold text-slate-200">{preset.label}</div>
-                                        <div className="text-[9px] text-slate-500">{preset.note}</div>
-                                    </button>
+                                    <option key={preset.id} value={preset.id}>
+                                        {preset.label} · {preset.note}
+                                    </option>
                                 ))}
-                            </div>
+                                <option value="custom">Custom</option>
+                            </select>
                         </div>
                         <label className="flex items-center gap-2 text-[11px] text-slate-300">
                             <span className="w-24">Audio (kbps)</span>
@@ -734,6 +738,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         performanceMode: PerformanceMode;
         uiFpsLimit: number;
     }>(null);
+    const recordingCanvasSizeRef = useRef<{ width: number; height: number } | null>(null);
 
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
@@ -758,7 +763,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [recordFps, setRecordFps] = useState(defaultVideoPreset?.fps ?? 30);
     const [recordBitrate, setRecordBitrate] = useState(defaultVideoPreset?.videoBitrate ?? 15_000_000);
     const [recordAudioBitrate, setRecordAudioBitrate] = useState(defaultAudioPreset?.bitrate ?? 192_000);
-    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(true);
+    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(false);
     const [autoScale, setAutoScale] = useState(false);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
     const [quality, setQuality] = useState<QualityMode>('high');
@@ -2051,6 +2056,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             performanceMode: performanceModeRef.current,
             uiFpsLimit: uiFpsLimitRef.current,
         };
+        if (canvasRef.current) {
+            recordingCanvasSizeRef.current = { width: canvasRef.current.width, height: canvasRef.current.height };
+            canvasRef.current.width = preset.width;
+            canvasRef.current.height = preset.height;
+        }
         const lockedFps = clampRecordingFps(preset.fps);
         setAutoScale(false);
         autoScaleHighStreakRef.current = 0;
@@ -2108,6 +2118,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             uiFpsLimitRef.current = snapshot.uiFpsLimit;
             setUiFpsLimit(snapshot.uiFpsLimit);
         }
+        if (canvasRef.current && recordingCanvasSizeRef.current) {
+            canvasRef.current.width = recordingCanvasSizeRef.current.width;
+            canvasRef.current.height = recordingCanvasSizeRef.current.height;
+        }
+        recordingCanvasSizeRef.current = null;
         handleResize();
     };
 
