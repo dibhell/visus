@@ -912,13 +912,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                             max={1}
                             className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
                             value={spectrumDebug.maxHeightFrac}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                maxHeightFrac: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                    <label className="flex items-center gap-1 mb-1">
+                    onChange={e => setSpectrumDebug(d => ({
+                        ...d,
+                        maxHeightFrac: Number(e.target.value) || 0
+                    }))}
+                />
+            </label>
                 </div>
             </div>
             <div className="absolute top-2 left-3 text-[9px] text-slate-500 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
