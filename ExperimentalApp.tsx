@@ -474,92 +474,110 @@ const PanelSettings: React.FC<{
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-3">
-                    <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">Recording</div>
-                    <div className="space-y-1">
-                        <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality presets</div>
+            <div className="space-y-3">
+                <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Recording</div>
+                <div className="grid md:grid-cols-2 gap-3">
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-3">
+                        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                            <span className="w-1.5 h-1.5 bg-accent rounded-full shadow-[0_0_8px_rgba(167,139,250,0.8)]"></span>
+                            Video
+                        </div>
+                        <div className="space-y-1">
+                            <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Quality presets</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                {bitratePresets.map((preset) => (
+                                    <button
+                                        key={preset.label}
+                                        onClick={() => setRecordBitrate(preset.value)}
+                                        className={`text-left p-3 rounded-xl border text-[11px] leading-tight ${toggleClass(recordBitrate === preset.value)}`}
+                                    >
+                                        <div className="font-bold text-slate-200">{preset.label}</div>
+                                        <div className="text-[10px] text-slate-300">{toMbps(preset.value)} Mb/s</div>
+                                        <div className="text-[9px] text-slate-500">{preset.note}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 gap-2">
-                            {bitratePresets.map((preset) => (
-                                <button
-                                    key={preset.label}
-                                    onClick={() => setRecordBitrate(preset.value)}
-                                    className={`text-left p-2 rounded border text-[11px] leading-tight ${toggleClass(recordBitrate === preset.value)}`}
-                                >
-                                    <div className="font-bold text-slate-200">{preset.label}</div>
-                                    <div className="text-[10px] text-slate-300">{toMbps(preset.value)} Mb/s</div>
-                                    <div className="text-[9px] text-slate-500">{preset.note}</div>
-                                </button>
-                            ))}
+                            <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                                <span className="w-16">FPS</span>
+                                <input
+                                    type="number"
+                                    min={15}
+                                    max={60}
+                                    value={recordFps}
+                                    onChange={(e) => setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))))}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                                />
+                            </label>
+                            <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                                <span className="w-20">Bitrate</span>
+                                <input
+                                    type="number"
+                                    min={minBitrateMbps}
+                                    max={maxBitrateMbps}
+                                    step={0.5}
+                                    value={toMbps(recordBitrate)}
+                                    onChange={(e) => setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')))}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                                />
+                                <span className="text-[10px] text-slate-500">Mb/s</span>
+                            </label>
                         </div>
                     </div>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <span className="w-24">FPS</span>
-                        <input
-                            type="number"
-                            min={15}
-                            max={60}
-                            value={recordFps}
-                            onChange={(e) => setRecordFps(Math.max(15, Math.min(60, parseInt(e.target.value || '0', 10))))}
-                            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
-                        />
-                    </label>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <span className="w-24">Bitrate (Mb/s)</span>
-                        <input
-                            type="number"
-                            min={minBitrateMbps}
-                            max={maxBitrateMbps}
-                            step={0.5}
-                            value={toMbps(recordBitrate)}
-                            onChange={(e) => setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')))}
-                            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
-                        />
-                    </label>
-                    <div className="space-y-1">
-                        <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio presets</div>
-                        <div className="grid grid-cols-3 gap-2">
-                            {audioBitratePresets.map((preset) => (
-                                <button
-                                    key={preset.label}
-                                    onClick={() => setRecordAudioBitrate(preset.value)}
-                                    className={`p-2 rounded border text-[10px] leading-tight text-center ${toggleClass(recordAudioBitrate === preset.value)}`}
-                                >
-                                    <div className="font-bold text-slate-200">{preset.label}</div>
-                                    <div className="text-[9px] text-slate-500">{preset.note}</div>
-                                </button>
-                            ))}
+
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-3">
+                        <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                            <span className="w-1.5 h-1.5 bg-sky-400 rounded-full shadow-[0_0_8px_rgba(56,189,248,0.8)]"></span>
+                            Audio
                         </div>
+                        <div className="space-y-1">
+                            <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio presets</div>
+                            <div className="grid grid-cols-3 gap-2">
+                                {audioBitratePresets.map((preset) => (
+                                    <button
+                                        key={preset.label}
+                                        onClick={() => setRecordAudioBitrate(preset.value)}
+                                        className={`p-3 rounded-xl border text-[10px] leading-tight text-center ${toggleClass(recordAudioBitrate === preset.value)}`}
+                                    >
+                                        <div className="font-bold text-slate-200">{preset.label}</div>
+                                        <div className="text-[9px] text-slate-500">{preset.note}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                            <span className="w-24">Audio (kbps)</span>
+                            <input
+                                type="number"
+                                min={minAudioKbps}
+                                max={maxAudioKbps}
+                                step={8}
+                                value={toKbps(recordAudioBitrate)}
+                                onChange={(e) => setRecordAudioBitrate(clampAudioBitrate(parseFloat(e.target.value || '0')))}
+                                className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                            />
+                        </label>
                     </div>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <span className="w-24">Audio (kbps)</span>
-                        <input
-                            type="number"
-                            min={minAudioKbps}
-                            max={maxAudioKbps}
-                            step={8}
-                            value={toKbps(recordAudioBitrate)}
-                            onChange={(e) => setRecordAudioBitrate(clampAudioBitrate(parseFloat(e.target.value || '0')))}
-                            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
-                        />
-                    </label>
-                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
-                        <input
-                            type="checkbox"
-                            checked={useWebCodecsRecord}
-                            onChange={(e) => setUseWebCodecsRecord(e.target.checked)}
-                            disabled={!webCodecsSupported}
-                        />
-                        WebCodecs (HW preferred){!webCodecsSupported && <span className="text-amber-400"> (n/a)</span>}
-                    </label>
                 </div>
 
-                <section className="mt-4">
-                    <h3 className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase mb-2">
+                <section className="bg-white/5 border border-white/10 rounded-2xl p-3 space-y-2">
+                    <h3 className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
                         Pipeline
                     </h3>
 
-                    <div className="grid grid-cols-1 gap-1 text-[11px] text-slate-200">
+                    <div className="grid sm:grid-cols-2 gap-2 text-[11px] text-slate-200">
+                        <label className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                checked={useWebCodecsRecord}
+                                onChange={(e) => setUseWebCodecsRecord(e.target.checked)}
+                                disabled={!webCodecsSupported}
+                                className="accent-sky-400"
+                            />
+                            <span className="leading-tight">WebCodecs (HW preferred){!webCodecsSupported && <span className="text-amber-400"> (n/a)</span>}</span>
+                        </label>
                         <label className="flex items-center gap-2">
                             <input
                                 type="checkbox"
@@ -569,7 +587,6 @@ const PanelSettings: React.FC<{
                             />
                             <span className="leading-tight">Auto scale quality</span>
                         </label>
-
                         <label className="flex items-center gap-2">
                             <input
                                 type="checkbox"
@@ -579,7 +596,6 @@ const PanelSettings: React.FC<{
                             />
                             <span className="leading-tight">Use worklet FFT</span>
                         </label>
-
                         <label className="flex items-center gap-2">
                             <input
                                 type="checkbox"
@@ -707,8 +723,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(15_000_000);
     const [recordAudioBitrate, setRecordAudioBitrate] = useState(192_000);
-    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(false);
-    const [autoScale, setAutoScale] = useState(true);
+    const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(true);
+    const [autoScale, setAutoScale] = useState(false);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
     const [quality, setQuality] = useState<QualityMode>('high');
     const [performanceMode, setPerformanceMode] = useState<PerformanceMode>(getPerformanceMode());
