@@ -524,8 +524,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const bands = syncParamsRef.current;
             if (bands && bands.length >= 3) {
                 bands.slice(0, 3).forEach((param, i) => {
-                    const bandFreq = bandPeakFreqs[i] || param.freq;
-                    const x = getLogX(bandFreq, W);
+                    const x = getLogX(param.freq, W);
                     // Normalize gain for visualization Y pos
                     const gainYFactor = Math.min(3.0, Math.max(0.1, param.gain)) / 3.0; 
                     const anchorY = H - (gainYFactor * H * 0.8); // Keep within 80% of height
