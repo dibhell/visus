@@ -677,8 +677,20 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         fx5: { shader: '00_NONE', routing: 'off', gain: 100, mix: 100 },
     });
 
+    type PlaylistItem = {
+        id: string;
+        name: string;
+        url: string;
+    };
+
+    const [playlist, setPlaylist] = useState<PlaylistItem[]>([]);
+    const [playlistMode, setPlaylistMode] = useState<'sequential' | 'random'>('sequential');
+    const [playlistAvoidRepeat, setPlaylistAvoidRepeat] = useState(true);
+    const [playlistCurrentIndex, setPlaylistCurrentIndex] = useState<number | null>(null);
+    const [playlistNextIndex, setPlaylistNextIndex] = useState<number | null>(null);
+
     const [mixer, setMixer] = useState({
-        video: { active: true, volume: 1.0, hasSource: false, playing: false },
+        video: { active: true, volume: 1.0, hasSource: false, playing: false, name: '' },
         music: { active: true, volume: 0.8, hasSource: false, playing: false, name: '' },
         mic: { active: false, volume: 1.5, hasSource: false }
     });
@@ -697,6 +709,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const fxVuLevelsRef = useRef(fxVuLevels);
     const visualLevelsRef = useRef(visualLevels);
     const mixerRef = useRef(mixer);
+    const playlistRef = useRef<PlaylistItem[]>([]);
+    const playlistModeRef = useRef<'sequential' | 'random'>('sequential');
+    const playlistAvoidRepeatRef = useRef(true);
+    const playlistCurrentIndexRef = useRef<number | null>(null);
+    const playlistNextIndexRef = useRef<number | null>(null);
 
     useEffect(() => { fxStateRef.current = fxState; }, [fxState]);
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
@@ -712,6 +729,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     useEffect(() => { fxVuLevelsRef.current = fxVuLevels; }, [fxVuLevels]);
     useEffect(() => { mixerRef.current = mixer; }, [mixer]);
     useEffect(() => { visualLevelsRef.current = visualLevels; }, [visualLevels]);
+    useEffect(() => { playlistRef.current = playlist; }, [playlist]);
+    useEffect(() => { playlistModeRef.current = playlistMode; }, [playlistMode]);
+    useEffect(() => { playlistAvoidRepeatRef.current = playlistAvoidRepeat; }, [playlistAvoidRepeat]);
+    useEffect(() => { playlistCurrentIndexRef.current = playlistCurrentIndex; }, [playlistCurrentIndex]);
+    useEffect(() => { playlistNextIndexRef.current = playlistNextIndex; }, [playlistNextIndex]);
     useEffect(() => { performanceModeRef.current = performanceMode; localStorage.setItem('visus_perf_mode', performanceMode); }, [performanceMode]);
     useEffect(() => { uiFpsLimitRef.current = uiFpsLimit; localStorage.setItem('visus_ui_fps', String(uiFpsLimit)); }, [uiFpsLimit]);
     useEffect(() => { frameCapRef.current = frameCap; localStorage.setItem('visus_framecap', String(frameCap)); }, [frameCap]);
@@ -1622,7 +1644,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) URL.revokeObjectURL(videoRef.current.src);
                         videoRef.current.src = url;
                         videoRef.current.muted = false;
-                        videoRef.current.loop = true;
+                        videoRef.current.loop = false;
                         videoRef.current.play().catch(() => {});
                         if (!debugNoAudio) {
                             await ensureAudioContext();
@@ -1645,6 +1667,159 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             }
         }
     }, [debugNoAudio, ensureAudioContext, loadMusicTrack]);
+
+    const pickNextPlaylistIndex = (
+        list: PlaylistItem[],
+        mode: 'sequential' | 'random',
+        avoidRepeat: boolean,
+        currentIndex: number | null
+    ): number | null => {
+        if (!list.length) return null;
+        if (list.length === 1) {
+            return avoidRepeat ? null : 0;
+        }
+
+        if (mode === 'sequential') {
+            if (currentIndex === null) return 0;
+            let next = currentIndex + 1;
+            if (next >= list.length) next = 0;
+            if (avoidRepeat && next === currentIndex) return null;
+            return next;
+        }
+
+        // mode === 'random'
+        let tries = 10;
+        let candidate = currentIndex;
+        while (tries-- > 0) {
+            const r = Math.floor(Math.random() * list.length);
+            if (!avoidRepeat || r !== currentIndex) {
+                candidate = r;
+                break;
+            }
+        }
+        return candidate === null ? 0 : candidate!;
+    };
+
+    const loadPlaylistClip = useCallback(async (index: number) => {
+        const list = playlistRef.current;
+        const item = list[index];
+        if (!item || !videoRef.current) return;
+
+        try {
+            if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) {
+                try { URL.revokeObjectURL(videoRef.current.src); } catch {}
+            }
+            videoRef.current.srcObject = null;
+            videoRef.current.src = item.url;
+            videoRef.current.loop = false;
+            videoRef.current.muted = false;
+            videoRef.current.playsInline = true;
+
+            if (!debugNoAudio) {
+                await ensureAudioContext();
+                audioRef.current.connectVideo(videoRef.current);
+                audioRef.current.setupFilters(syncParamsRef.current);
+            }
+
+            await videoRef.current.play().catch(() => {});
+
+            setMixer(prev => ({
+                ...prev,
+                video: {
+                    ...prev.video,
+                    hasSource: true,
+                    playing: true,
+                    name: item.name
+                }
+            }));
+
+            setPlaylistCurrentIndex(index);
+
+            const next = pickNextPlaylistIndex(
+                list,
+                playlistModeRef.current,
+                playlistAvoidRepeatRef.current,
+                index
+            );
+            setPlaylistNextIndex(next);
+        } catch (err) {
+            console.error('[VISUS] loadPlaylistClip error', err);
+        }
+    }, [debugNoAudio, ensureAudioContext, setMixer]);
+
+    const handleVideoEnded = useCallback(() => {
+        const list = playlistRef.current;
+        const next = playlistNextIndexRef.current;
+        if (next == null || !list.length) return;
+        loadPlaylistClip(next);
+    }, [loadPlaylistClip]);
+
+    const addFilesToPlaylist = useCallback(
+        async (fileList: FileList | null) => {
+            if (!fileList || fileList.length === 0) return;
+
+            const files: File[] = Array.from(fileList);
+            const newItems: PlaylistItem[] = files.map((file, idx) => ({
+                id: `${Date.now()}_${idx}_${file.name}`,
+                name: file.name,
+                url: URL.createObjectURL(file)
+            }));
+
+            setPlaylist(prev => {
+                const merged = [...prev, ...newItems];
+
+                if (playlistCurrentIndexRef.current === null && newItems.length > 0) {
+                    const startIndex = prev.length;
+                    setTimeout(() => {
+                        loadPlaylistClip(startIndex);
+                    }, 0);
+                }
+                return merged;
+            });
+        },
+        [loadPlaylistClip]
+    );
+
+    const skipPlaylistClip = useCallback(() => {
+        const list = playlistRef.current;
+        const current = playlistCurrentIndexRef.current;
+        if (!list.length) return;
+
+        const next = pickNextPlaylistIndex(
+            list,
+            playlistModeRef.current,
+            playlistAvoidRepeatRef.current,
+            current
+        );
+        if (next == null) return;
+        loadPlaylistClip(next);
+    }, [loadPlaylistClip]);
+
+    const setPlaylistModeSafe = (mode: 'sequential' | 'random') => {
+        setPlaylistMode(mode);
+        const list = playlistRef.current;
+        const current = playlistCurrentIndexRef.current;
+        const next = pickNextPlaylistIndex(
+            list,
+            mode,
+            playlistAvoidRepeatRef.current,
+            current
+        );
+        setPlaylistNextIndex(next);
+    };
+
+    const setPlaylistAvoidRepeatSafe = (value: boolean) => {
+        setPlaylistAvoidRepeat(value);
+        const list = playlistRef.current;
+        const current = playlistCurrentIndexRef.current;
+        const next = pickNextPlaylistIndex(
+            list,
+            playlistModeRef.current,
+            value,
+            current
+        );
+        setPlaylistNextIndex(next);
+    };
 
     const startCamera = async (deviceId?: string) => {
         if (!videoRef.current) return;
@@ -1986,10 +2161,10 @@ const toggleRecording = async () => {
                 ref={videoRef}
                 className="hidden"
                 crossOrigin="anonymous"
-                loop
                 muted={false}
                 playsInline
                 autoPlay
+                onEnded={handleVideoEnded}
             />
 
             {isBooting && (
@@ -2123,18 +2298,29 @@ const toggleRecording = async () => {
                                 onVolumeChange={handleVideoVolume}
                                 onPlayPause={playPauseVideo}
                                 onStop={stopVideo}
-                                color="#38bdf8"
-                            >
-                                <div className="flex gap-1 w-full justify-between">
-                                    <label className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded cursor-pointer flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Open Video File">
-                                        {ICONS.Folder}
-                                        <input type="file" accept="video/*" className="hidden" onChange={(e) => handleFile('video', e)} />
-                                    </label>
-                                    <button onClick={initCamera} className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Select Camera">
-                                        {ICONS.Camera}
-                                    </button>
-                                </div>
-                            </MixerChannel>
+                            color="#38bdf8"
+                        >
+                            <div className="flex gap-1 w-full justify-between">
+                                <label className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded cursor-pointer flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Open Video File(s)">
+                                    {ICONS.Folder}
+                                    <input
+                                        type="file"
+                                        accept="video/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            addFilesToPlaylist(e.target.files);
+                                            // opcjonalnie: stary pojedynczy load, gdybyś chciał zachować kompatybilność
+                                            // handleFile('video', e);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
+                                <button onClick={initCamera} className="flex-1 h-7 bg-white/5 hover:bg-white/10 hover:text-white rounded flex items-center justify-center text-slate-400 border border-white/5 transition-all" title="Select Camera">
+                                    {ICONS.Camera}
+                                </button>
+                            </div>
+                        </MixerChannel>
 
                             <MixerChannel
                                 label="MUSIC" icon={ICONS.Music}
@@ -2173,6 +2359,83 @@ const toggleRecording = async () => {
                         {mixer.music.name && (
                             <div className="mt-2 text-center text-[9px] text-accent truncate px-2 bg-accent/5 rounded py-1 border border-accent/20">
                                 {`>> ${mixer.music.name}`}
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)]"></span>
+                                Playlist
+                            </div>
+                            <div className="flex items-center gap-1 text-[9px]">
+                                <button
+                                    onClick={() => setPlaylistModeSafe('sequential')}
+                                    className={`px-2 py-1 rounded border ${playlistMode === 'sequential' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                                >
+                                    Seq
+                                </button>
+                                <button
+                                    onClick={() => setPlaylistModeSafe('random')}
+                                    className={`px-2 py-1 rounded border ${playlistMode === 'random' ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10'}`}
+                                >
+                                    Rand
+                                </button>
+                                <label className="flex items-center gap-1 ml-2">
+                                    <input
+                                        type="checkbox"
+                                        className="accent-accent"
+                                        checked={playlistAvoidRepeat}
+                                        onChange={(e) => setPlaylistAvoidRepeatSafe(e.target.checked)}
+                                    />
+                                    <span className="text-[9px] text-slate-400">No repeat</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="bg-black/30 rounded-2xl border border-white/10 px-3 py-2 space-y-1 text-[10px]">
+                            <div className="flex justify-between gap-2">
+                                <div className="flex-1 truncate">
+                                    <span className="text-slate-500 mr-1">Now:</span>
+                                    <span className="text-accent">
+                                        {playlistCurrentIndex != null && playlist[playlistCurrentIndex]
+                                            ? playlist[playlistCurrentIndex].name
+                                            : '–'}
+                                    </span>
+                                </div>
+                                <div className="flex-1 truncate text-right">
+                                    <span className="text-slate-500 mr-1">Next:</span>
+                                    <span className="text-slate-300">
+                                        {playlistNextIndex != null && playlist[playlistNextIndex]
+                                            ? playlist[playlistNextIndex].name
+                                            : '–'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={skipPlaylistClip}
+                                className="mt-1 w-full py-2 rounded-xl text-[10px] font-semibold border bg-white/5 hover:bg-white/10 text-slate-200 flex items-center justify-center gap-2"
+                                disabled={!playlist.length}
+                            >
+                                <span className="text-xs">SKIP →</span>
+                            </button>
+                        </div>
+
+                        {playlist.length > 0 && (
+                            <div className="mt-2 max-h-24 overflow-y-auto custom-scrollbar text-[9px] bg-black/20 rounded-xl border border-white/5">
+                                {playlist.map((item, idx) => (
+                                    <button
+                                        key={item.id}
+                                        onClick={() => loadPlaylistClip(idx)}
+                                        className={`w-full text-left px-3 py-1.5 border-b border-white/5 last:border-b-0 truncate ${
+                                            idx === playlistCurrentIndex ? 'bg-accent/20 text-accent' : 'bg-transparent text-slate-300 hover:bg-white/5'
+                                        }`}
+                                    >
+                                        {idx === playlistCurrentIndex ? '▶ ' : ''}{item.name}
+                                    </button>
+                                ))}
                             </div>
                         )}
                     </section>
