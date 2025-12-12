@@ -16,6 +16,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const frameRef = useRef<number>(0);
     const containerRef = useRef<HTMLDivElement>(null);
     const syncParamsRef = useRef<SyncParam[]>(syncParams);
+    const activePointerIdRef = useRef<number | null>(null);
     const hoveredBandRef = useRef<number | null>(null);
     const smoothBandsRef = useRef({ sync1: 0, sync2: 0, sync3: 0 });
     const fftInfoElRef = useRef<HTMLDivElement>(null);
@@ -48,6 +49,34 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
     useEffect(() => { spectrumDebugRef.current = spectrumDebug; }, [spectrumDebug]);
     useEffect(() => { spectrumModeRef.current = spectrumMode; }, [spectrumMode]);
+
+    const applyLocalParamChange = (index: number, changes: Partial<SyncParam>) => {
+        syncParamsRef.current = syncParamsRef.current.map((p, idx) =>
+            idx === index ? { ...p, ...changes } : p
+        );
+        onParamChange(index, changes);
+    };
+
+    const endDrag = () => {
+        isDragging.current = null;
+        dragMetaRef.current = null;
+        activePointerIdRef.current = null;
+        setHoveredBand(null);
+    };
+
+    useEffect(() => {
+        const handleGlobalPointerUp = (e: PointerEvent) => {
+            if (activePointerIdRef.current === null || e.pointerId !== activePointerIdRef.current) return;
+            endDrag();
+        };
+        window.addEventListener('pointerup', handleGlobalPointerUp);
+        window.addEventListener('pointercancel', handleGlobalPointerUp);
+        return () => {
+            window.removeEventListener('pointerup', handleGlobalPointerUp);
+            window.removeEventListener('pointercancel', handleGlobalPointerUp);
+        };
+    }, []);
+
     // --- MATH HELPERS ---
 
     const getLogX = (freq: number, width: number) => {
@@ -618,18 +647,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     // --- INTERACTION HANDLERS ---
     
-    const getMousePos = (e: React.MouseEvent | MouseEvent | React.TouchEvent) => {
+    const getMousePos = (e: React.PointerEvent | PointerEvent) => {
         if (!containerRef.current) return { x: 0, y: 0, w: 0, h: 0 };
         const rect = containerRef.current.getBoundingClientRect();
         
-        let clientX, clientY;
-        if ('touches' in e) {
-             clientX = e.touches[0].clientX;
-             clientY = e.touches[0].clientY;
-        } else {
-             clientX = (e as React.MouseEvent).clientX;
-             clientY = (e as React.MouseEvent).clientY;
-        }
+        const clientX = e.clientX;
+        const clientY = e.clientY;
 
         return {
             x: clientX - rect.left,
@@ -639,39 +662,25 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         };
     };
 
-    // --- MOUSE ---
-
-    const handleMouseDown = (e: React.MouseEvent) => {
+    const handlePointerDown = (e: React.PointerEvent) => {
         const { x, y, w, h } = getMousePos(e);
+        activePointerIdRef.current = e.pointerId;
+        containerRef.current?.setPointerCapture(e.pointerId);
         checkHit(x, y, w, h);
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handlePointerMove = (e: React.PointerEvent) => {
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
         const { x, y, w, h } = getMousePos(e);
         processMove(x, y, w, h);
     };
 
-    const handleMouseUp = () => {
-        isDragging.current = null;
-        dragMetaRef.current = null;
-    };
-
-    // --- TOUCH ---
-    
-    const handleTouchStart = (e: React.TouchEvent) => {
-        // e.preventDefault(); // Often needed to prevent scroll
-        const { x, y, w, h } = getMousePos(e);
-        checkHit(x, y, w, h);
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        const { x, y, w, h } = getMousePos(e);
-        processMove(x, y, w, h);
-    };
-
-    const handleTouchEnd = () => {
-        isDragging.current = null;
-        dragMetaRef.current = null;
+    const handlePointerUp = (e: React.PointerEvent | PointerEvent) => {
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+        if ('releasePointerCapture' in (containerRef.current || {})) {
+            try { containerRef.current?.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        }
+        endDrag();
     };
 
     // --- SHARED LOGIC ---
@@ -680,7 +689,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         let closest = -1;
         let minDist = 30; // Hit radius
 
-        syncParams.slice(0, 3).forEach((p, i) => {
+        syncParamsRef.current.slice(0, 3).forEach((p, i) => {
             const px = getLogX(p.freq, w);
             const dist = Math.abs(px - x);
             if (dist < minDist) {
@@ -694,13 +703,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             if (spectrumModeRef.current === 'cal') {
                 const peak = bandPeakFreqsRef.current[closest] || 0;
                 if (peak > 0) {
-                    onParamChange(closest, { freq: peak });
+                    applyLocalParamChange(closest, { freq: peak });
                 }
             }
 
             isDragging.current = closest;
             setHoveredBand(closest);
-            const params = syncParams[closest];
+            const params = syncParamsRef.current[closest];
             dragMetaRef.current = {
                 index: closest,
                 startY: y,
@@ -722,7 +731,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const meta = dragMetaRef.current;
             const minGain = 0.1;
             const maxGain = 3.0;
-            let newGain = syncParams[i]?.gain ?? 1.0;
+            let newGain = syncParamsRef.current[i]?.gain ?? 1.0;
 
             if (meta && meta.index === i) {
                 const dy = meta.startY - y; // up -> increase gain
@@ -733,12 +742,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             newGain = Math.max(minGain, Math.min(maxGain, newGain));
 
-            onParamChange(i, { freq: newFreq, gain: newGain });
+            applyLocalParamChange(i, { freq: newFreq, gain: newGain });
         } else {
             // Hover detection only for Mouse
             let closest = -1;
             let minDist = 20;
-            syncParams.slice(0, 3).forEach((p, i) => {
+            syncParamsRef.current.slice(0, 3).forEach((p, i) => {
                 const px = getLogX(p.freq, w);
                 const dist = Math.abs(px - x);
                 if (dist < minDist) {
@@ -753,16 +762,16 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     // Important: Add non-passive listener for wheel to prevent default scrolling
     const handleWheel = (e: React.WheelEvent) => {
         // Only capture scroll if we are actively dragging a point
-        if (isDragging.current !== null && syncParams[isDragging.current]) {
+        if (isDragging.current !== null && syncParamsRef.current[isDragging.current]) {
             e.preventDefault();
             e.stopPropagation();
             
             const idx = isDragging.current;
-            const currentWidth = syncParams[idx].width;
+            const currentWidth = syncParamsRef.current[idx].width;
             const delta = e.deltaY > 0 ? -5 : 5; // Scroll down shrinks
             const newWidth = Math.max(5, Math.min(150, currentWidth + delta));
             
-            onParamChange(idx, { width: newWidth });
+            applyLocalParamChange(idx, { width: newWidth });
         }
     };
 
@@ -781,13 +790,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
         <div 
             ref={containerRef}
             className="bg-black/20 border border-white/10 rounded-xl mb-4 overflow-hidden relative group cursor-crosshair select-none backdrop-blur-sm touch-none overscroll-contain"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
             onWheel={handleWheel}
         >
             <div
