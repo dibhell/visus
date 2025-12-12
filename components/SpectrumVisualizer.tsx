@@ -113,6 +113,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const W = rect.width;
             const H = rect.height;
             const bandPeakFreqs: Array<number | null> = [null, null, null];
+            const bandColors = [
+                'rgba(244, 114, 182, 0.12)',
+                'rgba(56, 189, 248, 0.12)',
+                'rgba(251, 191, 36, 0.12)',
+            ];
+            const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             // 1. Background
             ctx.clearRect(0, 0, W, H);
             ctx.fillStyle = 'rgba(15, 23, 42, 0.3)'; // Slate dark
@@ -137,7 +143,27 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             drawGridLine(1000, '1k');
             drawGridLine(10000, '10k');
 
-                                                            // 3. Spectrum Fill - hi-res, bass-biased FFT
+            const formatFreq = (f: number) =>
+                f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 1 : 2)}kHz` : `${f.toFixed(1)}Hz`;
+
+            const drawBandWindows = () => {
+                const bands = syncParamsRef.current;
+                bands.slice(0, 3).forEach((b, i) => {
+                    if (!b) return;
+                    const bandMin = Math.max(20, b.freq * Math.max(0.05, 1 - b.width / 100));
+                    const bandMax = Math.min(20000, b.freq * (1 + b.width / 100));
+                    const x1 = getLogX(bandMin, W);
+                    const x2 = getLogX(bandMax, W);
+                    const left = Math.min(x1, x2);
+                    const width = Math.abs(x2 - x1);
+                    ctx.save();
+                    ctx.fillStyle = bandColors[i];
+                    ctx.fillRect(left, 0, width, H);
+                    ctx.restore();
+                });
+            };
+
+            // 3. Spectrum Fill - hi-res, bass-biased FFT
             const aeAny: any = ae;
 
             // 3.1 FFT z silnika - zawsze hi-res z master bus
@@ -338,11 +364,11 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
 
-                        const bin = binForFreq(freq);
-                        const val = usedFFT[bin] || 0;
+                    const bin = binForFreq(freq);
+                    const val = usedFFT[bin] || 0;
 
-                        let energy = (val / 255) * gain;
-                        if (energy < 0.02) energy = 0.02;
+                    let energy = (val / 255) * gain;
+                    if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;
 
@@ -455,8 +481,9 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 const bands = syncParamsRef.current;
                 const bandLabels = bands.slice(0, 3).map((b, i) => {
                     const f = bandPeakFreqs[i] || 0;
-                    const text = f >= 1000 ? `${(f / 1000).toFixed(2)}kHz` : `${f.toFixed(1)}Hz`;
-                    return `${i + 1}:${text}`;
+                    const text = f > 0 ? formatFreq(f) : '---';
+                    const setText = b?.freq ? formatFreq(b.freq) : '---';
+                    return `${i + 1}:${setText}→${text}`;
                 });
 
                 ctx.save();
@@ -467,7 +494,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                 const peakLabel =
                     peakFreq && peakFreq > 0
-                        ? (peakFreq >= 1000 ? `${(peakFreq / 1000).toFixed(2)}kHz` : `${peakFreq.toFixed(1)}Hz`)
+                        ? formatFreq(peakFreq)
                         : '---';
 
                 ctx.fillStyle = '#fbbf24';
@@ -479,7 +506,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 // overlay nie jest krytyczny
             }
             // 4. Interactive Points
-            const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
             
             const bands = syncParamsRef.current;
             if (bands && bands.length >= 3) {
