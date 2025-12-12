@@ -41,17 +41,12 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const spectrumDebugRef = useRef(spectrumDebug);
     const lastPeakFreqRef = useRef<number | null>(null);
     const freqRangeRef = useRef<{ min: number; max: number }>({ min: 20, max: 20000 });
-    const [specStretch, setSpecStretch] = useState(1.0);
-    const specStretchRef = useRef(specStretch);
 
     useEffect(() => { syncParamsRef.current = syncParams; }, [syncParams]);
     useEffect(() => { hoveredBandRef.current = hoveredBand; }, [hoveredBand]);
     useEffect(() => { spectrumDebugRef.current = spectrumDebug; }, [spectrumDebug]);
     useEffect(() => { spectrumModeRef.current = spectrumMode; }, [spectrumMode]);
-    useEffect(() => { specStretchRef.current = specStretch; }, [specStretch]);
-
     // --- MATH HELPERS ---
-    const getSegmentStretch = (_freq: number) => 1;
 
     const getLogX = (freq: number, width: number) => {
         const minF = Math.max(5, freqRangeRef.current.min);
@@ -124,8 +119,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             const ae = audioServiceRef.current;
             const W = rect.width;
             const H = rect.height;
-            const stretchDisplay = Math.max(0.01, specStretchRef.current || 1);
-            const displayFreq = (f: number) => f * stretchDisplay;
             const bandPeakFreqs: Array<number | null> = [null, null, null];
             const bandColors = [
                 'rgba(244, 114, 182, 0.12)',
@@ -365,9 +358,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const bandsForPeak = syncParamsRef.current;
                     bandsForPeak.slice(0, 3).forEach((b, idx) => {
                         if (!b) return;
-                        const stretch = specStretchRef.current * getSegmentStretch(b.freq);
-                        const bandMin = Math.max(minFreq, (b.freq / Math.max(0.05, stretch)) * Math.max(0.05, 1 - b.width / 100));
-                        const bandMax = Math.min(maxFreq, (b.freq / Math.max(0.05, stretch)) * (1 + b.width / 100));
+                        const bandMin = Math.max(minFreq, b.freq * Math.max(0.05, 1 - b.width / 100));
+                        const bandMax = Math.min(maxFreq, b.freq * (1 + b.width / 100));
                         const bandPeak = findMainPeak(usedFFT, sampleRate, bandMin, bandMax);
                         bandPeakFreqs[idx] = bandPeak.freq || null;
                     });
@@ -387,10 +379,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                         const logF = minLog + t * (maxLog - minLog);
                         const freq = Math.pow(10, logF);
-                        const stretch = specStretchRef.current * getSegmentStretch(freq);
-                        const freqSample = freq / Math.max(0.05, stretch);
 
-                        const bin = binForFreq(freqSample);
+                        const bin = binForFreq(freq);
                         const val = usedFFT[bin] || 0;
 
                         let energy = (val / 255) * gain;
@@ -446,8 +436,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             try {
                 const peakFreq = lastPeakFreqRef.current;
                 if (peakFreq && peakFreq > 0) {
-                    const shownFreq = displayFreq(peakFreq);
-                    const peakX = getLogX(shownFreq, W);
+                    const peakX = getLogX(peakFreq, W);
 
                     ctx.save();
                     ctx.strokeStyle = 'rgba(255, 215, 0, 0.9)';
@@ -462,7 +451,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.textBaseline = 'bottom';
                     ctx.fillStyle = 'rgba(255, 215, 0, 0.95)';
 
-                    const label = formatFreq(shownFreq);
+                    const label = formatFreq(peakFreq);
 
                     ctx.fillText(`Peak: ${label}`, peakX + 4, H * 0.25 - 2);
                     ctx.restore();
@@ -505,7 +494,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 const bands = syncParamsRef.current;
                 const bandLabels = bands.slice(0, 3).map((b, i) => {
                     const f = bandPeakFreqs[i] || 0;
-                    const text = f > 0 ? formatFreq(displayFreq(f)) : '---';
+                    const text = f > 0 ? formatFreq(f) : '---';
                     const setText = b?.freq ? formatFreq(b.freq) : '---';
                     return `${i + 1}:${setText}->${text}`;
                 });
@@ -518,7 +507,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
                 const peakLabel =
                     peakFreq && peakFreq > 0
-                        ? formatFreq(displayFreq(peakFreq))
+                        ? formatFreq(peakFreq)
                         : '---';
 
                 ctx.fillStyle = '#fbbf24';
@@ -593,7 +582,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const bandPeak = bandPeakFreqs[i];
                     const fftLabel =
                         bandPeak && bandPeak > 0
-                            ? formatFreq(displayFreq(bandPeak))
+                            ? formatFreq(bandPeak)
                             : '---';
                     ctx.fillText(`FFT: ${fftLabel}`, x, tooltipY - 12);
                     ctx.fillStyle = '#fff';
@@ -930,17 +919,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         />
                     </label>
                     <label className="flex items-center gap-1 mb-1">
-                        <span>stretch</span>
-                        <input
-                            type="number"
-                            step={0.05}
-                            min={0.05}
-                            max={10}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={specStretch}
-                            onChange={e => setSpecStretch(Number(e.target.value) || 1)}
-                        />
-                    </label>
                 </div>
             </div>
             <div className="absolute top-2 left-3 text-[9px] text-slate-500 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
