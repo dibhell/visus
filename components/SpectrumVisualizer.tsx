@@ -18,6 +18,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const syncParamsRef = useRef<SyncParam[]>(syncParams);
     const hoveredBandRef = useRef<number | null>(null);
     const smoothBandsRef = useRef({ sync1: 0, sync2: 0, sync3: 0 });
+    const fftInfoElRef = useRef<HTMLDivElement>(null);
 
     const [hoveredBand, setHoveredBand] = useState<number | null>(null);
     const isDragging = useRef<number | null>(null);
@@ -477,35 +478,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 // overlay nie jest krytyczny
             }
 
-            // 3.6 - overlay: FFT vs fallback (debug)
-            try {
-                let info = '';
-
-                if (fftUsed && usedFFT && usedFFT.length) {
-                    info = `FFT:${debugSource} len=${usedFFT.length}`;
-                } else {
-                    const bandsSmooth = smoothBandsRef.current;
-                    const pk = Math.max(
-                        bandsSmooth.sync1 || 0,
-                        bandsSmooth.sync2 || 0,
-                        bandsSmooth.sync3 || 0
-                    ).toFixed(2);
-                    info = `BANDS:fallback pk=${pk}`;
-                }
-
-                ctx.save();
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                ctx.fillRect(6, 6, 220, 18);
-                ctx.fillStyle = '#a5b4fc';
-                ctx.font = '10px JetBrains Mono, monospace';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(info, 10, 15);
-                ctx.restore();
-            } catch {
-                // overlay nie jest krytyczny
-            }
-
-            // 3.7 - overlay z wartościami: peak FFT + podgląd pasm
+            // 3.6 - overlay z warto?ciami: peak FFT + podgl?d pasm (DOM)
             try {
                 const peakFreq = lastPeakFreqRef.current;
                 const bands = syncParamsRef.current;
@@ -516,40 +489,17 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     return `${i + 1}:${setText}->${text}`;
                 });
 
-                ctx.save();
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                ctx.fillRect(6, 26, 235, 28);
-                ctx.font = '11px JetBrains Mono, monospace';
-                ctx.textBaseline = 'middle';
-
                 const peakLabel =
                     peakFreq && peakFreq > 0
                         ? formatFreq(peakFreq)
                         : '---';
 
-                ctx.fillStyle = '#fbbf24';
-                ctx.fillText(`Peak (FFT): ${peakLabel}`, 12, 40);
-                ctx.fillStyle = 'rgba(255,255,255,0.75)';
-                ctx.fillText(`Bands: ${bandLabels.join(' | ')}`, 125, 40);
-                ctx.restore();
+                const infoText = `Peak (FFT): ${peakLabel} | Bands: ${bandLabels.join(' | ')}`;
+                if (fftInfoElRef.current) {
+                    fftInfoElRef.current.textContent = infoText;
+                }
             } catch {
                 // overlay nie jest krytyczny
-            }
-
-            // 3.8 - grid roundtrip debug (logX -> freqFromX)
-            try {
-                ctx.save();
-                ctx.font = '10px JetBrains Mono, monospace';
-                ctx.textBaseline = 'middle';
-                const text = gridCalDebug;
-                const textW = ctx.measureText(text).width;
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                ctx.fillRect(6, 56, Math.min(textW + 10, W - 12), 16);
-                ctx.fillStyle = '#bae6fd';
-                ctx.fillText(text, 10, 64);
-                ctx.restore();
-            } catch {
-                // ignore
             }
 
             // 3.9 - CAL mode overlay
@@ -840,6 +790,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
             onTouchEnd={handleTouchEnd}
             onWheel={handleWheel}
         >
+            <div
+                ref={fftInfoElRef}
+                className="absolute top-1 left-3 text-[10px] font-mono text-slate-200 bg-black/40 px-2 py-[2px] rounded"
+            />
             <div className="w-full h-[180px]">
                 <canvas 
                     ref={canvasRef} 
@@ -890,122 +844,6 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         </button>
                     </div>
                 </div>
-                <div className="flex flex-col mr-2">
-                    <span className="text-slate-500 mb-1">Auto gain</span>
-                    <label className="flex items-center gap-1 mb-1">
-                        <span>targetPeak</span>
-                        <input
-                            type="number"
-                            step={0.01}
-                            min={0}
-                            max={1}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.targetPeak}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                targetPeak: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                    <label className="flex items-center gap-1 mb-1">
-                        <span>minPeak</span>
-                        <input
-                            type="number"
-                            step={0.01}
-                            min={0}
-                            max={1}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.minPeak}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                minPeak: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                    <label className="flex items-center gap-1">
-                        <span>maxGain</span>
-                        <input
-                            type="number"
-                            step={0.1}
-                            min={0}
-                            max={20}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.maxGain}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                maxGain: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                </div>
-
-                <div className="flex flex-col">
-                    <span className="text-slate-500 mb-1">Shape</span>
-                    <label className="flex items-center gap-1 mb-1">
-                        <span>boostExp</span>
-                        <input
-                            type="number"
-                            step={0.05}
-                            min={0.1}
-                            max={2}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.boostExp}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                boostExp: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                    <label className="flex items-center gap-1 mb-1">
-                        <span>boostMult</span>
-                        <input
-                            type="number"
-                            step={0.1}
-                            min={0}
-                            max={5}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.boostMult}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                boostMult: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                    <label className="flex items-center gap-1 mb-1">
-                        <span>minH</span>
-                        <input
-                            type="number"
-                            step={0.01}
-                            min={0}
-                            max={0.5}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.minHeightFrac}
-                            onChange={e => setSpectrumDebug(d => ({
-                                ...d,
-                                minHeightFrac: Number(e.target.value) || 0
-                            }))}
-                        />
-                    </label>
-                    <label className="flex items-center gap-1">
-                        <span>maxH</span>
-                        <input
-                            type="number"
-                            step={0.01}
-                            min={0.3}
-                            max={1}
-                            className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
-                            value={spectrumDebug.maxHeightFrac}
-                    onChange={e => setSpectrumDebug(d => ({
-                        ...d,
-                        maxHeightFrac: Number(e.target.value) || 0
-                    }))}
-                />
-            </label>
-                </div>
-            </div>
-            <div className="absolute top-2 left-3 text-[9px] text-slate-500 font-mono pointer-events-none uppercase tracking-widest opacity-50 group-hover:opacity-100 transition-opacity">
-                Interactive Spectrum<br/>
-                Hold & Scroll to adjust Width (Q)
             </div>
         </div>
     );
