@@ -124,6 +124,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                 'rgba(251, 191, 36, 0.12)',
             ];
             const colors = ['#f472b6', '#38bdf8', '#fbbf24']; // Matching new palette
+
+            // dynamic freq range based on current sample rate
+            const currentSr = (ae as any)?.ctx?.sampleRate || 48000;
+            const currentNyquist = currentSr / 2;
+            const minF = 20;
+            const maxF = Math.max(minF + 100, Math.min(20000, currentNyquist));
+            freqRangeRef.current = { min: minF, max: maxF };
+
             // 1. Background
             ctx.clearRect(0, 0, W, H);
             ctx.fillStyle = 'rgba(15, 23, 42, 0.3)'; // Slate dark
@@ -336,8 +344,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const sampleRate = aeAny?.ctx?.sampleRate || 48000;
                     const nyquist = sampleRate / 2;
                     const minFreq = freqRangeRef.current.min;
-                    const maxFreq = Math.max(minFreq + 100, Math.min(20000, nyquist));
-                    freqRangeRef.current = { min: minFreq, max: maxFreq };
+                    const maxFreq = freqRangeRef.current.max;
                     const minLog = Math.log10(minFreq);
                     const maxLog = Math.log10(maxFreq);
 
