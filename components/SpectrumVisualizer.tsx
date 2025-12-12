@@ -57,19 +57,21 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const getLogX = (freq: number, width: number) => {
         const minF = freqRangeRef.current.min;
         const maxF = freqRangeRef.current.max;
+        const effMax = Math.max(minF + 1, maxF / Math.max(0.05, specStretchRef.current));
         const minLog = Math.log10(minF);
-        const maxLog = Math.log10(maxF);
-        const valLog = Math.log10(Math.max(minF, Math.min(maxF, freq * freqCalibRef.current)));
+        const maxLog = Math.log10(effMax);
+        const valLog = Math.log10(Math.max(minF, Math.min(effMax, freq * freqCalibRef.current)));
         const base = (valLog - minLog) / (maxLog - minLog);
-        return Math.min(width, Math.max(0, base * width * specStretchRef.current));
+        return Math.min(width, Math.max(0, base * width));
     };
 
     const getFreqFromX = (x: number, width: number) => {
         const minF = freqRangeRef.current.min;
         const maxF = freqRangeRef.current.max;
+        const effMax = Math.max(minF + 1, maxF / Math.max(0.05, specStretchRef.current));
         const minLog = Math.log10(minF);
-        const maxLog = Math.log10(maxF);
-        const t = Math.min(1, Math.max(0, x / (width * specStretchRef.current)));
+        const maxLog = Math.log10(effMax);
+        const t = Math.min(1, Math.max(0, x / width));
         return Math.pow(10, minLog + t * (maxLog - minLog));
     };
 
@@ -943,8 +945,8 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         <input
                             type="number"
                             step={0.05}
-                            min={0.5}
-                            max={3}
+                            min={0.05}
+                            max={10}
                             className="w-16 bg-slate-800 border border-slate-600 rounded px-1 py-[1px]"
                             value={specStretch}
                             onChange={e => setSpecStretch(Number(e.target.value) || 1)}
