@@ -508,7 +508,7 @@ const PanelSettings: React.FC<{
                                 className="accent-sky-400"
                             />
                             <span className="leading-tight break-words">
-                                req
+                                reqVidFrameCallback
                             </span>
                         </label>
                     </div>
