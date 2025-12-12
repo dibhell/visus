@@ -739,6 +739,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         uiFpsLimit: number;
     }>(null);
     const recordingCanvasSizeRef = useRef<{ width: number; height: number } | null>(null);
+    const recordingBusyRef = useRef<boolean>(false);
 
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
@@ -2156,6 +2157,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
         const captureFps = clampRecordingFps(preset.fps);
+        // Ensure canvas buffer matches target
+        canvasRef.current.width = preset.width;
+        canvasRef.current.height = preset.height;
         const canvasStream = canvasRef.current.captureStream(captureFps);
         const videoTracks = canvasStream.getVideoTracks();
         videoTracks.forEach((t) => {
@@ -2299,6 +2303,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 document.body.removeChild(a);
                 exitRecordingMode();
                 setIsRecording(false);
+                mediaRecorderRef.current = null;
+                recordingBusyRef.current = false;
             };
             recorder.start(500);
             mediaRecorderRef.current = recorder;
@@ -2310,29 +2316,36 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 mimeType,
                 videoTrackSettings: videoTracks[0]?.getSettings?.(),
             });
+            recordingBusyRef.current = false;
             return true;
         } catch (e) {
             console.error('[VISUS] MediaRecorder error', e);
             recordingAudio.cleanup?.();
             exitRecordingMode();
+            recordingBusyRef.current = false;
             alert('Recording failed: ' + e);
             return false;
         }
     };
     const stopActiveRecording = async () => {
+        if (recordingBusyRef.current) return;
+        recordingBusyRef.current = true;
         if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
             mediaRecorderRef.current.stop();
         } else {
             await stopWebCodecsRecording();
+            recordingBusyRef.current = false;
         }
     };
 
     const toggleRecording = async () => {
+        if (recordingBusyRef.current) return;
         if (isRecording) {
             await stopActiveRecording();
             return;
         }
 
+        recordingBusyRef.current = true;
         const preset = recordingPresetRef.current ?? activeRecordingPreset;
         enterRecordingMode(preset);
         const preferWebCodecs = useWebCodecsRecord && webCodecsSupported;
@@ -2340,6 +2353,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (!started) {
             exitRecordingMode();
             setIsRecording(false);
+            recordingBusyRef.current = false;
         }
     };
 
