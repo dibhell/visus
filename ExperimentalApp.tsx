@@ -740,6 +740,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     }>(null);
     const recordingCanvasSizeRef = useRef<{ width: number; height: number } | null>(null);
     const recordingBusyRef = useRef<boolean>(false);
+    const recordingCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const recordingCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+    const recordingCopyTimerRef = useRef<number | null>(null);
+    const recordingStartTsRef = useRef<number | null>(null);
 
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
@@ -2040,10 +2044,40 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         return { stream, cleanup: () => {} };
     };
 
-    const clampRecordingFps = (fps: number) => {
-        if (fps >= 50) return 60;
-        if (fps >= 28) return 30;
-        return 24;
+    const clampRecordingFps = (fps: number) => Math.max(15, Math.min(60, Math.round(fps)));
+
+    const ensureRecordingCanvas = (w: number, h: number) => {
+        let canvas = recordingCanvasRef.current;
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            recordingCanvasRef.current = canvas;
+        }
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
+        }
+        let ctx = recordingCtxRef.current;
+        if (!ctx) {
+            ctx = canvas.getContext('2d');
+            recordingCtxRef.current = ctx;
+        }
+        return { canvas, ctx };
+    };
+
+    const stopRecordingCopyLoop = () => {
+        if (recordingCopyTimerRef.current !== null) {
+            clearInterval(recordingCopyTimerRef.current);
+            recordingCopyTimerRef.current = null;
+        }
+    };
+
+    const startRecordingCopyLoop = (fps: number, targetCanvas: HTMLCanvasElement) => {
+        stopRecordingCopyLoop();
+        const interval = Math.max(5, Math.round(1000 / fps));
+        recordingCopyTimerRef.current = window.setInterval(() => {
+            if (!canvasRef.current || !recordingCtxRef.current) return;
+            recordingCtxRef.current.drawImage(canvasRef.current, 0, 0, targetCanvas.width, targetCanvas.height);
+        }, interval);
     };
 
     const enterRecordingMode = (preset: RecordingPreset) => {
@@ -2157,15 +2191,15 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             return false;
         }
         const captureFps = clampRecordingFps(preset.fps);
-        // Ensure canvas buffer matches target
-        canvasRef.current.width = preset.width;
-        canvasRef.current.height = preset.height;
-        const canvasStream = canvasRef.current.captureStream(captureFps);
+        const { canvas: recCanvas, ctx } = ensureRecordingCanvas(preset.width, preset.height);
+        if (!ctx) {
+            alert('Recording canvas unavailable.');
+            return false;
+        }
+        ctx.drawImage(canvasRef.current, 0, 0, preset.width, preset.height);
+        startRecordingCopyLoop(captureFps, recCanvas);
+        const canvasStream = recCanvas.captureStream(captureFps);
         const videoTracks = canvasStream.getVideoTracks();
-        videoTracks.forEach((t) => {
-            const constraints: MediaTrackConstraints = { frameRate: captureFps, width: preset.width, height: preset.height };
-            t.applyConstraints(constraints).catch(() => {});
-        });
 
         let audioTracks: MediaStreamTrack[] = [];
         let recordingAudio: { stream: MediaStream | null; cleanup: () => void } = { stream: null, cleanup: () => {} };
@@ -2252,20 +2286,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         console.log('[VISUS] REC TRACKS', { video: combinedStream.getVideoTracks().length, audio: combinedStream.getAudioTracks().length });
         try {
             const pickMimeType = () => {
-                const vp9First = [
+                const candidates = [
                     'video/webm;codecs=vp9,opus',
                     'video/webm;codecs=vp8,opus',
-                    'video/webm',
-                    'video/mp4;codecs=h264,aac',
-                    'video/mp4'
                 ];
-                const vp8First = [
-                    'video/webm;codecs=vp8,opus',
-                    'video/webm',
-                    'video/mp4;codecs=h264,aac',
-                    'video/mp4'
-                ];
-                const candidates = preferWebCodecs ? vp9First : vp8First;
                 return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
             };
             const mimeType = pickMimeType();
@@ -2286,13 +2310,18 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 audioBitsPerSecond: preset.audioBitrate,
             });
             recordedChunksRef.current = [];
+            recordingStartTsRef.current = performance.now();
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
             recorder.onerror = (event) => {
                 console.error('[VISUS] MediaRecorder runtime error', event);
             };
             recorder.onstop = () => {
                 recordingAudio.cleanup?.();
+                stopRecordingCopyLoop();
                 const blob = new Blob(recordedChunksRef.current, { type: mimeType });
+                const endTs = performance.now();
+                const durationSec = recordingStartTsRef.current ? (endTs - recordingStartTsRef.current) / 1000 : 0;
+                const effectiveMbps = durationSec > 0 ? (blob.size * 8) / durationSec / 1_000_000 : 0;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -2301,17 +2330,26 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
+                console.info('[VISUS] recording stop (MediaRecorder)', {
+                    preset,
+                    blobSize: blob.size,
+                    durationSec,
+                    effectiveMbps,
+                    targetVideoMbps: preset.videoBitrate / 1_000_000,
+                    targetAudioKbps: preset.audioBitrate / 1000,
+                });
                 exitRecordingMode();
                 setIsRecording(false);
                 mediaRecorderRef.current = null;
                 recordingBusyRef.current = false;
+                recordingStartTsRef.current = null;
             };
             recorder.start(500);
             mediaRecorderRef.current = recorder;
             setIsRecording(true);
             console.info('[VISUS] recording start (MediaRecorder)', {
                 preset,
-                canvas: { width: canvasRef.current.width, height: canvasRef.current.height },
+                canvas: { width: recCanvas.width, height: recCanvas.height },
                 captureFps,
                 mimeType,
                 videoTrackSettings: videoTracks[0]?.getSettings?.(),
