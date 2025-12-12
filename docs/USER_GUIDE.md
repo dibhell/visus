@@ -61,7 +61,7 @@ Przewodnik po uruchomieniu, miksie AV, nagrywaniu i pracy mobilnej.
 
 ## 11. Eksport / pliki
 - Nagrania zapisywane jako `VISUS_<ISO-datetime>.(webm|mp4)`.
-- Presety/playlisty - planowane; na razie ustawienia w pamieci sesji.
+- Playlisty: dodawaj klipy video do listy (Add to Playlist), tryb Sequential/Random, opcja Avoid repeats; widoczny Current/Next i lista pozycji z mozliwoscia usuniecia/clear.
 
 ## 12. Kontakt
 - Autor: Studio Poploch / Pan Grzyb - ptr@o2.pl

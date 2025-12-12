@@ -1,7 +1,7 @@
 # Changelog
 
 ## [Unreleased]
-- Playlist UX/backlog: np. playlista z klipami video (do rozwazenia).
+- Playlist: lista klipow video zaimplementowana (sekwencyjna/losowa, unikanie powtorzen, podglad Current/Next, dodawanie/usuwanie/clear).
 
 ## [0.2.7] - 2025-12-11
 - Spectrum: hi-res FFT z biasem na bas, sampler max zamiast sredniej, auto-gain bez twardego progu; fallback bands aktywny.
