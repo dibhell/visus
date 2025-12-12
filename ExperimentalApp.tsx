@@ -314,6 +314,8 @@ const PanelSettings: React.FC<{
     setRecordFps: (v: number) => void;
     recordBitrate: number;
     setRecordBitrate: (v: number) => void;
+    recordAudioBitrate: number;
+    setRecordAudioBitrate: (v: number) => void;
     webCodecsSupported: boolean;
     useWebCodecsRecord: boolean;
     setUseWebCodecsRecord: (v: boolean) => void;
@@ -332,6 +334,7 @@ const PanelSettings: React.FC<{
         uiFpsLimit, setUiFpsLimit,
         recordFps, setRecordFps,
         recordBitrate, setRecordBitrate,
+        recordAudioBitrate, setRecordAudioBitrate,
         webCodecsSupported, useWebCodecsRecord, setUseWebCodecsRecord,
         autoScale, setAutoScale,
         useWorkletFFT, setUseWorkletFFT,
@@ -366,6 +369,14 @@ const PanelSettings: React.FC<{
         { label: '1080p Lite', note: 'web upload', value: 8_000_000 },
         { label: '720p Stream', note: 'bandwidth saver', value: 6_000_000 },
     ];
+    const audioBitratePresets = [
+        { label: '320 kbps', note: 'HiFi music', value: 320_000 },
+        { label: '256 kbps', note: 'High', value: 256_000 },
+        { label: '192 kbps', note: 'Standard', value: 192_000 },
+        { label: '160 kbps', note: 'Podcast+', value: 160_000 },
+        { label: '128 kbps', note: 'Balanced', value: 128_000 },
+        { label: '64 kbps', note: 'Voice only', value: 64_000 },
+    ];
     const minBitrateMbps = 5;
     const maxBitrateMbps = 80;
     const toMbps = (bits: number) => Number((bits / 1_000_000).toFixed(1));
@@ -373,6 +384,14 @@ const PanelSettings: React.FC<{
         const safeValue = Number.isFinite(mbps) ? mbps : minBitrateMbps;
         const clamped = Math.max(minBitrateMbps, Math.min(maxBitrateMbps, safeValue));
         return Math.round(clamped * 1_000_000);
+    };
+    const minAudioKbps = 64;
+    const maxAudioKbps = 320;
+    const toKbps = (bits: number) => Math.round(bits / 1000);
+    const clampAudioBitrate = (kbps: number) => {
+        const safeValue = Number.isFinite(kbps) ? kbps : minAudioKbps;
+        const clamped = Math.max(minAudioKbps, Math.min(maxAudioKbps, safeValue));
+        return Math.round(clamped * 1000);
     };
 
     const toggleClass = (active: boolean) => active ? 'bg-accent text-black border-transparent' : 'bg-white/5 text-slate-400 border-white/10';
@@ -494,6 +513,33 @@ const PanelSettings: React.FC<{
                             step={0.5}
                             value={toMbps(recordBitrate)}
                             onChange={(e) => setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')))}
+                            className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                        />
+                    </label>
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-semibold tracking-[0.18em] text-slate-400 uppercase">Audio presets</div>
+                        <div className="grid grid-cols-3 gap-2">
+                            {audioBitratePresets.map((preset) => (
+                                <button
+                                    key={preset.label}
+                                    onClick={() => setRecordAudioBitrate(preset.value)}
+                                    className={`p-2 rounded border text-[10px] leading-tight text-center ${toggleClass(recordAudioBitrate === preset.value)}`}
+                                >
+                                    <div className="font-bold text-slate-200">{preset.label}</div>
+                                    <div className="text-[9px] text-slate-500">{preset.note}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300">
+                        <span className="w-24">Audio (kbps)</span>
+                        <input
+                            type="number"
+                            min={minAudioKbps}
+                            max={maxAudioKbps}
+                            step={8}
+                            value={toKbps(recordAudioBitrate)}
+                            onChange={(e) => setRecordAudioBitrate(clampAudioBitrate(parseFloat(e.target.value || '0')))}
                             className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
                         />
                     </label>
@@ -660,6 +706,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const [frameCapMode, setFrameCapMode] = useState<'dynamic' | 'manual'>(getFrameCapMode());
     const [recordFps, setRecordFps] = useState(45);
     const [recordBitrate, setRecordBitrate] = useState(15_000_000);
+    const [recordAudioBitrate, setRecordAudioBitrate] = useState(192_000);
     const [useWebCodecsRecord, setUseWebCodecsRecord] = useState(false);
     const [autoScale, setAutoScale] = useState(true);
     const [renderScale, setRenderScale] = useState(QUALITY_SCALE.high);
@@ -2045,7 +2092,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 alert('Nagrywanie przerwane: brak aktywnej sciezki audio w strumieniu.');
                 return false;
             }
-            const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: recordBitrate, audioBitsPerSecond: 192000 });
+            const recorder = new MediaRecorder(combinedStream, {
+                mimeType,
+                videoBitsPerSecond: recordBitrate,
+                audioBitsPerSecond: recordAudioBitrate,
+            });
             recordedChunksRef.current = [];
             recorder.ondataavailable = (event) => { if (event.data.size > 0) recordedChunksRef.current.push(event.data); };
             recorder.onerror = (event) => {
@@ -2308,6 +2359,8 @@ const toggleRecording = async () => {
                         setRecordFps={setRecordFps}
                         recordBitrate={recordBitrate}
                         setRecordBitrate={setRecordBitrate}
+                        recordAudioBitrate={recordAudioBitrate}
+                        setRecordAudioBitrate={setRecordAudioBitrate}
                         webCodecsSupported={webCodecsSupported}
                         useWebCodecsRecord={useWebCodecsRecord}
                         setUseWebCodecsRecord={setUseWebCodecsRecord}
