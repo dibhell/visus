@@ -124,8 +124,10 @@ const detectWebGLSupport = () => {
     const result = { webgl2: false, webgl: false };
     try {
         const probeCanvas = document.createElement('canvas');
-        result.webgl2 = !!probeCanvas.getContext('webgl2');
-        result.webgl = !!probeCanvas.getContext('webgl');
+        const gl2 = probeCanvas.getContext('webgl2', { failIfMajorPerformanceCaveat: false });
+        const gl1 = probeCanvas.getContext('webgl', { failIfMajorPerformanceCaveat: false }) || probeCanvas.getContext('experimental-webgl', { failIfMajorPerformanceCaveat: false } as any);
+        result.webgl2 = !!gl2;
+        result.webgl = !!gl1 || !!gl2;
     } catch (err) {
         console.error('[VISUS] WebGL probe exception:', err);
     }
@@ -679,6 +681,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
+    const resizePendingRef = useRef<boolean>(false);
     const envCanvasRef = useRef<HTMLCanvasElement>(null);
     const additiveSliderRef = useRef<HTMLDivElement | null>(null);
     const additiveDraggingRef = useRef(false);
@@ -1063,68 +1066,73 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     };
 
     const handleResize = useCallback(() => {
-        if (!canvasRef.current) return;
+        if (resizePendingRef.current) return;
+        resizePendingRef.current = true;
+        requestAnimationFrame(() => {
+            resizePendingRef.current = false;
+            const canvas = canvasRef.current;
+            if (!canvas) return;
 
-        const wWindow = window.innerWidth;
-        const hWindow = window.innerHeight;
-        const isMobileNow = wWindow < 768;
-        setIsMobile(isMobileNow);
-        const panelWidth = (panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0;
-        const sideGap = panelVisible ? 16 : 0;
-        const availableW = isMobileNow ? wWindow : Math.max(0, wWindow - panelWidth - sideGap);
-        let availableH = hWindow;
-        let topOffset = 0;
+            const wWindow = window.innerWidth;
+            const hWindow = window.innerHeight;
+            const isMobileNow = wWindow < 768;
+            setIsMobile(isMobileNow);
+            const panelWidth = (panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0;
+            const sideGap = panelVisible ? 16 : 0;
+            const availableW = isMobileNow ? wWindow : Math.max(0, wWindow - panelWidth - sideGap);
+            let availableH = hWindow;
+            let topOffset = 0;
 
-        if (isMobileNow && panelVisible) {
-            availableH = hWindow * 0.45;
-            topOffset = 8;
-        }
-
-        let finalW = wWindow;
-        let finalH = hWindow;
-
-        const recordingTarget = ((isRecording || recordingLocksRef.current) && recordingPresetRef.current) ? recordingPresetRef.current : null;
-
-        if (recordingTarget) {
-            finalW = recordingTarget.width;
-            finalH = recordingTarget.height;
-        } else if (aspectRatio === 'native') {
-            if (videoRef.current && videoRef.current.videoWidth > 0) {
-                finalW = videoRef.current.videoWidth;
-                finalH = videoRef.current.videoHeight;
+            if (isMobileNow && panelVisible) {
+                availableH = hWindow * 0.45;
+                topOffset = 8;
             }
-        } else if (aspectRatio === '16:9') {
-            finalH = 1080; finalW = 1920;
-        } else if (aspectRatio === '9:16') {
-            finalW = 1080; finalH = 1920;
-        } else if (aspectRatio === '4:5') {
-            finalW = 1080; finalH = 1350;
-        } else if (aspectRatio === '1:1') {
-            finalW = 1080; finalH = 1080;
-        } else if (aspectRatio === '21:9') {
-            finalH = 1080; finalW = 2520;
-        } else if (aspectRatio === 'fit') {
-            finalW = wWindow; finalH = hWindow;
-        }
 
-        const canvas = canvasRef.current;
-        const scale = Math.min(availableW / finalW, availableH / finalH);
-        const displayW = finalW * scale;
-        const displayH = finalH * scale;
+            let finalW = wWindow;
+            let finalH = hWindow;
 
-        const renderW = Math.max(4, Math.round(finalW * renderScaleRef.current));
-        const renderH = Math.max(4, Math.round(finalH * renderScaleRef.current));
+            const recordingTarget = ((isRecording || recordingLocksRef.current) && recordingPresetRef.current) ? recordingPresetRef.current : null;
 
-        canvas.style.width = `${displayW}px`;
-        canvas.style.height = `${displayH}px`;
-        canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
-        canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
+            if (recordingTarget) {
+                finalW = recordingTarget.width;
+                finalH = recordingTarget.height;
+            } else if (aspectRatio === 'native') {
+                if (videoRef.current && videoRef.current.videoWidth > 0) {
+                    finalW = videoRef.current.videoWidth;
+                    finalH = videoRef.current.videoHeight;
+                }
+            } else if (aspectRatio === '16:9') {
+                finalH = 1080; finalW = 1920;
+            } else if (aspectRatio === '9:16') {
+                finalW = 1080; finalH = 1920;
+            } else if (aspectRatio === '4:5') {
+                finalW = 1080; finalH = 1350;
+            } else if (aspectRatio === '1:1') {
+                finalW = 1080; finalH = 1080;
+            } else if (aspectRatio === '21:9') {
+                finalH = 1080; finalW = 2520;
+            } else if (aspectRatio === 'fit') {
+                finalW = wWindow; finalH = hWindow;
+            }
 
-        if (useWorkerRenderRef.current && workerRef.current) {
-            workerRef.current.postMessage({ type: 'resize', width: renderW, height: renderH });
-        } else {
-            rendererRef.current.resize(renderW, renderH);
-        }
+            const scale = Math.min(availableW / finalW, availableH / finalH);
+            const displayW = finalW * scale;
+            const displayH = finalH * scale;
+
+            const renderW = Math.max(4, Math.round(finalW * renderScaleRef.current));
+            const renderH = Math.max(4, Math.round(finalH * renderScaleRef.current));
+
+            canvas.style.width = `${displayW}px`;
+            canvas.style.height = `${displayH}px`;
+            canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
+            canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
+
+            if (useWorkerRenderRef.current && workerRef.current) {
+                workerRef.current.postMessage({ type: 'resize', width: renderW, height: renderH });
+            } else {
+                rendererRef.current.resize(renderW, renderH);
+            }
+        });
     }, [aspectRatio, panelVisible, isRecording, recordResolution.width, recordResolution.height]);
 
     useEffect(() => {
@@ -1386,11 +1394,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
     }, [fxState.main.shader, renderMode]);
 
+    const didStartLoopRef = useRef(false);
     useEffect(() => {
-        if (debugNoLoop) {
-            console.info('[VISUS] debug_no_loop=1 -> render loop skipped');
+        if (debugNoLoop || didStartLoopRef.current) {
+            if (debugNoLoop) console.info('[VISUS] debug_no_loop=1 -> render loop skipped');
             return;
         }
+        didStartLoopRef.current = true;
         let mounted = true;
 
         const scheduleNext = () => {
@@ -1718,7 +1728,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 (videoRef.current as any).cancelVideoFrameCallback(videoFrameRequestRef.current);
             }
         };
-    }, [autoScale, handleResize, lockResolution, useVideoFrameCb]);
+    }, [debugNoLoop, handleResize]);
 
     const toggleMic = useCallback(async (isActive: boolean) => {
         if (debugNoAudio) {
