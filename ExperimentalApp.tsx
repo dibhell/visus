@@ -651,11 +651,14 @@ const getDebugFlags = () => {
     };
 };
 
+let __visusMountSeq = 0;
+
 const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
-    console.log('[VISUS] ExperimentalAppFull mount start');
+    const mountIdRef = useRef<number>(++__visusMountSeq);
+    console.log('[VISUS] ExperimentalAppFull mount start', { mountId: mountIdRef.current, time: Date.now() });
     useEffect(() => {
-        console.log('[VISUS] ExperimentalApp mounted');
-        return () => console.log('[VISUS] ExperimentalApp unmounted');
+        console.log('[VISUS] ExperimentalApp mounted', { mountId: mountIdRef.current });
+        return () => console.log('[VISUS] ExperimentalApp unmounted', { mountId: mountIdRef.current });
     }, []);
     const debugFlagSet = getDebugFlags();
     const debugNoAudio = getDebugFlag('debug_no_audio') || debugFlagSet.noAudio;
@@ -691,8 +694,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         }
     }, []);
 
+    const didInitRef = useRef(false);
+
     useEffect(() => {
-        console.log('[VISUS] init useEffect enter');
+        if (didInitRef.current) return;
+        didInitRef.current = true;
+        console.log('[VISUS] init useEffect enter', { mountId: mountIdRef.current });
         console.log('[VISUS] init start', { noGL: debugFlagSet.noGL, noAudio: debugFlagSet.noAudio, noWorker: debugFlagSet.noWorker });
         try {
             if (!debugFlagSet.noGL) {
@@ -712,10 +719,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             console.error('[VISUS] init error', err);
         }
         return () => {
+            console.log('[VISUS] cleanup init', { mountId: mountIdRef.current });
             rendererRef.current = null as unknown as FastGLService;
             audioRef.current = null as unknown as ExperimentalAudioEngine;
         };
-    }, [debugFlagSet.noGL, debugFlagSet.noAudio, debugFlagSet.noWorker]);
+    }, []);
 
     const rafRef = useRef<number>(0);
     const lastFrameRef = useRef<number>(0);
@@ -2351,12 +2359,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 return false;
             }
             const safeAudioBps = clampAudioBps(preset.audioBitrate);
-            const totalBps = preset.videoBitrate + safeAudioBps;
             const recorder = new MediaRecorder(combinedStream, {
                 mimeType,
                 videoBitsPerSecond: preset.videoBitrate,
                 audioBitsPerSecond: safeAudioBps,
-                bitsPerSecond: totalBps,
             });
             recordedChunksRef.current = [];
             recordingStartTsRef.current = performance.now();
@@ -2369,7 +2375,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 mimeType,
                 videoBitsPerSecond: preset.videoBitrate,
                 audioBitsPerSecond: safeAudioBps,
-                bitsPerSecond: totalBps,
                 tracks: {
                     v: combinedStream.getVideoTracks().map(t => t.getSettings?.()),
                     a: combinedStream.getAudioTracks().map(t => t.getSettings?.()),
@@ -2734,15 +2739,15 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                                 <div className="font-black tracking-[0.16em] text-[9px] text-slate-400">LAST RECORDING</div>
                                 <div className="text-slate-200">Size: {(lastRecordingStats.blobSize / 1_000_000).toFixed(2)} MB</div>
                                 <div className="text-slate-200">Dur: {lastRecordingStats.durationSec.toFixed(2)} s</div>
-                                <div className="text-slate-200">Eff: {lastRecordingStats.effectiveMbps.toFixed(2)} Mb/s</div>
-                                <div className="text-slate-200">Target: {lastRecordingStats.targetVideoMbps.toFixed(1)} Mb/s + {lastRecordingStats.targetAudioKbps} kbps</div>
-                                <div className="text-slate-200">Mime: {lastRecordingStats.mimeType}</div>
-                                <div className="text-slate-200">Chunks: {lastRecordingStats.chunkCount ?? 0}</div>
-                                <div className="text-slate-400 text-[9px]">Windows Explorer może błędnie raportować bitrate WEBM/VPx. Efektywny bitrate powyżej odzwierciedla realne dane.</div>
-                            </div>
-                        )}
-                        </div>
-                    </section>
+                        <div className="text-slate-200">Eff: {lastRecordingStats.effectiveMbps.toFixed(2)} Mb/s</div>
+                        <div className="text-slate-200">Target: {lastRecordingStats.targetVideoMbps.toFixed(1)} Mb/s + {lastRecordingStats.targetAudioKbps} kbps</div>
+                        <div className="text-slate-200">Mime: {lastRecordingStats.mimeType}</div>
+                        <div className="text-slate-200">Chunks: {lastRecordingStats.chunkCount ?? 0}</div>
+                        <div className="text-slate-400 text-[9px]">Windows Explorer może błędnie raportować bitrate WEBM/VPx. Efektywny bitrate powyżej odzwierciedla realne dane.</div>
+                    </div>
+                )}
+                </div>
+            </section>
 
                     <PanelSettings
                         quality={quality}
