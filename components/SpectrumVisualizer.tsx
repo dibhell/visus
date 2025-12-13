@@ -5,7 +5,7 @@ import { SyncParam } from '../constants';
 const SPECTRUM_CALIB_MARKERS = [50, 80, 100, 200, 500, 1000, 2000, 5000];
 
 interface Props {
-    audioServiceRef: React.MutableRefObject<AudioEngine>;
+    audioServiceRef: React.MutableRefObject<AudioEngine | null>;
     syncParams: SyncParam[];
     onParamChange: (index: number, changes: Partial<SyncParam>) => void;
     enabled?: boolean;
@@ -149,6 +149,10 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             const ae = audioServiceRef.current;
+            if (!ae) {
+                ctx.clearRect(0, 0, rect.width, rect.height);
+                return;
+            }
             const W = rect.width;
             const H = rect.height;
             const bandPeakFreqs: Array<number | null> = [null, null, null];
