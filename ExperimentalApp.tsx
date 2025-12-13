@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FastGLService, ExperimentalFxPacket } from './services/fastGlService';
 import { ExperimentalAudioEngine } from './services/experimentalAudioService';
+import { AudioEngine } from './services/audioService';
 import { FxState, SyncParam, AspectRatioMode, TransformConfig, SHADER_LIST, QualityMode, QUALITY_SCALE, FallbackReason, AdditiveEnvConfig, DEFAULT_ADDITIVE_ENV_CONFIG } from './constants';
 import { RecordingPreset, RecordingAudioPreset, RECORDING_AUDIO_PRESETS, RECORDING_VIDEO_PRESETS, DEFAULT_RECORDING_AUDIO_PRESET_ID, DEFAULT_RECORDING_VIDEO_PRESET_ID } from './constants/recordingPresets';
 import RenderWorker from './services/renderWorker?worker';
@@ -658,10 +659,9 @@ let __visusMountSeq = 0;
 
 const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequested = true }) => {
     const mountIdRef = useRef<number>(++__visusMountSeq);
-    console.log('[VISUS] ExperimentalAppFull mount start', { mountId: mountIdRef.current, time: Date.now() });
     useEffect(() => {
-        console.log('[VISUS] ExperimentalApp mounted', { mountId: mountIdRef.current });
-        return () => console.log('[VISUS] ExperimentalApp unmounted', { mountId: mountIdRef.current });
+        console.log('[VISUS] ExperimentalAppFull mount start', { mountId: mountIdRef.current, time: Date.now() });
+        return () => console.log('[VISUS] ExperimentalAppFull unmount', { mountId: mountIdRef.current });
     }, []);
     const debugFlagSet = getDebugFlags();
     const debugNoAudio = getDebugFlag('debug_no_audio') || debugFlagSet.noAudio;
@@ -670,20 +670,22 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     useEffect(() => {
         console.info('[VISUS] debug flags', { debugNoAudio, debugNoGL, debugNoLoop, flags: debugFlagSet });
     }, [debugNoAudio, debugNoGL, debugNoLoop, debugFlagSet.noAudio, debugFlagSet.noGL, debugFlagSet.noWorker]);
-    const rendererRef = useRef<FastGLService>(null as unknown as FastGLService);
+    const rendererRef = useRef<FastGLService | null>(null);
     const workerRef = useRef<Worker | null>(null);
     const workerReadyRef = useRef(false);
     const bitmapInFlightRef = useRef(false);
     const useWorkerRenderRef = useRef(false);
     const canvas2dRef = useRef<CanvasRenderingContext2D | null>(null);
     const webCodecsSupported = typeof (window as any).VideoEncoder !== 'undefined' && typeof (window as any).MediaStreamTrackProcessor !== 'undefined';
-    const audioRef = useRef<ExperimentalAudioEngine | null>(null);
+    const [audioEngine] = useState<AudioEngine>(() => new ExperimentalAudioEngine());
+    const audioRef = useRef<AudioEngine>(audioEngine);
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioElRef = useRef<HTMLAudioElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const resizePendingRef = useRef<boolean>(false);
     const panelRectRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+    const pendingResizeRef = useRef<{ w: number; h: number } | null>(null);
     const envCanvasRef = useRef<HTMLCanvasElement>(null);
     const additiveSliderRef = useRef<HTMLDivElement | null>(null);
     const additiveDraggingRef = useRef(false);
@@ -691,11 +693,20 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const spectrumRef = useRef<Uint8Array | null>(null);
     const frameStateRef = useRef<{ spectrum: Uint8Array | null }>({ spectrum: null });
     const ensureAudioContext = useCallback(async () => {
-        if (!audioRef.current) return;
-        if (!audioRef.current.ctx) {
-            await audioRef.current.initContext();
-        } else if (audioRef.current.ctx.state === 'suspended') {
-            await audioRef.current.ctx.resume();
+        const ae = audioRef.current;
+        try {
+            if (!ae.ctx) {
+                await ae.initContext();
+            } else if (ae.ctx.state === 'suspended') {
+                await ae.ctx.resume();
+            }
+        } catch (err) {
+            console.warn('[VISUS] ensureAudioContext failed (will retry on gesture)', err);
+        }
+        const ready = !!ae.ctx;
+        if (audioReadyRef.current !== ready) {
+            audioReadyRef.current = ready;
+            setAudioReady(ready);
         }
     }, []);
 
@@ -722,14 +733,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     rendererRef.current = new FastGLService({ noWorker: true });
                     console.log('[VISUS] GL disabled via debug flag');
                 }
-                audioRef.current = new ExperimentalAudioEngine();
-                audioReadyRef.current = false;
-                setAudioReady(false);
-                if (debugFlagSet.noAudio) {
-                    console.log('[VISUS] Audio disabled via debug flag (engine stub only)');
-                } else {
-                    console.log('[VISUS] ExperimentalAudioEngine created');
-                }
+                flushPendingResize();
                 handleResize();
             } catch (err) {
                 console.error('[VISUS] init error', err);
@@ -762,8 +766,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 try { workerRef.current.terminate(); } catch {}
                 workerRef.current = null;
             }
-            rendererRef.current = null as unknown as FastGLService;
-            audioRef.current = null;
+            rendererRef.current = null;
             audioReadyRef.current = false;
             setAudioReady(false);
             engineStartedRef.current = false;
@@ -985,14 +988,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     useEffect(() => {
         useWorkletFFTRef.current = useWorkletFFT;
         localStorage.setItem('visus_worklet_fft', useWorkletFFT ? '1' : '0');
-        if (debugNoAudio || !audioReady) return;
-        const eng = audioRef.current;
-        if (!eng || typeof (eng as any).setUseWorkletFFT !== 'function') {
-            console.warn('[VISUS] setUseWorkletFFT skipped: audio engine not ready');
-            return;
-        }
-        eng.setUseWorkletFFT(useWorkletFFT);
-    }, [useWorkletFFT, debugNoAudio, audioReady]);
+        if (debugNoAudio) return;
+        audioRef.current.setUseWorkletFFT(useWorkletFFT);
+    }, [useWorkletFFT, debugNoAudio]);
     useEffect(() => { useVideoFrameCbRef.current = useVideoFrameCb; localStorage.setItem('visus_vfc', useVideoFrameCb ? '1' : '0'); }, [useVideoFrameCb]);
     useEffect(() => {
         if (!audioReady || debugNoAudio) return;
@@ -1118,11 +1116,37 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         return 0;
     };
 
+    const applyRendererResize = useCallback((renderW: number, renderH: number) => {
+        if (disposedRef.current) return;
+        if (useWorkerRenderRef.current) {
+            if (!workerReadyRef.current || !workerRef.current) {
+                pendingResizeRef.current = { w: renderW, h: renderH };
+                return;
+            }
+            workerRef.current.postMessage({ type: 'resize', width: renderW, height: renderH });
+            return;
+        }
+        const renderer = rendererRef.current;
+        if (!renderer) {
+            pendingResizeRef.current = { w: renderW, h: renderH };
+            return;
+        }
+        renderer.resize(renderW, renderH);
+    }, []);
+
+    const flushPendingResize = useCallback(() => {
+        const pending = pendingResizeRef.current;
+        if (!pending) return;
+        pendingResizeRef.current = null;
+        applyRendererResize(pending.w, pending.h);
+    }, [applyRendererResize]);
+
     const handleResize = useCallback(() => {
         if (resizePendingRef.current) return;
         resizePendingRef.current = true;
         requestAnimationFrame(() => {
             resizePendingRef.current = false;
+            if (disposedRef.current) return;
             const canvas = canvasRef.current;
             if (!canvas) return;
 
@@ -1186,13 +1210,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
             canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
 
-            if (useWorkerRenderRef.current && workerRef.current) {
-                workerRef.current.postMessage({ type: 'resize', width: renderW, height: renderH });
-            } else {
-                rendererRef.current.resize(renderW, renderH);
-            }
+            applyRendererResize(renderW, renderH);
         });
-    }, [aspectRatio, panelVisible, isRecording, recordResolution.width, recordResolution.height]);
+    }, [applyRendererResize, aspectRatio, panelVisible, isRecording, recordResolution.width, recordResolution.height]);
 
     useEffect(() => {
         handleResize();
@@ -1303,6 +1323,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     setRenderMode('webgl-worker');
                     setFallbackReason('NONE');
                     setLastShaderError('');
+                    flushPendingResize();
                     console.info('[VISUS] start FX (worker):', fxStateRef.current.main.shader);
                     return true;
                 } catch (err) {
@@ -1338,20 +1359,27 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     if (!workerUsed) {
                         useWorkerRenderRef.current = false;
                         workerReadyRef.current = false;
-                        const webglReady = rendererRef.current.init(canvas);
+                        let renderer = rendererRef.current;
+                        if (!renderer) {
+                            renderer = new FastGLService({ noWorker: debugFlagSet.noWorker });
+                            rendererRef.current = renderer;
+                            console.info('[VISUS] FastGLService created (late)');
+                        }
+                        const webglReady = renderer.init(canvas);
                         if (webglReady) {
                             const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
-                            const ok = rendererRef.current.loadShader(shaderDef.src);
+                            const ok = renderer.loadShader(shaderDef.src);
                             if (!ok) {
                                 setRenderMode('canvas2d');
                                 setFallbackReason('SHADER_FAIL');
-                                setLastShaderError(rendererRef.current.lastShaderError || 'shader init failed');
+                                setLastShaderError(renderer.lastShaderError || 'shader init failed');
                                 ensureCanvas2D();
                                 console.warn('[VISUS] fallback Canvas2D (shader init failed)');
                             } else {
                                 setRenderMode('webgl-fastgl');
                                 setFallbackReason('NONE');
                                 setLastShaderError('');
+                                flushPendingResize();
                                 console.info('[VISUS] start FX (fastgl):', fxStateRef.current.main.shader);
                             }
                         } else {
@@ -1369,11 +1397,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
 
             const initializeAudio = async () => {
                 const eng = audioRef.current;
-                if (!eng) {
-                    console.warn('[VISUS] audio engine not ready - init skipped');
-                    return;
+                try {
+                    await eng.initContext();
+                } catch (err) {
+                    console.warn('[VISUS] audio init failed (will retry on gesture)', err);
                 }
-                await eng.initContext();
 
                 if (!debugNoAudio) {
                     eng.setupFilters(syncParamsRef.current);
@@ -1386,8 +1414,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 } else {
                     console.info('[VISUS] debug_no_audio=1 -> AudioContext utworzony, filtry/FFT pominiete');
                 }
-                audioReadyRef.current = true;
-                setAudioReady(true);
+                const ready = !!eng.ctx;
+                audioReadyRef.current = ready;
+                setAudioReady(ready);
             };
 
             await initializeAudio();
@@ -1455,21 +1484,24 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             setLastShaderError('');
             console.info('[VISUS] start FX (worker):', fxState.main.shader);
         } else if (renderMode === 'webgl-fastgl') {
-            const ok = rendererRef.current.loadShader(shaderDef.src);
+            const renderer = rendererRef.current;
+            if (!renderer) return;
+            const ok = renderer.loadShader(shaderDef.src);
             if (!ok) {
                 setRenderMode('canvas2d');
                 setFallbackReason('SHADER_FAIL');
-                setLastShaderError(rendererRef.current.lastShaderError || 'shader init failed');
+                setLastShaderError(renderer.lastShaderError || 'shader init failed');
                 const ctx = canvasRef.current?.getContext('2d') || null;
                 if (ctx) canvas2dRef.current = ctx;
                 console.warn('[VISUS] fallback Canvas2D (shader compile failure)');
             } else {
                 setFallbackReason('NONE');
                 setLastShaderError('');
+                flushPendingResize();
                 console.info('[VISUS] start FX (fastgl):', fxState.main.shader);
             }
         }
-    }, [fxState.main.shader, renderMode]);
+    }, [fxState.main.shader, flushPendingResize, renderMode]);
 
     const didStartLoopRef = useRef(false);
     const stopLoop = useCallback(() => {
@@ -1523,10 +1555,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 scheduleNext();
                 return;
             }
-            if (!audioReadyRef.current && !debugNoAudio) {
-                scheduleNext();
-                return;
-            }
             const isSlowFrame = dt > 40;
             if (isSlowFrame) {
                 slowFrameStreakRef.current += 1;
@@ -1546,7 +1574,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     frameStateRef.current.spectrum = spectrumRef.current;
                 }
             }
-            const vu = ae.getLevelsFast(0.08); // channel RMS (video, music, mic)
+            const vu = (ae as ExperimentalAudioEngine).getLevelsFast(0.08); // channel RMS (video, music, mic)
             const uiBudget = 1000 / Math.max(1, uiFpsLimitRef.current);
             const shouldUpdateUi = (now - lastUiUpdateRef.current) > uiBudget;
 
@@ -1734,9 +1762,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                         })
                         .catch(() => { bitmapInFlightRef.current = false; window.clearTimeout(timeout); });
                 }
-            } else if (canUseWebGL && renderModeRef.current === 'webgl-fastgl' && videoRef.current && rendererRef.current.isReady()) {
-                rendererRef.current.updateTexture(videoRef.current);
-                rendererRef.current.draw(now, videoRef.current, computedFx);
+            } else if (canUseWebGL && renderModeRef.current === 'webgl-fastgl' && videoRef.current) {
+                const renderer = rendererRef.current;
+                if (renderer && renderer.isReady()) {
+                    renderer.updateTexture(videoRef.current);
+                    renderer.draw(now, videoRef.current, computedFx);
+                }
             } else if (!canUseWebGL && videoRef.current && hasVideoReady && canvasRef.current) {
                 const ctx2d = canvas2dRef.current || canvasRef.current.getContext('2d');
                 if (ctx2d) {
@@ -1834,10 +1865,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: false, hasSource: false } }));
             return;
         }
-        if (!audioRef.current) {
-            console.warn('[VISUS] toggleMic skipped: audio engine not ready');
-            return;
-        }
         setMixer(prev => ({ ...prev, mic: { ...prev.mic, active: isActive } }));
 
         if (isActive) {
@@ -1930,13 +1957,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         audioElRef.current = audio;
 
         await ensureAudioContext();
-        const eng = audioRef.current;
-        if (!eng) {
-            console.warn('[VISUS] loadMusicTrack: audio engine not ready');
-            return;
-        }
-        eng.connectMusic(audio);
-        eng.setupFilters(syncParamsRef.current);
+        audioRef.current.connectMusic(audio);
+        audioRef.current.setupFilters(syncParamsRef.current);
 
         audio.play().then(() => {
             setMixer(prev => ({
@@ -1966,13 +1988,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                         videoRef.current.play().catch(() => {});
                         if (!debugNoAudio) {
                             await ensureAudioContext();
-                            const eng = audioRef.current;
-                            if (eng) {
-                                eng.connectVideo(videoRef.current);
-                                eng.setupFilters(syncParamsRef.current);
-                            } else {
-                                console.warn('[VISUS] video file load: audio engine not ready');
-                            }
+                            audioRef.current.connectVideo(videoRef.current);
+                            audioRef.current.setupFilters(syncParamsRef.current);
                         }
                         setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true, name: file.name } }));
                     } catch (err) {
@@ -2042,13 +2059,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
 
             if (!debugNoAudio) {
                 await ensureAudioContext();
-                const eng = audioRef.current;
-                if (eng) {
-                    eng.connectVideo(videoRef.current);
-                    eng.setupFilters(syncParamsRef.current);
-                } else {
-                    console.warn('[VISUS] loadPlaylistClip: audio engine not ready');
-                }
+                audioRef.current.connectVideo(videoRef.current);
+                audioRef.current.setupFilters(syncParamsRef.current);
             }
 
             await videoRef.current.play().catch(() => {});
@@ -2162,12 +2174,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             videoRef.current.srcObject = stream;
             videoRef.current.play();
             if (!debugNoAudio) {
-                const eng = audioRef.current;
-                if (eng) {
-                    eng.connectVideo(videoRef.current);
-                } else {
-                    console.warn('[VISUS] startCamera: audio engine not ready');
-                }
+                await ensureAudioContext();
+                audioRef.current.connectVideo(videoRef.current);
             }
             setMixer(prev => ({ ...prev, video: { ...prev.video, hasSource: true, playing: true } }));
             setShowCameraSelector(false);
@@ -2389,30 +2397,22 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         let audioTracks: MediaStreamTrack[] = [];
         let recordingAudio: { stream: MediaStream | null; cleanup: () => void } = { stream: null, cleanup: () => {} };
         if (!debugNoAudio) {
-            const eng = audioRef.current;
-            if (eng) {
-                try {
-                    await eng.initContext();
-                    if (eng.ctx?.state === 'suspended') {
-                        await eng.ctx.resume();
-                    }
-                } catch (e) {
-                    console.warn('Audio context resume failed before recording', e);
-                }
-                const { stream, cleanup } = buildRecordingAudio();
-                recordingAudio = { stream, cleanup };
-                if (stream) {
-                    console.debug('[VISUS] rec stream tracks', stream.getAudioTracks().map((t: MediaStreamTrack) => ({
-                        kind: t.kind,
-                        readyState: t.readyState,
-                        enabled: t.enabled,
-                        label: t.label,
-                    })));
-                    audioTracks = stream.getAudioTracks().filter((t: MediaStreamTrack) => t.readyState === 'live');
-                    audioTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
-                }
-            } else {
-                console.warn('[VISUS] recording audio skipped: engine not ready');
+            try {
+                await ensureAudioContext();
+            } catch (e) {
+                console.warn('Audio context resume failed before recording', e);
+            }
+            const { stream, cleanup } = buildRecordingAudio();
+            recordingAudio = { stream, cleanup };
+            if (stream) {
+                console.debug('[VISUS] rec stream tracks', stream.getAudioTracks().map((t: MediaStreamTrack) => ({
+                    kind: t.kind,
+                    readyState: t.readyState,
+                    enabled: t.enabled,
+                    label: t.label,
+                })));
+                audioTracks = stream.getAudioTracks().filter((t: MediaStreamTrack) => t.readyState === 'live');
+                audioTracks.forEach((t: MediaStreamTrack) => { t.enabled = true; });
             }
         } else {
             console.info('[VISUS] debug_no_audio=1 -> recording video-only (no audio tracks)');
@@ -2644,12 +2644,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         const newParams = [...syncParams];
         newParams[index] = { ...newParams[index], ...changes };
         setSyncParams(newParams);
-        if (debugNoAudio || !audioRef.current) return;
+        if (debugNoAudio) return;
         audioRef.current.updateFilters(newParams);
     }, [syncParams, debugNoAudio]);
 
     const handleUpdateFilters = useCallback((params: SyncParam[]) => {
-        if (debugNoAudio || !audioRef.current) return;
+        if (debugNoAudio) return;
         audioRef.current.updateFilters(params);
     }, [debugNoAudio]);
 
