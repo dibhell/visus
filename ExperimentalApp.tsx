@@ -759,9 +759,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         blobSize: number;
         durationSec: number;
         effectiveMbps: number;
+        effectiveBps: number;
         targetVideoMbps: number;
         targetAudioKbps: number;
         videoTrackSettings?: MediaTrackSettings;
+        chunkCount?: number;
     }>(null);
     const [recorderPath, setRecorderPath] = useState<'MediaRecorder' | 'WebCodecs' | 'unknown'>('unknown');
 
@@ -2065,6 +2067,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     };
 
     const clampRecordingFps = (fps: number) => Math.max(15, Math.min(60, Math.round(fps)));
+    const clampAudioBps = (bps: number) => Math.max(64_000, Math.min(510_000, bps));
 
     const ensureRecordingCanvas = (w: number, h: number) => {
         let canvas = recordingCanvasRef.current;
@@ -2345,8 +2348,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 alert('Nagrywanie przerwane: brak aktywnej sciezki audio w strumieniu.');
                 return false;
             }
-            const AUDIO_CAP_CHROME_OPUS = 510_000;
-            const safeAudioBps = Math.min(preset.audioBitrate, AUDIO_CAP_CHROME_OPUS);
+            const safeAudioBps = clampAudioBps(preset.audioBitrate);
             const recorder = new MediaRecorder(combinedStream, {
                 mimeType,
                 videoBitsPerSecond: preset.videoBitrate,
@@ -2368,6 +2370,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     a: combinedStream.getAudioTracks().map(t => t.getSettings?.()),
                 },
             });
+            console.debug('[REC PRESET APPLY]', { preset, captureFps });
             console.info('[VISUS] recording start (MediaRecorder)', {
                 preset: {
                     id: preset.id,
@@ -2416,6 +2419,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     targetAudioKbps: safeAudioBps / 1000,
                     recorderPath,
                     videoTrackSettings: videoTracks[0]?.getSettings?.(),
+                    chunkCount: recordedChunksRef.current.length,
                 });
                 exitRecordingMode();
                     setIsRecording(false);
@@ -2430,8 +2434,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         durationSec,
                         effectiveMbps,
                         targetVideoMbps: preset.videoBitrate / 1_000_000,
-                        targetAudioKbps: preset.audioBitrate / 1000,
+                        targetAudioKbps: safeAudioBps / 1000,
                         videoTrackSettings: videoTracks[0]?.getSettings?.(),
+                        chunkCount: recordedChunksRef.current.length,
+                        effectiveBps: durationSec > 0 ? (blob.size * 8) / durationSec : 0,
                     });
                 };
             recorder.start(500);
