@@ -2123,11 +2123,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             uiFpsLimit: uiFpsLimitRef.current,
             lockResolution,
         };
-        if (canvasRef.current) {
-            recordingCanvasSizeRef.current = { width: canvasRef.current.width, height: canvasRef.current.height };
-            canvasRef.current.width = preset.width;
-            canvasRef.current.height = preset.height;
-        }
         const lockedFps = clampRecordingFps(preset.fps);
         setAutoScale(false);
         autoScaleHighStreakRef.current = 0;
@@ -2189,11 +2184,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         if (snapshot.lockResolution !== lockResolution) {
             setLockResolution(snapshot.lockResolution);
         }
-        if (canvasRef.current && recordingCanvasSizeRef.current) {
-            canvasRef.current.width = recordingCanvasSizeRef.current.width;
-            canvasRef.current.height = recordingCanvasSizeRef.current.height;
-        }
-        recordingCanvasSizeRef.current = null;
         handleResize();
     };
 
