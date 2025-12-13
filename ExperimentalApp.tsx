@@ -2331,9 +2331,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         console.log('[VISUS] REC TRACKS', { video: combinedStream.getVideoTracks().length, audio: combinedStream.getAudioTracks().length });
         try {
             const pickMimeType = () => {
-                const candidates = preset.codecVideo === 'vp8'
-                    ? ['video/webm;codecs=vp8,opus', 'video/webm']
-                    : ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+                const candidates = [
+                    'video/webm;codecs=vp9,opus',
+                    'video/webm;codecs=vp8,opus',
+                    'video/webm',
+                ];
                 return candidates.find(mt => MediaRecorder.isTypeSupported(mt));
             };
             const mimeType = pickMimeType();
@@ -2349,10 +2351,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 return false;
             }
             const safeAudioBps = clampAudioBps(preset.audioBitrate);
+            const totalBps = preset.videoBitrate + safeAudioBps;
             const recorder = new MediaRecorder(combinedStream, {
                 mimeType,
                 videoBitsPerSecond: preset.videoBitrate,
                 audioBitsPerSecond: safeAudioBps,
+                bitsPerSecond: totalBps,
             });
             recordedChunksRef.current = [];
             recordingStartTsRef.current = performance.now();
@@ -2365,6 +2369,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 mimeType,
                 videoBitsPerSecond: preset.videoBitrate,
                 audioBitsPerSecond: safeAudioBps,
+                bitsPerSecond: totalBps,
                 tracks: {
                     v: combinedStream.getVideoTracks().map(t => t.getSettings?.()),
                     a: combinedStream.getAudioTracks().map(t => t.getSettings?.()),
@@ -2420,6 +2425,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     recorderPath,
                     videoTrackSettings: videoTracks[0]?.getSettings?.(),
                     chunkCount: recordedChunksRef.current.length,
+                    mimeType,
                 });
                 exitRecordingMode();
                     setIsRecording(false);
@@ -2436,7 +2442,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                         targetVideoMbps: preset.videoBitrate / 1_000_000,
                         targetAudioKbps: safeAudioBps / 1000,
                         videoTrackSettings: videoTracks[0]?.getSettings?.(),
-                        chunkCount: recordedChunksRef.current.length,
                         effectiveBps: durationSec > 0 ? (blob.size * 8) / durationSec : 0,
                     });
                 };
@@ -2732,6 +2737,8 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                                 <div className="text-slate-200">Eff: {lastRecordingStats.effectiveMbps.toFixed(2)} Mb/s</div>
                                 <div className="text-slate-200">Target: {lastRecordingStats.targetVideoMbps.toFixed(1)} Mb/s + {lastRecordingStats.targetAudioKbps} kbps</div>
                                 <div className="text-slate-200">Mime: {lastRecordingStats.mimeType}</div>
+                                <div className="text-slate-200">Chunks: {lastRecordingStats.chunkCount ?? 0}</div>
+                                <div className="text-slate-400 text-[9px]">Windows Explorer może błędnie raportować bitrate WEBM/VPx. Efektywny bitrate powyżej odzwierciedla realne dane.</div>
                             </div>
                         )}
                         </div>
