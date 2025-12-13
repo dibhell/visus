@@ -763,6 +763,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         targetAudioKbps: number;
         videoTrackSettings?: MediaTrackSettings;
     }>(null);
+    const [recorderPath, setRecorderPath] = useState<'MediaRecorder' | 'WebCodecs' | 'unknown'>('unknown');
 
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
@@ -2359,6 +2360,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 totalBps,
                 captureFps,
                 videoTrackSettings: videoSettings,
+                recorderPath,
                 tracks: combinedStream.getTracks().map((t) => ({
                     kind: t.kind,
                     readyState: t.readyState,
@@ -2381,15 +2383,17 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
-                    console.info('[VISUS] recording stop (MediaRecorder)', {
-                        preset,
-                        blobSize: blob.size,
-                        durationSec,
-                        effectiveMbps,
-                        targetVideoMbps: preset.videoBitrate / 1_000_000,
-                        targetAudioKbps: preset.audioBitrate / 1000,
-                    });
-                    exitRecordingMode();
+                console.info('[VISUS] recording stop (MediaRecorder)', {
+                    preset,
+                    blobSize: blob.size,
+                    durationSec,
+                    effectiveMbps,
+                    targetVideoMbps: preset.videoBitrate / 1_000_000,
+                    targetAudioKbps: preset.audioBitrate / 1000,
+                    recorderPath,
+                    videoTrackSettings: videoTracks[0]?.getSettings?.(),
+                });
+                exitRecordingMode();
                     setIsRecording(false);
                     mediaRecorderRef.current = null;
                     recordingBusyRef.current = false;
@@ -2449,7 +2453,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         const preset = recordingPresetRef.current ?? activeRecordingPreset;
         enterRecordingMode(preset);
         const preferWebCodecs = useWebCodecsRecord && webCodecsSupported;
-        const started = await startMediaRecorderRecording(preset, preferWebCodecs);
+        const useWebCodecsPath = false; // WebCodecs path not yet implemented for muxing; force MediaRecorder
+        setRecorderPath(useWebCodecsPath ? 'WebCodecs' : 'MediaRecorder');
+        const started = await startMediaRecorderRecording(preset, useWebCodecsPath ? true : false);
         if (!started) {
             exitRecordingMode();
             setIsRecording(false);
