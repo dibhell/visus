@@ -538,7 +538,7 @@ const PanelSettings: React.FC<{
                                         setRecordingVideoPresetId('custom');
                                         setRecordBitrate(clampBitrate(parseFloat(e.target.value || '0')));
                                     }}
-                                    className="flex-1 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
+                                    className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-slate-100"
                                 />
                                 <span className="text-[10px] text-slate-500">Mb/s</span>
                             </label>
@@ -2149,7 +2149,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
             uiFpsLimitRef.current = 15;
             setUiFpsLimit(15);
         }
-        if (preset.height >= 1080 && !lockResolution) setLockResolution(true);
+        if (lockResolution) {
+            setLockResolution(false);
+        }
         handleResize();
     };
 
@@ -2357,6 +2359,15 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 console.error('[VISUS] MediaRecorder runtime error', event);
             };
             const videoSettings = videoTracks[0]?.getSettings?.();
+            console.debug('[REC] requested', {
+                mimeType,
+                videoBitsPerSecond: preset.videoBitrate,
+                audioBitsPerSecond: safeAudioBps,
+                tracks: {
+                    v: combinedStream.getVideoTracks().map(t => t.getSettings?.()),
+                    a: combinedStream.getAudioTracks().map(t => t.getSettings?.()),
+                },
+            });
             console.info('[VISUS] recording start (MediaRecorder)', {
                 preset: {
                     id: preset.id,
@@ -2400,6 +2411,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     blobSize: blob.size,
                     durationSec,
                     effectiveMbps,
+                    effectiveBps: durationSec > 0 ? (blob.size * 8) / durationSec : 0,
                     targetVideoMbps: preset.videoBitrate / 1_000_000,
                     targetAudioKbps: safeAudioBps / 1000,
                     recorderPath,
