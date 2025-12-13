@@ -2227,6 +2227,19 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
         startRecordingCopyLoop(captureFps, recCanvas);
         const canvasStream = recCanvas.captureStream(captureFps);
         const videoTracks = canvasStream.getVideoTracks();
+        if (!videoTracks.length) {
+            alert('Recording aborted: no video track from canvas.');
+            return false;
+        }
+        try {
+            await videoTracks[0].applyConstraints({
+                frameRate: { ideal: captureFps, max: captureFps },
+                width: { ideal: preset.width },
+                height: { ideal: preset.height },
+            });
+        } catch (e) {
+            console.warn('Video track constraints apply failed', e);
+        }
 
         let audioTracks: MediaStreamTrack[] = [];
         let recordingAudio: { stream: MediaStream | null; cleanup: () => void } = { stream: null, cleanup: () => {} };
@@ -2330,12 +2343,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                 alert('Nagrywanie przerwane: brak aktywnej sciezki audio w strumieniu.');
                 return false;
             }
-            const totalBps = preset.videoBitrate + preset.audioBitrate;
+            const AUDIO_CAP_CHROME_OPUS = 510_000;
+            const safeAudioBps = Math.min(preset.audioBitrate, AUDIO_CAP_CHROME_OPUS);
             const recorder = new MediaRecorder(combinedStream, {
                 mimeType,
                 videoBitsPerSecond: preset.videoBitrate,
-                audioBitsPerSecond: preset.audioBitrate,
-                bitsPerSecond: totalBps,
+                audioBitsPerSecond: safeAudioBps,
             });
             recordedChunksRef.current = [];
             recordingStartTsRef.current = performance.now();
@@ -2351,13 +2364,12 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     height: preset.height,
                     fps: preset.fps,
                     videoBitrate: preset.videoBitrate,
-                    audioBitrate: preset.audioBitrate,
+                    audioBitrate: safeAudioBps,
                     videoMbps: preset.videoBitrate / 1_000_000,
-                    audioKbps: preset.audioBitrate / 1000,
+                    audioKbps: safeAudioBps / 1000,
                 },
                 mimeType,
                 fileExt,
-                totalBps,
                 captureFps,
                 videoTrackSettings: videoSettings,
                 recorderPath,
@@ -2389,7 +2401,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
                     durationSec,
                     effectiveMbps,
                     targetVideoMbps: preset.videoBitrate / 1_000_000,
-                    targetAudioKbps: preset.audioBitrate / 1000,
+                    targetAudioKbps: safeAudioBps / 1000,
                     recorderPath,
                     videoTrackSettings: videoTracks[0]?.getSettings?.(),
                 });
