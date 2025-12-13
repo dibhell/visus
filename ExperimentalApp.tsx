@@ -683,6 +683,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const uiPanelRef = useRef<HTMLDivElement>(null);
     const resizePendingRef = useRef<boolean>(false);
+    const panelRectRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
     const envCanvasRef = useRef<HTMLCanvasElement>(null);
     const additiveSliderRef = useRef<HTMLDivElement | null>(null);
     const additiveDraggingRef = useRef(false);
@@ -1115,7 +1116,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             const hWindow = window.innerHeight;
             const isMobileNow = wWindow < 768;
             setIsMobile(isMobileNow);
-            const panelWidth = (panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0;
+            const panelWidth = (panelVisible && panelRectRef.current.width > 0)
+                ? panelRectRef.current.width
+                : ((panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0);
+            if (panelVisible && panelRectRef.current.width === 0 && uiPanelRef.current) {
+                const r = uiPanelRef.current.getBoundingClientRect();
+                panelRectRef.current = { width: r.width, height: r.height };
+            }
             const sideGap = panelVisible ? 16 : 0;
             const availableW = isMobileNow ? wWindow : Math.max(0, wWindow - panelWidth - sideGap);
             let availableH = hWindow;
@@ -1175,14 +1182,25 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
 
     useEffect(() => {
         handleResize();
-        const t = setTimeout(handleResize, 300);
-        window.addEventListener('resize', handleResize);
+        const onResize = () => handleResize();
+        window.addEventListener('resize', onResize);
         const v = videoRef.current;
-        if (v) v.addEventListener('loadedmetadata', handleResize);
+        if (v) v.addEventListener('loadedmetadata', onResize);
+        let ro: ResizeObserver | null = null;
+        if (uiPanelRef.current && typeof ResizeObserver !== 'undefined') {
+            ro = new ResizeObserver((entries) => {
+                const entry = entries[0];
+                if (entry && entry.contentRect) {
+                    panelRectRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
+                    handleResize();
+                }
+            });
+            ro.observe(uiPanelRef.current);
+        }
         return () => {
-            clearTimeout(t);
-            window.removeEventListener('resize', handleResize);
-            if (v) v.removeEventListener('loadedmetadata', handleResize);
+            window.removeEventListener('resize', onResize);
+            if (v) v.removeEventListener('loadedmetadata', onResize);
+            if (ro) ro.disconnect();
         };
     }, [handleResize, renderScale]);
 
@@ -1433,6 +1451,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     }, [fxState.main.shader, renderMode]);
 
     const didStartLoopRef = useRef(false);
+    const stopLoop = useCallback(() => {
+        didStartLoopRef.current = false;
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        if (videoRef.current && videoFrameRequestRef.current !== null && typeof (videoRef.current as any).cancelVideoFrameCallback === 'function') {
+            (videoRef.current as any).cancelVideoFrameCallback(videoFrameRequestRef.current);
+        }
+    }, []);
+
     useEffect(() => {
         if (debugNoLoop || didStartLoopRef.current) {
             if (debugNoLoop) console.info('[VISUS] debug_no_loop=1 -> render loop skipped');
@@ -1761,12 +1787,17 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         scheduleNext();
         return () => {
             mounted = false;
-            cancelAnimationFrame(rafRef.current);
-            if (videoRef.current && videoFrameRequestRef.current !== null && typeof (videoRef.current as any).cancelVideoFrameCallback === 'function') {
-                (videoRef.current as any).cancelVideoFrameCallback(videoFrameRequestRef.current);
-            }
+            stopLoop();
         };
-    }, [debugNoLoop, handleResize]);
+    }, [debugNoLoop, handleResize, stopLoop]);
+
+    useEffect(() => {
+        if (!didStartLoopRef.current && !debugNoLoop) {
+            // trigger loop start if toggled after init
+            stopLoop();
+            didStartLoopRef.current = false;
+        }
+    }, [useVideoFrameCb]);
 
     const toggleMic = useCallback(async (isActive: boolean) => {
         if (debugNoAudio) {
