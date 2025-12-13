@@ -36,11 +36,12 @@ const LandingScreen: React.FC<LandingProps> = ({ onInitialize }) => (
 const App: React.FC = () => {
     const [isSystemActive, setIsSystemActive] = useState(false);
 
-    if (isSystemActive) {
-        return <ExperimentalApp onExit={() => setIsSystemActive(false)} />;
-    }
-
-    return <LandingScreen onInitialize={() => setIsSystemActive(true)} />;
+    return (
+        <>
+            <ExperimentalApp onExit={() => setIsSystemActive(false)} bootRequested={isSystemActive} />
+            {!isSystemActive && <LandingScreen onInitialize={() => setIsSystemActive(true)} />}
+        </>
+    );
 };
 
 export default App;

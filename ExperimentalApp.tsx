@@ -139,6 +139,7 @@ type RenderMode = 'webgl-worker' | 'webgl-fastgl' | 'canvas2d';
 
 interface ExperimentalProps {
     onExit: () => void;
+    bootRequested?: boolean;
 }
 
 const Credits: React.FC = () => (
@@ -655,7 +656,7 @@ const getDebugFlags = () => {
 
 let __visusMountSeq = 0;
 
-const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
+const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequested = true }) => {
     const mountIdRef = useRef<number>(++__visusMountSeq);
     console.log('[VISUS] ExperimentalAppFull mount start', { mountId: mountIdRef.current, time: Date.now() });
     useEffect(() => {
@@ -698,35 +699,72 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit }) => {
     }, []);
 
     const didInitRef = useRef(false);
+    const disposedRef = useRef(false);
+    const initScheduledRef = useRef(false);
+    const idleIdRef = useRef<number | null>(null);
+    const engineStartedRef = useRef(false);
 
     useEffect(() => {
-        if (didInitRef.current) return;
+        if (didInitRef.current || !bootRequested) return;
         didInitRef.current = true;
-        console.log('[VISUS] init useEffect enter', { mountId: mountIdRef.current });
-        console.log('[VISUS] init start', { noGL: debugFlagSet.noGL, noAudio: debugFlagSet.noAudio, noWorker: debugFlagSet.noWorker });
-        try {
-            if (!debugFlagSet.noGL) {
-                rendererRef.current = new FastGLService({ noWorker: debugFlagSet.noWorker });
-                console.log('[VISUS] FastGLService created');
-            } else {
-                rendererRef.current = new FastGLService({ noWorker: true });
-                console.log('[VISUS] GL disabled via debug flag');
+        disposedRef.current = false;
+        const initWork = () => {
+            if (disposedRef.current || engineStartedRef.current) return;
+            engineStartedRef.current = true;
+            console.log('[VISUS] init useEffect enter', { mountId: mountIdRef.current });
+            console.log('[VISUS] init start', { noGL: debugFlagSet.noGL, noAudio: debugFlagSet.noAudio, noWorker: debugFlagSet.noWorker });
+            try {
+                if (!debugFlagSet.noGL) {
+                    rendererRef.current = new FastGLService({ noWorker: debugFlagSet.noWorker });
+                    console.log('[VISUS] FastGLService created');
+                } else {
+                    rendererRef.current = new FastGLService({ noWorker: true });
+                    console.log('[VISUS] GL disabled via debug flag');
+                }
+                audioRef.current = new ExperimentalAudioEngine();
+                if (debugFlagSet.noAudio) {
+                    console.log('[VISUS] Audio disabled via debug flag (engine stub only)');
+                } else {
+                    console.log('[VISUS] ExperimentalAudioEngine created');
+                }
+                handleResize();
+            } catch (err) {
+                console.error('[VISUS] init error', err);
             }
-            audioRef.current = new ExperimentalAudioEngine();
-            if (debugFlagSet.noAudio) {
-                console.log('[VISUS] Audio disabled via debug flag (engine stub only)');
+        };
+        if (!initScheduledRef.current) {
+            initScheduledRef.current = true;
+            if (typeof (window as any).requestIdleCallback === 'function') {
+                idleIdRef.current = (window as any).requestIdleCallback(() => initWork());
             } else {
-                console.log('[VISUS] ExperimentalAudioEngine created');
+                const id = window.setTimeout(() => initWork(), 0);
+                idleIdRef.current = id;
             }
-        } catch (err) {
-            console.error('[VISUS] init error', err);
         }
         return () => {
+            disposedRef.current = true;
+            if (idleIdRef.current !== null) {
+                if (typeof (window as any).cancelIdleCallback === 'function') {
+                    (window as any).cancelIdleCallback(idleIdRef.current);
+                } else {
+                    clearTimeout(idleIdRef.current);
+                }
+                idleIdRef.current = null;
+            }
             console.log('[VISUS] cleanup init', { mountId: mountIdRef.current });
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                try { mediaRecorderRef.current.stop(); } catch {}
+            }
+            if (workerRef.current) {
+                try { workerRef.current.terminate(); } catch {}
+                workerRef.current = null;
+            }
             rendererRef.current = null as unknown as FastGLService;
             audioRef.current = null as unknown as ExperimentalAudioEngine;
+            engineStartedRef.current = false;
+            initScheduledRef.current = false;
         };
-    }, []);
+    }, [bootRequested, debugFlagSet.noAudio, debugFlagSet.noGL, debugFlagSet.noWorker]);
 
     const rafRef = useRef<number>(0);
     const lastFrameRef = useRef<number>(0);
