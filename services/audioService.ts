@@ -109,7 +109,7 @@ export class AudioEngine {
     async initContext() {
         if (!this.ctx) {
             const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
-                latencyHint: 'playback',
+                latencyHint: 'interactive',
             });
             this.ctx = ctx;
 
@@ -118,6 +118,7 @@ export class AudioEngine {
             this.mainAnalyser.fftSize = 8192;
             this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount) as ByteArray;
+			
 
             // Dodatkowy analyser do wizualizacji / tapów
             this.vizAnalyser = ctx.createAnalyser();
@@ -134,9 +135,20 @@ export class AudioEngine {
             this.masterMix.connect(ctx.destination);
 
             // Analiza pomocnicza (tap, worklety itp.)
-            this.analysisSink = ctx.createGain();
-            this.analysisSink.gain.value = 0;
-            this.analysisSink.connect(ctx.destination);
+			this.analysisSink = ctx.createGain();
+			this.analysisSink.gain.value = 0;
+			this.analysisSink.connect(ctx.destination);
+			
+			// UTRZYMUJ ANALYSERY AKTYWNE (ważne na mobile)
+			this.mainAnalyser!.connect(this.analysisSink);
+			this.vizAnalyser!.connect(this.analysisSink);
+			
+			// Zakres dB - mobile często zwraca zera bez tego
+			this.mainAnalyser!.minDecibels = -120;
+			this.mainAnalyser!.maxDecibels = -10;
+			this.vizAnalyser!.minDecibels = -120;
+			this.vizAnalyser!.maxDecibels = -10;
+
 
             // Destination do nagrywania
             this.recDest = ctx.createMediaStreamDestination();
@@ -396,7 +408,7 @@ export class AudioEngine {
 
                 // 'latency' is not typed in some TS DOM libs, but browsers may accept it as a hint.
                 // Keep it as a hint without breaking the build.
-                //(audioConstraints as any).latency = 0.02; <-this shit
+                //(audioConstraints as any).latency = 0.02; <-this is shit
 
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: audioConstraints,
@@ -742,4 +754,3 @@ export class AudioEngine {
         }
     }
 }
-
