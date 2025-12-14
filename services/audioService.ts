@@ -396,7 +396,7 @@ export class AudioEngine {
 
                 // 'latency' is not typed in some TS DOM libs, but browsers may accept it as a hint.
                 // Keep it as a hint without breaking the build.
-                (audioConstraints as any).latency = 0.02;
+                //(audioConstraints as any).latency = 0.02; <-this shit
 
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: audioConstraints,
