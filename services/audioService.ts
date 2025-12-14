@@ -1,5 +1,3 @@
-
-
 import { FilterBand, SyncParam, BandsData, AdditiveEnvConfig, DEFAULT_ADDITIVE_ENV_CONFIG } from '../constants';
 
 type ByteArray = Uint8Array<ArrayBuffer>;
@@ -8,7 +6,7 @@ const ADD_ENV_HISTORY_LEN = 256; // ~1s przy ~256 blokach/s
 
 export class AudioEngine {
     ctx: AudioContext | null = null;
-    
+
     // Main Mix Bus (For Analysis & Recording)
     masterMix: GainNode | null = null;
     mainAnalyser: AnalyserNode | null = null;
@@ -20,7 +18,7 @@ export class AudioEngine {
 
     // Channel Nodes [Source -> Gain -> VU Analyser -> MasterMix]
     //                               \-> Destination (Speakers, except Mic)
-    
+
     // Channel 1: Video
     videoNode: MediaElementAudioSourceNode | null = null;
     videoGain: GainNode | null = null;
@@ -63,14 +61,14 @@ export class AudioEngine {
         })(),
         index: 0,
     };
-    
+
     // FFT buffer sized to analyser.frequencyBinCount
     fftData: ByteArray = new Uint8Array(1024) as ByteArray;
     vizData: ByteArray = new Uint8Array(1024) as ByteArray;
     private spectrumData: ByteArray | null = null;
-    
+
     // Scratch buffers for VU meters
-    vuData: ByteArray = new Uint8Array(16) as ByteArray; 
+    vuData: ByteArray = new Uint8Array(16) as ByteArray;
     channelActive = { video: false, music: false, mic: false };
 
     constructor() {
@@ -118,7 +116,6 @@ export class AudioEngine {
             this.mainAnalyser.fftSize = 8192;
             this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount) as ByteArray;
-			
 
             // Dodatkowy analyser do wizualizacji / tapów
             this.vizAnalyser = ctx.createAnalyser();
@@ -126,22 +123,34 @@ export class AudioEngine {
             this.vizAnalyser.smoothingTimeConstant = 0.55;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount) as ByteArray;
 
+            // Zakres dB - na mobile często bez tego FFT wygląda jak "zero"
+            this.mainAnalyser.minDecibels = -120;
+            this.mainAnalyser.maxDecibels = -10;
+            this.vizAnalyser.minDecibels = -120;
+            this.vizAnalyser.maxDecibels = -10;
+
             // Master bus
             this.masterMix = ctx.createGain();
             this.masterMix.gain.value = 1;
 
-            // Wyjście na głośniki + główny analyser
+            // Wyjście na głośniki + główny analyser (jak było)
             this.masterMix.connect(this.mainAnalyser);
             this.masterMix.connect(ctx.destination);
 
-            // Analiza pomocnicza (tap, worklety itp.)
-            this.analysisSink = ctx.createGain();
-            this.analysisSink.gain.value = 0;
-            this.analysisSink.connect(ctx.destination);
-
-            // Destination do nagrywania
+            // Destination do nagrywania (MUSI być przed analysisSink, bo analysis będzie podpięta do recDest)
             this.recDest = ctx.createMediaStreamDestination();
             this.masterMix.connect(this.recDest);
+
+            // Analiza pomocnicza (tap, worklety itp.)
+            // UWAGA: na mobile widmo często "ożywa" dopiero, gdy analiza jest wpięta do MediaStreamDestination,
+            // więc analysisSink idzie do recDest (nie do głośników), gain=0 zostaje.
+            this.analysisSink = ctx.createGain();
+            this.analysisSink.gain.value = 0;
+            this.analysisSink.connect(this.recDest);
+
+            // Utrzymuj analysers w aktywnym grafie (bez wpływu na dźwięk i bez psucia nagrań)
+            this.mainAnalyser.connect(this.analysisSink);
+            this.vizAnalyser.connect(this.analysisSink);
 
             // VU worklet (FFT / RMS / bands)
             try {
@@ -175,6 +184,7 @@ export class AudioEngine {
             await this.ctx.resume();
         }
     }
+
     private handleVuMessage(channel: 'video' | 'music' | 'mic', payload: any) {
         if (!payload) return;
         const { rms = 0, bands, buckets } = payload;
@@ -221,7 +231,7 @@ export class AudioEngine {
             // mic tylko przez masterMix.
             const sendToDestination = (channel === 'video' || channel === 'music');
 
-            // GŁÓWNY TOR AUDIO – ZAWSZE BEZPOŚREDNIO Z GAIN
+            // GŁÓWNY TOR AUDIO - ZAWSZE BEZPOŚREDNIO Z GAIN
             gain.connect(this.masterMix!);
             if (sendToDestination) {
                 gain.connect(this.ctx!.destination);
@@ -236,7 +246,7 @@ export class AudioEngine {
                 vuNode.connect(analyser);
                 vuNode.connect(tap);
             } else {
-                // fallback bez workleta – gain też karmi analysers
+                // fallback bez workleta - gain też karmi analysers
                 gain.connect(analyser);
                 gain.connect(tap);
             }
@@ -305,7 +315,7 @@ export class AudioEngine {
             // słuchamy całego master busa
             this.masterMix.connect(node);
 
-            // utrzymujemy node aktywny - albo do analysisSink, albo cichej gałęzi
+            // utrzymujemy node aktywny
             if (this.analysisSink) {
                 node.connect(this.analysisSink);
             } else {
@@ -327,29 +337,29 @@ export class AudioEngine {
 
     connectVideo(videoEl: HTMLMediaElement) {
         if (!this.ctx || !this.videoGain) return;
-        
+
         // 1. Check if we already created a source for this EXACT element
         if (this.boundVideoElement === videoEl && this.videoNode) {
             // Already connected. Just ensure the audio graph path is active.
             try {
                 this.videoNode.disconnect();
                 this.videoNode.connect(this.videoGain);
-            } catch(e) {
+            } catch (e) {
                 // Ignore disconnect errors
             }
             return;
         }
-        
+
         // 2. Disconnect old source if it exists (and is different)
-        if (this.videoNode) { 
-            try { this.videoNode.disconnect(); } catch(e){} 
+        if (this.videoNode) {
+            try { this.videoNode.disconnect(); } catch (e) {}
         }
 
         // 3. Create new source
         try {
             this.videoNode = this.ctx.createMediaElementSource(videoEl);
             this.boundVideoElement = videoEl;
-            
+
             // Path: źródło -> gain (gain wpięty w masterMix/destination w initChannelNodes)
             this.videoNode.connect(this.videoGain);
 
@@ -358,15 +368,15 @@ export class AudioEngine {
                 this.videoNode.connect(this.videoTapAnalyser);
                 if (this.analysisSink) this.videoTapAnalyser.connect(this.analysisSink);
             }
-        } catch(e) {
-            console.error("AudioEngine: Error connecting video source. It might be already connected.", e);
+        } catch (e) {
+            console.error('AudioEngine: Error connecting video source. It might be already connected.', e);
         }
     }
 
     connectMusic(audioEl: HTMLMediaElement) {
         if (!this.ctx || !this.musicGain) return;
 
-        if (this.musicNode) { try { this.musicNode.disconnect(); } catch(e){} }
+        if (this.musicNode) { try { this.musicNode.disconnect(); } catch (e) {} }
 
         this.musicNode = this.ctx.createMediaElementSource(audioEl);
         this.musicNode.connect(this.musicGain);
@@ -380,30 +390,23 @@ export class AudioEngine {
 
     async connectMic() {
         if (!this.ctx || !this.micGain) return;
-        
-        // If we have a node, we must check if it's active. 
+
         // Best practice: always get a new stream to ensure we comply with user intention.
-        this.disconnectMic(); 
+        this.disconnectMic();
 
         try {
-            // Request audio with standard constraints
             const audioConstraints: MediaTrackConstraints = {
-                    // Mobile: disable DSP that often adds buffering/latency
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false,
-                    channelCount: 1
-                };
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+                channelCount: 1
+            };
 
-                // 'latency' is not typed in some TS DOM libs, but browsers may accept it as a hint.
-                // Keep it as a hint without breaking the build.
-                //(audioConstraints as any).latency = 0.02; <-this is shit
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: audioConstraints,
+                video: false
+            });
 
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: audioConstraints,
-                    video: false
-                });
-            
             this.micNode = this.ctx.createMediaStreamSource(stream);
             this.micNode.connect(this.micGain);
             // NOTE: We DO NOT connect Mic to ctx.destination to avoid feedback loop
@@ -414,18 +417,18 @@ export class AudioEngine {
                 if (this.analysisSink) this.micTapAnalyser.connect(this.analysisSink);
             }
         } catch (e) {
-            console.error("Mic access failed", e);
+            console.error('Mic access failed', e);
             throw e;
         }
     }
 
     disconnectMic() {
         if (this.micNode) {
-            // CRITICAL: Stop the tracks to release the hardware/permission lock
+            // Stop the tracks to release the hardware/permission lock
             if (this.micNode.mediaStream) {
                 this.micNode.mediaStream.getTracks().forEach(track => track.stop());
             }
-            try { this.micNode.disconnect(); } catch(e){}
+            try { this.micNode.disconnect(); } catch (e) {}
             this.micNode = null;
         }
     }
@@ -486,13 +489,11 @@ export class AudioEngine {
     }
 
     setVolume(channel: 'video' | 'music' | 'mic', val: number) {
-        // Linear input (0-1) to Exponential Audio Param
-        const gainNode = channel === 'video' ? this.videoGain : 
-                         channel === 'music' ? this.musicGain : 
-                         this.micGain;
-        
+        const gainNode = channel === 'video' ? this.videoGain :
+            channel === 'music' ? this.musicGain :
+                this.micGain;
+
         if (gainNode && this.ctx) {
-            // Smooth transition
             gainNode.gain.setTargetAtTime(val, this.ctx.currentTime, 0.05);
         }
     }
@@ -512,14 +513,13 @@ export class AudioEngine {
 
         const getRMS = (analyser: AnalyserNode | null) => {
             if (!analyser) return 0;
-            // No cast needed because vuData is 'any'
             analyser.getByteTimeDomainData(this.vuData);
             let sum = 0;
             for (let i = 0; i < this.vuData.length; i++) {
                 const float = (this.vuData[i] - 128) / 128;
                 sum += float * float;
             }
-            return Math.sqrt(sum / this.vuData.length) * 5.0; // Boosted for visibility
+            return Math.sqrt(sum / this.vuData.length) * 5.0;
         };
 
         return {
@@ -546,10 +546,8 @@ export class AudioEngine {
         const tracks = this.recDest.stream.getAudioTracks();
         const hasLive = tracks.some(t => t.readyState === 'live');
 
-        // Ensure the track is enabled before handing it to MediaRecorder.
         tracks.forEach(t => { t.enabled = true; });
 
-        // If the node stopped producing audio (ended), rebuild destination to restore a live track.
         if (!hasLive) {
             try { this.masterMix.disconnect(this.recDest); } catch {}
             this.recDest = this.ctx.createMediaStreamDestination();
@@ -593,34 +591,28 @@ export class AudioEngine {
     }
 
     getFFTData(): Uint8Array | null {
-		// 0) Prefer worklet buckets on mobile / when available (more reliable than Analyser on mobile)
-		if (this.vuWorkletReady && this.useWorkletFFT) {
-		const bV = this.vuWorkletBuckets.video;
-		const bM = this.vuWorkletBuckets.music;
-		const bC = this.vuWorkletBuckets.mic;
-		
-		const buckets = (bV && bV.length) ? bV : (bM && bM.length) ? bM : (bC && bC.length) ? bC : null;
-		
-		if (buckets && buckets.length) {
-			const out = new Uint8Array(buckets.length);
-			for (let i = 0; i < buckets.length; i++) {
-			// buckets are typically 0..1 floats; scale to 0..255
-			const v = Math.max(0, Math.min(1, buckets[i] || 0));
-			out[i] = (v * 255) | 0;
-			}
-			return out;
-		}
-		}
-		
-        // Keep context alive to ensure analysers flow
+        // 0) Prefer worklet buckets on mobile / when available (more reliable than Analyser on mobile)
+        if (this.vuWorkletReady && this.useWorkletFFT) {
+            const bV = this.vuWorkletBuckets.video;
+            const bM = this.vuWorkletBuckets.music;
+            const bC = this.vuWorkletBuckets.mic;
+
+            const buckets = (bV && bV.length) ? bV : (bM && bM.length) ? bM : (bC && bC.length) ? bC : null;
+
+            if (buckets && buckets.length) {
+                const out = new Uint8Array(buckets.length);
+                for (let i = 0; i < buckets.length; i++) {
+                    const v = Math.max(0, Math.min(1, buckets[i] || 0));
+                    out[i] = (v * 255) | 0;
+                }
+                return out;
+            }
+        }
+
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume().catch(() => {});
         }
 
-        // Always return linear 0..Nyquist FFT from native analysers (no worklet buckets),
-        // so mapping bin->Hz remains accurate for band routing (sync1/2/3).
-        // Use the full-resolution master analyser for consistent 0..Nyquist mapping (same as visualizer).
-        // If it is missing, fall back to active taps.
         const candidates: Array<{ node: AnalyserNode | null; active: boolean }> = [
             { node: this.mainAnalyser, active: true },
             { node: this.musicTapAnalyser, active: this.channelActive.music },
@@ -660,7 +652,6 @@ export class AudioEngine {
     setupFilters(syncParams: SyncParam[]) {
         if (!this.ctx || !this.masterMix) return;
 
-        // Cleanup
         this.filters.forEach(f => {
             if (this.masterMix) this.masterMix.disconnect(f.bandpass);
             f.bandpass.disconnect();
@@ -670,11 +661,10 @@ export class AudioEngine {
 
         ['sync1', 'sync2', 'sync3'].forEach((name, i) => {
             if (!this.ctx || !this.masterMix) return;
-            
+
             const bandpass = this.ctx.createBiquadFilter();
             bandpass.type = 'bandpass';
-            
-            // Set initial params
+
             const p = syncParams[i];
             bandpass.frequency.value = p ? p.freq : 100;
             bandpass.Q.value = p ? (1 + p.width * 0.1) : 1;
@@ -686,7 +676,6 @@ export class AudioEngine {
             this.masterMix.connect(bandpass);
             bandpass.connect(analyser);
 
-            // Connect analyser to silent sink so it keeps processing
             if (this.analysisSink) analyser.connect(this.analysisSink);
 
             this.filters.push({ name, bandpass, analyser, data: new Uint8Array(analyser.frequencyBinCount) as ByteArray });
@@ -723,7 +712,6 @@ export class AudioEngine {
                 }
                 analyser.getByteFrequencyData(this.fftData);
 
-                // If still empty (possible if graph not yet flowing), try time-domain energy
                 let energy = 0;
                 for (let i = 0; i < this.fftData.length; i++) energy += this.fftData[i];
                 if (energy === 0) {
@@ -738,20 +726,19 @@ export class AudioEngine {
         }
 
         // 2. Filtered Bands Data (Logic)
-        this.filters.forEach((f, index) => {
+        this.filters.forEach((f) => {
             f.analyser.getByteFrequencyData(f.data);
             let peak = 0;
             for (let i = 0; i < f.data.length; i++) {
                 if (f.data[i] > peak) peak = f.data[i];
             }
-            // Use peak with soft power curve and smoothing to keep bands stable but reactive
             const shaped = Math.pow(peak / 255, 0.6) * 1.4;
             const target = Math.min(1.0, shaped);
             const prev = this.bands[f.name] ?? 0;
             this.bands[f.name] = (prev * 0.25) + (target * 0.75);
         });
 
-        // Blend in worklet-provided bands when available (use max across channels)
+        // Blend in worklet-provided bands when available
         if (this.vuWorkletReady && this.useWorkletFFT) {
             const low = Math.max(this.vuWorkletBands.video[0] || 0, this.vuWorkletBands.music[0] || 0, this.vuWorkletBands.mic[0] || 0);
             const mid = Math.max(this.vuWorkletBands.video[1] || 0, this.vuWorkletBands.music[1] || 0, this.vuWorkletBands.mic[1] || 0);
@@ -762,3 +749,4 @@ export class AudioEngine {
         }
     }
 }
+
