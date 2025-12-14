@@ -135,22 +135,9 @@ export class AudioEngine {
             this.masterMix.connect(ctx.destination);
 
             // Analiza pomocnicza (tap, worklety itp.)
-			this.analysisSink = ctx.createGain();
-			this.analysisSink.gain.value = 0.00001; // zamiast 0 - mobile nie ubije grafu
-			this.analysisSink.connect(ctx.destination);
-			
-			// UTRZYMUJ ANALYSERY AKTYWNE (ważne na mobile)
-			this.masterMix.connect(this.mainAnalyser);
-			this.masterMix.connect(ctx.destination);
-			this.mainAnalyser!.connect(this.analysisSink);
-			this.vizAnalyser!.connect(this.analysisSink);
-			
-			// Zakres dB - mobile często zwraca zera bez tego
-			this.mainAnalyser!.minDecibels = -120;
-			this.mainAnalyser!.maxDecibels = -10;
-			this.vizAnalyser!.minDecibels = -120;
-			this.vizAnalyser!.maxDecibels = -10;
-
+            this.analysisSink = ctx.createGain();
+            this.analysisSink.gain.value = 0;
+            this.analysisSink.connect(ctx.destination);
 
             // Destination do nagrywania
             this.recDest = ctx.createMediaStreamDestination();
@@ -238,9 +225,6 @@ export class AudioEngine {
             gain.connect(this.masterMix!);
             if (sendToDestination) {
                 gain.connect(this.ctx!.destination);
-			}
-			if (channel === 'mic' && this.analysisSink) {
-				gain.connect(this.analysisSink); // mic mieli się, ale nie słychać (0.00001)
             }
 
             // VU WORKLET JAKO SIDECHAIN (ANALIZA ONLY)
@@ -609,6 +593,25 @@ export class AudioEngine {
     }
 
     getFFTData(): Uint8Array | null {
+		// 0) Prefer worklet buckets on mobile / when available (more reliable than Analyser on mobile)
+		if (this.vuWorkletReady && this.useWorkletFFT) {
+		const bV = this.vuWorkletBuckets.video;
+		const bM = this.vuWorkletBuckets.music;
+		const bC = this.vuWorkletBuckets.mic;
+		
+		const buckets = (bV && bV.length) ? bV : (bM && bM.length) ? bM : (bC && bC.length) ? bC : null;
+		
+		if (buckets && buckets.length) {
+			const out = new Uint8Array(buckets.length);
+			for (let i = 0; i < buckets.length; i++) {
+			// buckets are typically 0..1 floats; scale to 0..255
+			const v = Math.max(0, Math.min(1, buckets[i] || 0));
+			out[i] = (v * 255) | 0;
+			}
+			return out;
+		}
+		}
+		
         // Keep context alive to ensure analysers flow
         if (this.ctx && this.ctx.state === 'suspended') {
             this.ctx.resume().catch(() => {});
