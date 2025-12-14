@@ -8,23 +8,31 @@ export class AudioEngine {
     ctx: AudioContext | null = null;
 
     // Main Mix Bus (For Analysis & Recording)
+    // masterMix = nagranie + analiza (MOŻE zawierać mic)
     masterMix: GainNode | null = null;
+
+    // Monitor Mix (Speakers only)
+    // monitorMix = odsłuch (NIGDY mic)
+    monitorMix: GainNode | null = null;
+
     mainAnalyser: AnalyserNode | null = null;
     vizAnalyser: AnalyserNode | null = null;
+
+    // Silent sink to keep analysis graph alive (connected to recDest, not speakers)
     analysisSink: GainNode | null = null;
+
     recDest: MediaStreamAudioDestinationNode | null = null;
     recordTaps: MediaStreamAudioDestinationNode[] = [];
     vizOut: GainNode | null = null;
 
     // Channel Nodes [Source -> Gain -> VU Analyser -> MasterMix]
-    //                               \-> Destination (Speakers, except Mic)
+    //                               \-> MonitorMix (Speakers, except Mic)
 
     // Channel 1: Video
     videoNode: MediaElementAudioSourceNode | null = null;
     videoGain: GainNode | null = null;
     videoAnalyser: AnalyserNode | null = null;
     videoTapAnalyser: AnalyserNode | null = null;
-    // Keep track of the element to avoid re-creation errors
     boundVideoElement: HTMLMediaElement | null = null;
 
     // Channel 2: Music
@@ -47,6 +55,7 @@ export class AudioEngine {
     vuWorkletBuckets: Record<'video' | 'music' | 'mic', Float32Array | null> = { video: null, music: null, mic: null };
     vuWorkletReady = false;
     useWorkletFFT = true;
+
     additiveEnvNode: AudioWorkletNode | null = null;
     additiveEnvReady = false;
     additiveEnvValue = 0.5;
@@ -111,48 +120,50 @@ export class AudioEngine {
             });
             this.ctx = ctx;
 
-            // Główny analyser do FX/spectrum
+            // Master analyser (FX/spectrum)
             this.mainAnalyser = ctx.createAnalyser();
             this.mainAnalyser.fftSize = 8192;
             this.mainAnalyser.smoothingTimeConstant = 0.7;
             this.fftData = new Uint8Array(this.mainAnalyser.frequencyBinCount) as ByteArray;
 
-            // Dodatkowy analyser do wizualizacji / tapów
+            // Viz analyser
             this.vizAnalyser = ctx.createAnalyser();
             this.vizAnalyser.fftSize = 512;
             this.vizAnalyser.smoothingTimeConstant = 0.55;
             this.vizData = new Uint8Array(this.vizAnalyser.frequencyBinCount) as ByteArray;
 
-            // Zakres dB - na mobile często bez tego FFT wygląda jak "zero"
+            // dB range (mobile often needs this)
             this.mainAnalyser.minDecibels = -120;
             this.mainAnalyser.maxDecibels = -10;
             this.vizAnalyser.minDecibels = -120;
             this.vizAnalyser.maxDecibels = -10;
 
-            // Master bus
+            // Buses
+            // masterMix = record/analysis (includes mic)
             this.masterMix = ctx.createGain();
             this.masterMix.gain.value = 1;
 
-            // Wyjście na głośniki + główny analyser (jak było)
-            this.masterMix.connect(this.mainAnalyser);
-            this.masterMix.connect(ctx.destination);
+            // monitorMix = speakers (NO mic ever)
+            this.monitorMix = ctx.createGain();
+            this.monitorMix.gain.value = 1;
+            this.monitorMix.connect(ctx.destination);
 
-            // Destination do nagrywania (MUSI być przed analysisSink, bo analysis będzie podpięta do recDest)
+            // Recording destination (keep alive even when not recording)
             this.recDest = ctx.createMediaStreamDestination();
             this.masterMix.connect(this.recDest);
 
-            // Analiza pomocnicza (tap, worklety itp.)
-            // UWAGA: na mobile widmo często "ożywa" dopiero, gdy analiza jest wpięta do MediaStreamDestination,
-            // więc analysisSink idzie do recDest (nie do głośników), gain=0 zostaje.
+            // Analysis sink -> recDest (NOT speakers) to avoid feedback / mobile weirdness
             this.analysisSink = ctx.createGain();
             this.analysisSink.gain.value = 0;
             this.analysisSink.connect(this.recDest);
 
-            // Utrzymuj analysers w aktywnym grafie (bez wpływu na dźwięk i bez psucia nagrań)
+            // Analysis taps: keep analysers in active graph without touching speakers
+            this.masterMix.connect(this.mainAnalyser);
+            this.masterMix.connect(this.vizAnalyser);
             this.mainAnalyser.connect(this.analysisSink);
             this.vizAnalyser.connect(this.analysisSink);
 
-            // VU worklet (FFT / RMS / bands)
+            // VU worklet
             try {
                 await ctx.audioWorklet.addModule(new URL('./worklets/vu-processor.js', import.meta.url));
                 this.vuWorkletReady = true;
@@ -161,7 +172,7 @@ export class AudioEngine {
                 this.vuWorkletReady = false;
             }
 
-            // Additive env worklet (obwiednia)
+            // Additive env worklet
             try {
                 await ctx.audioWorklet.addModule(new URL('./worklets/additive-env-processor.js', import.meta.url));
                 this.additiveEnvReady = true;
@@ -170,12 +181,11 @@ export class AudioEngine {
                 this.additiveEnvReady = false;
             }
 
-            // Kanały + envelope follower
             this.initChannelNodes();
             this.setupAdditiveEnvFollower();
 
             console.info(
-                `[AudioEngine] initContext ok, masterMix -> destination active | ` +
+                `[AudioEngine] initContext ok | ` +
                 `[SPECTRUM CAL] sr=${ctx.sampleRate} fftSize=${this.mainAnalyser.fftSize} bins=${this.mainAnalyser.frequencyBinCount}`
             );
         }
@@ -189,12 +199,14 @@ export class AudioEngine {
         if (!payload) return;
         const { rms = 0, bands, buckets } = payload;
         this.vuWorkletLevels[channel] = (rms || 0) * 5;
+
         if (bands && bands.length >= 3) {
             const target = this.vuWorkletBands[channel];
             target[0] = bands[0] || 0;
             target[1] = bands[1] || 0;
             target[2] = bands[2] || 0;
         }
+
         if (buckets && buckets.length) {
             this.vuWorkletBuckets[channel] = buckets instanceof Float32Array ? buckets : new Float32Array(buckets);
         }
@@ -205,6 +217,7 @@ export class AudioEngine {
 
         const createChannel = (channel: 'video' | 'music' | 'mic') => {
             const gain = this.ctx!.createGain();
+
             const analyser = this.ctx!.createAnalyser();
             analyser.fftSize = 32; // VU
             analyser.smoothingTimeConstant = 0.3;
@@ -222,36 +235,31 @@ export class AudioEngine {
                         outputChannelCount: [1],
                     });
                     vuNode.port.onmessage = (ev) => this.handleVuMessage(channel, ev.data);
-                } catch (e) {
+                } catch {
                     vuNode = null;
                 }
             }
 
-            // UWAGA: video + music idą również bezpośrednio na destination,
-            // mic tylko przez masterMix.
-            const sendToDestination = (channel === 'video' || channel === 'music');
+            // Speakers only for video+music
+            const sendToMonitor = (channel === 'video' || channel === 'music');
 
-            // GŁÓWNY TOR AUDIO - ZAWSZE BEZPOŚREDNIO Z GAIN
+            // Main routing
             gain.connect(this.masterMix!);
-            if (sendToDestination) {
-                gain.connect(this.ctx!.destination);
+            if (sendToMonitor && this.monitorMix) {
+                gain.connect(this.monitorMix);
             }
 
-            // VU WORKLET JAKO SIDECHAIN (ANALIZA ONLY)
+            // VU worklet as sidechain (analysis only)
             if (vuNode) {
-                // podgląd do workleta
                 gain.connect(vuNode);
-
-                // worklet karmi lokalne analysers
                 vuNode.connect(analyser);
                 vuNode.connect(tap);
             } else {
-                // fallback bez workleta - gain też karmi analysers
                 gain.connect(analyser);
                 gain.connect(tap);
             }
 
-            // utrzymujemy gałąź analityczną aktywną
+            // keep analysis alive (to recDest via analysisSink)
             if (this.analysisSink) {
                 analyser.connect(this.analysisSink);
                 tap.connect(this.analysisSink);
@@ -312,10 +320,10 @@ export class AudioEngine {
                 }
             };
 
-            // słuchamy całego master busa
+            // listen to whole master bus (includes mic)
             this.masterMix.connect(node);
 
-            // utrzymujemy node aktywny
+            // keep node active (to analysisSink -> recDest)
             if (this.analysisSink) {
                 node.connect(this.analysisSink);
             } else {
@@ -338,32 +346,24 @@ export class AudioEngine {
     connectVideo(videoEl: HTMLMediaElement) {
         if (!this.ctx || !this.videoGain) return;
 
-        // 1. Check if we already created a source for this EXACT element
         if (this.boundVideoElement === videoEl && this.videoNode) {
-            // Already connected. Just ensure the audio graph path is active.
             try {
                 this.videoNode.disconnect();
                 this.videoNode.connect(this.videoGain);
-            } catch (e) {
-                // Ignore disconnect errors
-            }
+            } catch {}
             return;
         }
 
-        // 2. Disconnect old source if it exists (and is different)
         if (this.videoNode) {
-            try { this.videoNode.disconnect(); } catch (e) {}
+            try { this.videoNode.disconnect(); } catch {}
         }
 
-        // 3. Create new source
         try {
             this.videoNode = this.ctx.createMediaElementSource(videoEl);
             this.boundVideoElement = videoEl;
 
-            // Path: źródło -> gain (gain wpięty w masterMix/destination w initChannelNodes)
             this.videoNode.connect(this.videoGain);
 
-            // Path 3: Direct tap for metering (pre-fader)
             if (this.videoTapAnalyser) {
                 this.videoNode.connect(this.videoTapAnalyser);
                 if (this.analysisSink) this.videoTapAnalyser.connect(this.analysisSink);
@@ -376,12 +376,13 @@ export class AudioEngine {
     connectMusic(audioEl: HTMLMediaElement) {
         if (!this.ctx || !this.musicGain) return;
 
-        if (this.musicNode) { try { this.musicNode.disconnect(); } catch (e) {} }
+        if (this.musicNode) {
+            try { this.musicNode.disconnect(); } catch {}
+        }
 
         this.musicNode = this.ctx.createMediaElementSource(audioEl);
         this.musicNode.connect(this.musicGain);
 
-        // Direct tap pre-fader for VU/FFT
         if (this.musicTapAnalyser) {
             this.musicNode.connect(this.musicTapAnalyser);
             if (this.analysisSink) this.musicTapAnalyser.connect(this.analysisSink);
@@ -391,7 +392,6 @@ export class AudioEngine {
     async connectMic() {
         if (!this.ctx || !this.micGain) return;
 
-        // Best practice: always get a new stream to ensure we comply with user intention.
         this.disconnectMic();
 
         try {
@@ -409,9 +409,8 @@ export class AudioEngine {
 
             this.micNode = this.ctx.createMediaStreamSource(stream);
             this.micNode.connect(this.micGain);
-            // NOTE: We DO NOT connect Mic to ctx.destination to avoid feedback loop
+            // NO mic -> monitorMix/destination (anti-feedback)
 
-            // Direct tap for metering (pre-fader)
             if (this.micTapAnalyser) {
                 this.micNode.connect(this.micTapAnalyser);
                 if (this.analysisSink) this.micTapAnalyser.connect(this.analysisSink);
@@ -424,11 +423,10 @@ export class AudioEngine {
 
     disconnectMic() {
         if (this.micNode) {
-            // Stop the tracks to release the hardware/permission lock
             if (this.micNode.mediaStream) {
                 this.micNode.mediaStream.getTracks().forEach(track => track.stop());
             }
-            try { this.micNode.disconnect(); } catch (e) {}
+            try { this.micNode.disconnect(); } catch {}
             this.micNode = null;
         }
     }
@@ -534,18 +532,22 @@ export class AudioEngine {
     getAudioStream(): MediaStream | null {
         if (!this.ctx || !this.masterMix) return null;
 
-        // Lazily create destination if missing
         if (!this.recDest) {
             this.recDest = this.ctx.createMediaStreamDestination();
             this.recDest.channelCount = 2;
             this.recDest.channelCountMode = 'explicit';
             this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
+
+            // ensure analysisSink has somewhere to go
+            if (this.analysisSink) {
+                try { this.analysisSink.disconnect(); } catch {}
+                this.analysisSink.connect(this.recDest);
+            }
         }
 
         const tracks = this.recDest.stream.getAudioTracks();
         const hasLive = tracks.some(t => t.readyState === 'live');
-
         tracks.forEach(t => { t.enabled = true; });
 
         if (!hasLive) {
@@ -555,6 +557,11 @@ export class AudioEngine {
             this.recDest.channelCountMode = 'explicit';
             this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
+
+            if (this.analysisSink) {
+                try { this.analysisSink.disconnect(); } catch {}
+                this.analysisSink.connect(this.recDest);
+            }
         }
 
         return this.recDest.stream;
@@ -591,7 +598,7 @@ export class AudioEngine {
     }
 
     getFFTData(): Uint8Array | null {
-        // 0) Prefer worklet buckets on mobile / when available (more reliable than Analyser on mobile)
+        // Prefer worklet buckets (more reliable on mobile)
         if (this.vuWorkletReady && this.useWorkletFFT) {
             const bV = this.vuWorkletBuckets.video;
             const bM = this.vuWorkletBuckets.music;
@@ -703,7 +710,7 @@ export class AudioEngine {
             return;
         }
 
-        // 1. RAW FFT Data (Visualizer)
+        // RAW FFT fallback when worklet disabled
         if (!this.vuWorkletReady || !this.useWorkletFFT) {
             const analyser = this.vizAnalyser || this.mainAnalyser;
             if (analyser) {
@@ -725,7 +732,7 @@ export class AudioEngine {
             }
         }
 
-        // 2. Filtered Bands Data (Logic)
+        // Filtered bands (logic)
         this.filters.forEach((f) => {
             f.analyser.getByteFrequencyData(f.data);
             let peak = 0;
@@ -749,4 +756,3 @@ export class AudioEngine {
         }
     }
 }
-
