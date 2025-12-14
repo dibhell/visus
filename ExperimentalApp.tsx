@@ -1126,13 +1126,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         if (!ae) return;
         ae.setVolume('video', mixer.video.active ? mixer.video.volume : 0);
         ae.setVolume('music', mixer.music.active ? mixer.music.volume : 0);
-        ae.setVolume('mic', mixer.mic.active ? mixer.mic.volume : 0);
+        const micOut = mixer.mic.active ? ((isMobile && !isRecording) ? 0 : mixer.mic.volume) : 0;
+        ae.setVolume('mic', micOut);
         if ((ae as any).setChannelActive) {
             (ae as any).setChannelActive('video', mixer.video.active);
             (ae as any).setChannelActive('music', mixer.music.active);
             (ae as any).setChannelActive('mic', mixer.mic.active);
         }
-    }, [audioReady, debugNoAudio, mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
+    }, [audioReady, debugNoAudio, isMobile, isRecording, mixer.video.volume, mixer.video.active, mixer.music.volume, mixer.music.active, mixer.mic.volume, mixer.mic.active]);
 
     const getActivationLevel = (routing: string, phase: number) => {
         if (routing === 'off') return 1.0;
