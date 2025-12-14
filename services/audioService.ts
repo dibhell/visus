@@ -136,10 +136,12 @@ export class AudioEngine {
 
             // Analiza pomocnicza (tap, worklety itp.)
 			this.analysisSink = ctx.createGain();
-			this.analysisSink.gain.value = 0;
+			this.analysisSink.gain.value = 0.00001; // zamiast 0 - mobile nie ubije grafu
 			this.analysisSink.connect(ctx.destination);
 			
 			// UTRZYMUJ ANALYSERY AKTYWNE (ważne na mobile)
+			this.masterMix.connect(this.mainAnalyser);
+			this.masterMix.connect(ctx.destination);
 			this.mainAnalyser!.connect(this.analysisSink);
 			this.vizAnalyser!.connect(this.analysisSink);
 			
@@ -236,6 +238,8 @@ export class AudioEngine {
             gain.connect(this.masterMix!);
             if (sendToDestination) {
                 gain.connect(this.ctx!.destination);
+			if (channel === 'mic' && this.analysisSink) {
+				gain.connect(this.analysisSink); // mic mieli się, ale nie słychać (0.00001)
             }
 
             // VU WORKLET JAKO SIDECHAIN (ANALIZA ONLY)
@@ -753,4 +757,4 @@ export class AudioEngine {
             this.bands.sync3 = (this.bands.sync3 * 0.4) + (high * 0.6);
         }
     }
-}
+	}
