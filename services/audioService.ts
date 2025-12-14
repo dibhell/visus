@@ -391,7 +391,6 @@ export class AudioEngine {
                     echoCancellation: false,
                     noiseSuppression: false,
                     autoGainControl: false,
-                    latency: 0,
                     channelCount: 1
                 }, 
                 video: false 
@@ -736,3 +735,4 @@ export class AudioEngine {
         }
     }
 }
+
