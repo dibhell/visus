@@ -419,8 +419,9 @@ const PanelSettings: React.FC<{
     const selectVideoPreset = (preset: RecordingPreset) => {
         setRecordingVideoPresetId(preset.id);
         // For AUTO presets (width/height = 0), keep UI in sync with current output canvas size
-        if ((preset.width === 0 || preset.height === 0) && canvasRef.current) {
-            setRecordResolution({ width: canvasRef.current.width, height: canvasRef.current.height });
+        if ((preset.width === 0 || preset.height === 0)) {
+            // AUTO preset: keep current recordResolution; actual size is resolved at REC start.
+            setRecordResolution(recordResolution);
         } else {
             setRecordResolution({ width: preset.width, height: preset.height });
         }
