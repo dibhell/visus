@@ -109,7 +109,7 @@ export class AudioEngine {
     async initContext() {
         if (!this.ctx) {
             const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({
-                latencyHint: 'interactive',
+                latencyHint: 'playback',
             });
             this.ctx = ctx;
 
@@ -386,15 +386,22 @@ export class AudioEngine {
 
         try {
             // Request audio with standard constraints
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
+            const audioConstraints: MediaTrackConstraints = {
+                    // Mobile: disable DSP that often adds buffering/latency
                     echoCancellation: false,
                     noiseSuppression: false,
                     autoGainControl: false,
                     channelCount: 1
-                }, 
-                video: false 
-            });
+                };
+
+                // 'latency' is not typed in some TS DOM libs, but browsers may accept it as a hint.
+                // Keep it as a hint without breaking the build.
+                (audioConstraints as any).latency = 0.02;
+
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: audioConstraints,
+                    video: false
+                });
             
             this.micNode = this.ctx.createMediaStreamSource(stream);
             this.micNode.connect(this.micGain);
