@@ -27,6 +27,13 @@ const ICONS = {
     Settings: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
 };
 
+const DEFAULT_ADDITIVE_GAIN = 80;
+const DEFAULT_MIXER_STATE = {
+    video: { active: true, volume: 1.0, hasSource: false, playing: false, name: '' },
+    music: { active: true, volume: 0.8, hasSource: false, playing: false, name: '' },
+    mic: { active: false, volume: 1.5, hasSource: false }
+};
+
 const getFxPreference = (): 'auto' | 'forceOn' | 'forceOff' => {
     if (typeof window === 'undefined') return 'auto';
     const params = new URLSearchParams(window.location.search);
@@ -333,6 +340,7 @@ const PanelSettings: React.FC<{
     setLockResolution: (v: boolean) => void;
     frameCap: number;
     frameCapMode: 'dynamic' | 'manual';
+    defaultFrameCap: number;
     setFrameCap: (v: number) => void;
     setFrameCapMode: (m: 'dynamic' | 'manual') => void;
     performanceMode: PerformanceMode;
@@ -364,7 +372,7 @@ const PanelSettings: React.FC<{
     const {
         quality, setQuality,
         lockResolution, setLockResolution,
-        frameCap, frameCapMode, setFrameCap, setFrameCapMode,
+        frameCap, frameCapMode, defaultFrameCap, setFrameCap, setFrameCapMode,
         performanceMode, setPerformanceMode,
         uiFpsLimit, setUiFpsLimit,
         recordFps, setRecordFps,
@@ -481,6 +489,7 @@ const PanelSettings: React.FC<{
                             step={1}
                             value={frameCap}
                             onChange={(e) => setFrameCap(parseInt(e.target.value, 10))}
+                            onDoubleClick={() => setFrameCap(defaultFrameCap)}
                             disabled={frameCapMode === 'dynamic'}
                             className="flex-1"
                         />
@@ -855,6 +864,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     }>(null);
     const [recorderPath, setRecorderPath] = useState<'MediaRecorder' | 'WebCodecs' | 'unknown'>('unknown');
 
+    useEffect(() => {
+        if (!lastRecordingStats) return;
+        const timer = window.setTimeout(() => {
+            setLastRecordingStats(null);
+        }, 20_000);
+        return () => window.clearTimeout(timer);
+    }, [lastRecordingStats]);
+
     const [fxPreference, setFxPreference] = useState<'auto' | 'forceOn' | 'forceOff'>(getFxPreference());
     const [renderPreference, setRenderPreference] = useState<'auto' | 'webgl' | 'canvas'>(getRenderPreference());
     const [workerPreference, setWorkerPreference] = useState<boolean>(getWorkerPreference());
@@ -889,6 +906,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const [useVideoFrameCb, setUseVideoFrameCb] = useState<boolean>(getUseVideoFrameCallback());
     const [audioReady, setAudioReady] = useState(false);
     const frameCapRef = useRef<number>(frameCap);
+    const defaultFrameCapRef = useRef<number>(frameCap);
     const uiFpsLimitRef = useRef<number>(uiFpsLimit);
     const performanceModeRef = useRef<PerformanceMode>(performanceMode);
     const frameCapModeRef = useRef<'dynamic' | 'manual'>(frameCapMode);
@@ -906,7 +924,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>('native');
     const [isMirrored, setIsMirrored] = useState(false);
     const [transform, setTransform] = useState<TransformConfig>({ x: 0, y: 0, scale: 1.0 });
-    const [additiveGain, setAdditiveGain] = useState(80);
+    const [additiveGain, setAdditiveGain] = useState(DEFAULT_ADDITIVE_GAIN);
     const [additiveEnvConfig, setAdditiveEnvConfig] = useState<AdditiveEnvConfig>(DEFAULT_ADDITIVE_ENV_CONFIG);
     const [additiveEnvValue, setAdditiveEnvValue] = useState(0.5);
     const [additiveEnvTrace, setAdditiveEnvTrace] = useState<{ env: Float32Array; det: Float32Array; eff: Float32Array } | null>(null);
@@ -964,11 +982,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const [playlistCurrentIndex, setPlaylistCurrentIndex] = useState<number | null>(null);
     const [playlistNextIndex, setPlaylistNextIndex] = useState<number | null>(null);
 
-    const [mixer, setMixer] = useState({
-        video: { active: true, volume: 1.0, hasSource: false, playing: false, name: '' },
-        music: { active: true, volume: 0.8, hasSource: false, playing: false, name: '' },
-        mic: { active: false, volume: 1.5, hasSource: false }
-    });
+    const [mixer, setMixer] = useState(() => ({
+        video: { ...DEFAULT_MIXER_STATE.video },
+        music: { ...DEFAULT_MIXER_STATE.music },
+        mic: { ...DEFAULT_MIXER_STATE.mic }
+    }));
 
     const fxStateRef = useRef(fxState);
     const syncParamsRef = useRef(syncParams);
@@ -3017,6 +3035,7 @@ const removePlaylistItem = useCallback((index: number) => {
                         setLockResolution={setLockResolution}
                         frameCap={frameCap}
                         frameCapMode={frameCapMode}
+                        defaultFrameCap={defaultFrameCapRef.current}
                         setFrameCap={setFrameCap}
                         setFrameCapMode={setFrameCapMode}
                         performanceMode={performanceMode}
@@ -3057,6 +3076,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                 label="VIDEO" icon={ICONS.Video}
                                 isActive={mixer.video.active}
                                 volume={mixer.video.volume}
+                                defaultVolume={DEFAULT_MIXER_STATE.video.volume}
                                 vuLevel={vuLevels.video}
                                 isPlaying={mixer.video.playing}
                                 onToggle={handleVideoToggle}
@@ -3091,6 +3111,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                 label="MUSIC" icon={ICONS.Music}
                                 isActive={mixer.music.active}
                                 volume={mixer.music.volume}
+                                defaultVolume={DEFAULT_MIXER_STATE.music.volume}
                                 vuLevel={vuLevels.music}
                                 isPlaying={mixer.music.playing}
                                 onToggle={handleMusicToggle}
@@ -3114,6 +3135,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                 label="MIC" icon={ICONS.Mic}
                                 isActive={mixer.mic.active}
                                 volume={mixer.mic.volume}
+                                defaultVolume={DEFAULT_MIXER_STATE.mic.volume}
                                 vuLevel={vuLevels.mic}
                                 onToggle={toggleMic}
                                 onVolumeChange={handleMicVolume}
@@ -3241,18 +3263,21 @@ const removePlaylistItem = useCallback((index: number) => {
                                 <Knob
                                     label="Scale" value={transform.scale}
                                     min={0.1} max={3.0} step={0.05}
+                                    defaultValue={1}
                                     onChange={(v) => updateTransform('scale', v)}
                                     format={(v) => v.toFixed(2)} color="#2dd4bf"
                                 />
                                 <Knob
                                     label="Pan X" value={transform.x}
                                     min={-1.0} max={1.0} step={0.05}
+                                    defaultValue={0}
                                     onChange={(v) => updateTransform('x', v)}
                                     format={(v) => v.toFixed(1)} color="#2dd4bf"
                                 />
                                 <Knob
                                     label="Pan Y" value={transform.y}
                                     min={-1.0} max={1.0} step={0.05}
+                                    defaultValue={0}
                                     onChange={(v) => updateTransform('y', v)}
                                     format={(v) => v.toFixed(1)} color="#2dd4bf"
                                 />
@@ -3320,6 +3345,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                 className="relative h-8 cursor-pointer select-none"
                                 ref={additiveSliderRef}
                                 onPointerDown={handleAdditivePointerDown}
+                                onDoubleClick={() => setAdditiveGain(DEFAULT_ADDITIVE_GAIN)}
                             >
                                 <div className="absolute inset-0 flex items-center">
                                     <div className="relative w-full h-1 bg-slate-800/80 rounded-full overflow-visible">
@@ -3351,6 +3377,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                         step={1}
                                         value={Math.round(additiveEnvConfig.depth * 100)}
                                         onChange={(e) => updateEnvFollower({ depth: parseInt(e.target.value, 10) / 100 })}
+                                        onDoubleClick={() => updateEnvFollower({ depth: DEFAULT_ADDITIVE_ENV_CONFIG.depth })}
                                         className="w-full accent-accent"
                                         disabled={!additiveEnvConfig.enabled}
                                     />
@@ -3398,6 +3425,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                             min={0.5}
                                             max={200}
                                             step={0.5}
+                                            defaultValue={DEFAULT_ADDITIVE_ENV_CONFIG.attackMs}
                                             onChange={(v) => updateEnvFollower({ attackMs: v })}
                                             format={(v) => `${v.toFixed(1)}ms`}
                                             color="#a855f7"
@@ -3408,6 +3436,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                             min={10}
                                             max={2000}
                                             step={10}
+                                            defaultValue={DEFAULT_ADDITIVE_ENV_CONFIG.releaseMs}
                                             onChange={(v) => updateEnvFollower({ releaseMs: v })}
                                             format={(v) => `${Math.round(v)}ms`}
                                             color="#a855f7"
@@ -3418,6 +3447,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                             min={0}
                                             max={200}
                                             step={1}
+                                            defaultValue={DEFAULT_ADDITIVE_ENV_CONFIG.delayMs}
                                             onChange={(v) => updateEnvFollower({ delayMs: v })}
                                             format={(v) => `${Math.round(v)}ms`}
                                             color="#22d3ee"
@@ -3431,6 +3461,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                             min={0}
                                             max={2}
                                             step={0.05}
+                                            defaultValue={DEFAULT_ADDITIVE_ENV_CONFIG.gain}
                                             onChange={(v) => updateEnvFollower({ gain: v })}
                                             format={(v) => `${Math.round(v * 100)}%`}
                                             color="#22d3ee"
@@ -3441,6 +3472,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                             min={-1}
                                             max={1}
                                             step={0.05}
+                                            defaultValue={DEFAULT_ADDITIVE_ENV_CONFIG.offset}
                                             onChange={(v) => updateEnvFollower({ offset: v })}
                                             format={(v) => `${Math.round(v * 50)}%`}
                                             color="#38bdf8"
@@ -3478,6 +3510,7 @@ const removePlaylistItem = useCallback((index: number) => {
                                             step={0.05}
                                             value={additiveEnvConfig.shape}
                                             onChange={(e) => updateEnvFollower({ shape: parseFloat(e.target.value) })}
+                                            onDoubleClick={() => updateEnvFollower({ shape: DEFAULT_ADDITIVE_ENV_CONFIG.shape })}
                                             className="w-full accent-accent"
                                             disabled={!additiveEnvConfig.enabled}
                                         />

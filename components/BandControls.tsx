@@ -4,6 +4,12 @@ import React from 'react';
 import { SyncParam } from '../constants';
 import Knob from './Knob';
 
+const DEFAULT_SYNC_PARAMS: SyncParam[] = [
+    { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
+    { bpm: 128.0, offset: 0, freq: 800, width: 40, gain: 1.0 },
+    { bpm: 128.0, offset: 0, freq: 6000, width: 40, gain: 1.0 },
+];
+
 interface BandControlsProps {
     syncParams: SyncParam[];
     setSyncParams: React.Dispatch<React.SetStateAction<SyncParam[]>>;
@@ -41,6 +47,7 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                         type="range" min="60" max="180" step="0.1" 
                         value={syncParams[0].bpm}
                         onChange={(e) => update(0, 'bpm', parseFloat(e.target.value))}
+                        onDoubleClick={() => update(0, 'bpm', DEFAULT_SYNC_PARAMS[0].bpm)}
                         className="w-full accent-accent"
                     />
                 </div>
@@ -53,6 +60,7 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                         type="range" min="0" max="1000" step="5" 
                         value={syncParams[0].offset}
                         onChange={(e) => update(0, 'offset', parseFloat(e.target.value))}
+                        onDoubleClick={() => update(0, 'offset', DEFAULT_SYNC_PARAMS[0].offset)}
                         className="w-full accent-slate-400"
                     />
                 </div>
@@ -86,6 +94,7 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                                 min={i === 0 ? 20 : i === 1 ? 200 : 2000} 
                                 max={i === 0 ? 500 : i === 1 ? 5000 : 20000}
                                 step={10}
+                                defaultValue={DEFAULT_SYNC_PARAMS[i]?.freq ?? sync.freq}
                                 onChange={(v) => update(i, 'freq', v)}
                                 format={formatFreq}
                                 color={colors[i]}
@@ -97,6 +106,7 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                                 min={1} 
                                 max={150}
                                 step={1}
+                                defaultValue={DEFAULT_SYNC_PARAMS[i]?.width ?? sync.width}
                                 onChange={(v) => update(i, 'width', v)}
                                 format={formatPct}
                                 color={colors[i]}
@@ -108,6 +118,7 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                                 min={0.1} 
                                 max={3.0}
                                 step={0.1}
+                                defaultValue={DEFAULT_SYNC_PARAMS[i]?.gain ?? sync.gain}
                                 onChange={(v) => update(i, 'gain', v)}
                                 format={formatGain}
                                 color={colors[i]}

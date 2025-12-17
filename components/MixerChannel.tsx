@@ -6,6 +6,7 @@ interface Props {
     icon: React.ReactNode;
     isActive: boolean;
     volume: number; // 0 to 1
+    defaultVolume?: number;
     vuLevel: number; // 0 to 1
     isPlaying?: boolean; // New: Transport state
     onToggle: (active: boolean) => void;
@@ -16,8 +17,20 @@ interface Props {
     color?: string;
 }
 
-const MixerChannel: React.FC<Props> = ({ 
-    label, icon, isActive, volume, vuLevel, isPlaying, onToggle, onVolumeChange, onPlayPause, onStop, children, color = "#a78bfa"
+const MixerChannel: React.FC<Props> = ({
+    label,
+    icon,
+    isActive,
+    volume,
+    defaultVolume,
+    vuLevel,
+    isPlaying,
+    onToggle,
+    onVolumeChange,
+    onPlayPause,
+    onStop,
+    children,
+    color = "#a78bfa"
 }) => {
     const sliderRef = useRef<HTMLDivElement | null>(null);
     const isDraggingRef = useRef(false);
@@ -49,6 +62,11 @@ const MixerChannel: React.FC<Props> = ({
         updateFromPointer(e.clientY);
         window.addEventListener('pointermove', handlePointerMove);
         window.addEventListener('pointerup', endDrag);
+    };
+
+    const handleDoubleClick = () => {
+        if (defaultVolume === undefined) return;
+        onVolumeChange(defaultVolume);
     };
 
     useEffect(() => {
@@ -105,6 +123,7 @@ const MixerChannel: React.FC<Props> = ({
                 <div
                     ref={sliderRef}
                     onPointerDown={startDrag}
+                    onDoubleClick={handleDoubleClick}
                     className="h-full w-8 relative flex items-center justify-center group cursor-pointer select-none"
                 >
                     {/* Custom Track Visual */}

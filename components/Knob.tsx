@@ -7,6 +7,7 @@ interface KnobProps {
     min: number;
     max: number;
     step?: number;
+    defaultValue?: number;
     onChange: (val: number) => void;
     format?: (val: number) => string;
     color?: string;
@@ -18,6 +19,7 @@ const Knob: React.FC<KnobProps> = ({
     min, 
     max, 
     step = 1, 
+    defaultValue,
     onChange, 
     format,
     color = '#a78bfa'
@@ -85,6 +87,11 @@ const Knob: React.FC<KnobProps> = ({
         onChange(newValue);
     };
 
+    const handleDoubleClick = () => {
+        if (defaultValue === undefined) return;
+        onChange(defaultValue);
+    };
+
     // SVG Arc calculation
     const r = 18;
     const dashArray = 2 * Math.PI * r;
@@ -98,6 +105,7 @@ const Knob: React.FC<KnobProps> = ({
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
+                onDoubleClick={handleDoubleClick}
             >
                 <svg width="48" height="48" className="transform rotate-90 drop-shadow-sm">
                     {/* Background Track */}

@@ -133,6 +133,7 @@ const FxSlot: React.FC<FxSlotProps> = React.memo(({ slotName, fxState, setFxStat
                             min={0}
                             max={200}
                             step={1}
+                            defaultValue={100}
                             onChange={(v) => handleChange('gain', v)}
                             format={(v) => `${v}%`}
                             color={glowColor}
@@ -145,6 +146,7 @@ const FxSlot: React.FC<FxSlotProps> = React.memo(({ slotName, fxState, setFxStat
                             min={0}
                             max={100}
                             step={1}
+                            defaultValue={100}
                             onChange={(v) => handleChange('mix', v)}
                             format={(v) => `${v}%`}
                             color="#ffffff"

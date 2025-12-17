@@ -106,9 +106,9 @@ export const DEFAULT_ADDITIVE_ENV_CONFIG: AdditiveEnvConfig = {
 
   source: 'RMS',
 
-  attackMs: 10,
+  attackMs: 0.5,
 
-  releaseMs: 200,
+  releaseMs: 10,
 
   shape: 0,
 
