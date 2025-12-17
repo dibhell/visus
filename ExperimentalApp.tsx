@@ -1567,9 +1567,16 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
         const scheduleNext = () => {
             if (!mounted) return;
             const videoEl: any = videoRef.current;
-            if (useVideoFrameCbRef.current && videoEl && typeof videoEl.requestVideoFrameCallback === 'function') {
+            const canUseRvfc = useVideoFrameCbRef.current
+                && videoEl
+                && typeof videoEl.requestVideoFrameCallback === 'function'
+                && videoEl.readyState >= 2
+                && !videoEl.paused
+                && !videoEl.ended;
+            if (canUseRvfc) {
                 videoFrameRequestRef.current = videoEl.requestVideoFrameCallback(loop);
             } else {
+                videoFrameRequestRef.current = null;
                 rafRef.current = requestAnimationFrame(loop);
             }
         };
