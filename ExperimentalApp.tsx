@@ -1648,10 +1648,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 lastBandLevelsRef.current = bandLevels;
             }
             if (!skipHeavy) {
-                bandLevels.sync1 = 0;
-                bandLevels.sync2 = 0;
-                bandLevels.sync3 = 0;
-
                 const sampleStride = performanceModeRef.current === 'high' ? 1 : performanceModeRef.current === 'medium' ? 2 : 3;
                 const shouldSampleFft = needsSpectrum && (frameIndexRef.current % sampleStride === 0);
                 let fftData: Uint8Array | null = null;
@@ -1672,6 +1668,15 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     fftData = lastFftDataRef.current || spectrumRef.current;
                 }
 
+                const baseBands = (ae as any).getBandLevels ? (ae as any).getBandLevels() : (ae as any).bands;
+                const baseSync1 = Math.max(0, (baseBands?.sync1 ?? 0) * (currentSyncParams[0]?.gain ?? 1));
+                const baseSync2 = Math.max(0, (baseBands?.sync2 ?? 0) * (currentSyncParams[1]?.gain ?? 1));
+                const baseSync3 = Math.max(0, (baseBands?.sync3 ?? 0) * (currentSyncParams[2]?.gain ?? 1));
+
+                bandLevels.sync1 = baseSync1;
+                bandLevels.sync2 = baseSync2;
+                bandLevels.sync3 = baseSync3;
+
                 if (fftData && fftData.length > 0) {
                     const nyquist = ((ae as any).ctx?.sampleRate || 48000) / 2;
                     const sampleBand = (freq: number, width: number, gain: number) => {
@@ -1690,16 +1695,20 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                         return Math.min(1, norm * gain);
                     };
 
-                    bandLevels.sync1 = sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1);
-                    bandLevels.sync2 = sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1);
-                    bandLevels.sync3 = sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1);
-                }
-                const bandSum = bandLevels.sync1 + bandLevels.sync2 + bandLevels.sync3;
-                if (bandSum <= 0.0001 && (ae as any).getBandLevels) {
-                    const fallbackBands = (ae as any).getBandLevels();
-                    bandLevels.sync1 = Math.max(bandLevels.sync1, fallbackBands?.sync1 ?? 0);
-                    bandLevels.sync2 = Math.max(bandLevels.sync2, fallbackBands?.sync2 ?? 0);
-                    bandLevels.sync3 = Math.max(bandLevels.sync3, fallbackBands?.sync3 ?? 0);
+                    const fftSync1 = sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1);
+                    const fftSync2 = sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1);
+                    const fftSync3 = sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1);
+
+                    const baseSum = baseSync1 + baseSync2 + baseSync3;
+                    if (baseSum < 0.001) {
+                        bandLevels.sync1 = fftSync1;
+                        bandLevels.sync2 = fftSync2;
+                        bandLevels.sync3 = fftSync3;
+                    } else {
+                        bandLevels.sync1 = Math.max(baseSync1, fftSync1);
+                        bandLevels.sync2 = Math.max(baseSync2, fftSync2);
+                        bandLevels.sync3 = Math.max(baseSync3, fftSync3);
+                    }
                 }
                 lastBandLevelsRef.current = bandLevels;
             }
