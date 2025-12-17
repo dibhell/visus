@@ -1655,13 +1655,21 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 const sampleStride = performanceModeRef.current === 'high' ? 1 : performanceModeRef.current === 'medium' ? 2 : 3;
                 const shouldSampleFft = needsSpectrum && (frameIndexRef.current % sampleStride === 0);
                 let fftData: Uint8Array | null = null;
-                if (shouldSampleFft && (ae as any).getFFTData) {
-                    fftData = (ae as any).getFFTData();
+                if (shouldSampleFft) {
+                    if ((ae as any).getFFTData) {
+                        fftData = (ae as any).getFFTData();
+                    }
+                    if ((!fftData || fftData.length === 0) && spectrumRef.current && spectrumRef.current.length > 0) {
+                        fftData = spectrumRef.current;
+                    }
+                    if ((!fftData || fftData.length === 0) && (ae as any).getSpectrum) {
+                        fftData = (ae as any).getSpectrum();
+                    }
                     if (fftData && fftData.length > 0) {
                         lastFftDataRef.current = fftData;
                     }
                 } else if (needsSpectrum) {
-                    fftData = lastFftDataRef.current;
+                    fftData = lastFftDataRef.current || spectrumRef.current;
                 }
 
                 if (fftData && fftData.length > 0) {
@@ -1685,6 +1693,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     bandLevels.sync1 = sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1);
                     bandLevels.sync2 = sampleBand(currentSyncParams[1].freq, currentSyncParams[1].width, currentSyncParams[1]?.gain ?? 1);
                     bandLevels.sync3 = sampleBand(currentSyncParams[2].freq, currentSyncParams[2].width, currentSyncParams[2]?.gain ?? 1);
+                }
+                const bandSum = bandLevels.sync1 + bandLevels.sync2 + bandLevels.sync3;
+                if (bandSum <= 0.0001 && (ae as any).getBandLevels) {
+                    const fallbackBands = (ae as any).getBandLevels();
+                    bandLevels.sync1 = Math.max(bandLevels.sync1, fallbackBands?.sync1 ?? 0);
+                    bandLevels.sync2 = Math.max(bandLevels.sync2, fallbackBands?.sync2 ?? 0);
+                    bandLevels.sync3 = Math.max(bandLevels.sync3, fallbackBands?.sync3 ?? 0);
                 }
                 lastBandLevelsRef.current = bandLevels;
             }
