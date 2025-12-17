@@ -152,10 +152,10 @@ export class AudioEngine {
             this.recDest = ctx.createMediaStreamDestination();
             this.masterMix.connect(this.recDest);
 
-            // Analysis sink -> recDest (NOT speakers) to avoid feedback / mobile weirdness
+            // Analysis sink -> destination (silent) to keep analysers/worklets alive
             this.analysisSink = ctx.createGain();
             this.analysisSink.gain.value = 0;
-            this.analysisSink.connect(this.recDest);
+            this.analysisSink.connect(ctx.destination);
 
             // Analysis taps: keep analysers in active graph without touching speakers
             this.masterMix.connect(this.mainAnalyser);
@@ -259,7 +259,7 @@ export class AudioEngine {
                 gain.connect(tap);
             }
 
-            // keep analysis alive (to recDest via analysisSink)
+            // keep analysis alive (via analysisSink)
             if (this.analysisSink) {
                 analyser.connect(this.analysisSink);
                 tap.connect(this.analysisSink);
@@ -323,7 +323,7 @@ export class AudioEngine {
             // listen to whole master bus (includes mic)
             this.masterMix.connect(node);
 
-            // keep node active (to analysisSink -> recDest)
+            // keep node active (via analysisSink)
             if (this.analysisSink) {
                 node.connect(this.analysisSink);
             } else {
@@ -539,11 +539,6 @@ export class AudioEngine {
             this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
 
-            // ensure analysisSink has somewhere to go
-            if (this.analysisSink) {
-                try { this.analysisSink.disconnect(); } catch {}
-                this.analysisSink.connect(this.recDest);
-            }
         }
 
         const tracks = this.recDest.stream.getAudioTracks();
@@ -558,10 +553,6 @@ export class AudioEngine {
             this.recDest.channelInterpretation = 'speakers';
             this.masterMix.connect(this.recDest);
 
-            if (this.analysisSink) {
-                try { this.analysisSink.disconnect(); } catch {}
-                this.analysisSink.connect(this.recDest);
-            }
         }
 
         return this.recDest.stream;
