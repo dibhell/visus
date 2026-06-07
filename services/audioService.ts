@@ -665,11 +665,11 @@ export class AudioEngine {
 
             const p = syncParams[i];
             bandpass.frequency.value = p ? p.freq : 100;
-            bandpass.Q.value = p ? (1 + p.width * 0.1) : 1;
+            bandpass.Q.value = p ? (0.8 + p.width * 0.055) : 1;
 
             const analyser = this.ctx.createAnalyser();
-            analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.45;
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.22;
 
             this.masterMix.connect(bandpass);
             bandpass.connect(analyser);
@@ -688,7 +688,7 @@ export class AudioEngine {
             if (f.bandpass && params) {
                 const freq = Math.max(20, Math.min(20000, params.freq));
                 f.bandpass.frequency.setTargetAtTime(freq, this.ctx!.currentTime, 0.1);
-                const qValue = 1 + (params.width * 0.09);
+                const qValue = 0.8 + (params.width * 0.055);
                 f.bandpass.Q.setTargetAtTime(qValue, this.ctx!.currentTime, 0.1);
             }
         });
@@ -723,27 +723,45 @@ export class AudioEngine {
             }
         }
 
+        const shapeBandLevel = (raw: number) => {
+            const floor = 0.03;
+            const normalized = Math.max(0, (raw - floor) / (1 - floor));
+            const driven = 1 - Math.exp(-normalized * 3.4);
+            return Math.min(1.15, Math.pow(driven, 0.62) * 1.16);
+        };
+
+        const followBand = (prev: number, target: number) => {
+            const attack = 0.72;
+            const release = 0.22;
+            const alpha = target > prev ? attack : release;
+            return (prev * (1 - alpha)) + (target * alpha);
+        };
+
         // Filtered bands (logic)
         this.filters.forEach((f) => {
             f.analyser.getByteFrequencyData(f.data);
             let peak = 0;
+            let sum = 0;
             for (let i = 0; i < f.data.length; i++) {
-                if (f.data[i] > peak) peak = f.data[i];
+                const v = f.data[i] || 0;
+                if (v > peak) peak = v;
+                sum += v;
             }
-            const shaped = Math.pow(peak / 255, 0.6) * 1.4;
-            const target = Math.min(1.0, shaped);
+            const avg = f.data.length ? sum / f.data.length : 0;
+            const blended = (peak * 0.7) + (avg * 0.3);
+            const target = shapeBandLevel(blended / 255);
             const prev = this.bands[f.name] ?? 0;
-            this.bands[f.name] = (prev * 0.25) + (target * 0.75);
+            this.bands[f.name] = followBand(prev, target);
         });
 
         // Blend in worklet-provided bands when available
         if (this.vuWorkletReady && this.useWorkletFFT) {
-            const low = Math.max(this.vuWorkletBands.video[0] || 0, this.vuWorkletBands.music[0] || 0, this.vuWorkletBands.mic[0] || 0);
-            const mid = Math.max(this.vuWorkletBands.video[1] || 0, this.vuWorkletBands.music[1] || 0, this.vuWorkletBands.mic[1] || 0);
-            const high = Math.max(this.vuWorkletBands.video[2] || 0, this.vuWorkletBands.music[2] || 0, this.vuWorkletBands.mic[2] || 0);
-            this.bands.sync1 = (this.bands.sync1 * 0.4) + (low * 0.6);
-            this.bands.sync2 = (this.bands.sync2 * 0.4) + (mid * 0.6);
-            this.bands.sync3 = (this.bands.sync3 * 0.4) + (high * 0.6);
+            const low = shapeBandLevel(Math.max(this.vuWorkletBands.video[0] || 0, this.vuWorkletBands.music[0] || 0, this.vuWorkletBands.mic[0] || 0));
+            const mid = shapeBandLevel(Math.max(this.vuWorkletBands.video[1] || 0, this.vuWorkletBands.music[1] || 0, this.vuWorkletBands.mic[1] || 0));
+            const high = shapeBandLevel(Math.max(this.vuWorkletBands.video[2] || 0, this.vuWorkletBands.music[2] || 0, this.vuWorkletBands.mic[2] || 0));
+            this.bands.sync1 = Math.max(this.bands.sync1, followBand(this.bands.sync1, low));
+            this.bands.sync2 = Math.max(this.bands.sync2, followBand(this.bands.sync2, mid));
+            this.bands.sync3 = Math.max(this.bands.sync3, followBand(this.bands.sync3, high));
         }
     }
 }

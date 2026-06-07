@@ -934,9 +934,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
-        { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
-        { bpm: 128.0, offset: 0, freq: 800, width: 40, gain: 1.0 },
-        { bpm: 128.0, offset: 0, freq: 6000, width: 40, gain: 1.0 },
+        { bpm: 128.0, offset: 0, freq: 70, width: 45, gain: 1.5 },
+        { bpm: 128.0, offset: 0, freq: 900, width: 55, gain: 1.35 },
+        { bpm: 128.0, offset: 0, freq: 5200, width: 60, gain: 1.45 },
     ]);
 
     const [fxState, setFxState] = useState<FxState>({
@@ -1647,6 +1647,13 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 bandLevels = { sync1: 0, sync2: 0, sync3: 0 };
                 lastBandLevelsRef.current = bandLevels;
             }
+            const shapeAudioLevel = (level: number, drive = 1.0) => {
+                const floor = 0.035;
+                const normalized = Math.max(0, (Math.max(0, level) - floor) / (1 - floor));
+                const expanded = 1 - Math.exp(-normalized * 3.2 * drive);
+                return Math.min(1.25, Math.pow(expanded, 0.68) * 1.18);
+            };
+
             if (!skipHeavy) {
                 const sampleStride = performanceModeRef.current === 'high' ? 1 : performanceModeRef.current === 'medium' ? 2 : 3;
                 const shouldSampleFft = needsSpectrum && (frameIndexRef.current % sampleStride === 0);
@@ -1669,9 +1676,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 }
 
                 const baseBands = (ae as any).getBandLevels ? (ae as any).getBandLevels() : (ae as any).bands;
-                const baseSync1 = Math.max(0, (baseBands?.sync1 ?? 0) * (currentSyncParams[0]?.gain ?? 1));
-                const baseSync2 = Math.max(0, (baseBands?.sync2 ?? 0) * (currentSyncParams[1]?.gain ?? 1));
-                const baseSync3 = Math.max(0, (baseBands?.sync3 ?? 0) * (currentSyncParams[2]?.gain ?? 1));
+                const baseSync1 = shapeAudioLevel(baseBands?.sync1 ?? 0, currentSyncParams[0]?.gain ?? 1);
+                const baseSync2 = shapeAudioLevel(baseBands?.sync2 ?? 0, currentSyncParams[1]?.gain ?? 1);
+                const baseSync3 = shapeAudioLevel(baseBands?.sync3 ?? 0, currentSyncParams[2]?.gain ?? 1);
 
                 bandLevels.sync1 = baseSync1;
                 bandLevels.sync2 = baseSync2;
@@ -1685,14 +1692,17 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                         const minBin = Math.max(0, Math.floor((minF / nyquist) * fftData.length));
                         const maxBin = Math.min(fftData.length - 1, Math.ceil((maxF / nyquist) * fftData.length));
                         let sum = 0;
+                        let peak = 0;
                         let count = 0;
                         for (let i = minBin; i <= maxBin; i++) {
-                            sum += fftData[i];
+                            const v = fftData[i] || 0;
+                            sum += v;
+                            if (v > peak) peak = v;
                             count++;
                         }
                         const avg = count > 0 ? sum / count : 0;
-                        const norm = Math.min(1, avg / 255);
-                        return Math.min(1, norm * gain);
+                        const blended = (peak * 0.65) + (avg * 0.35);
+                        return shapeAudioLevel(blended / 255, gain);
                     };
 
                     const fftSync1 = sampleBand(currentSyncParams[0].freq, currentSyncParams[0].width, currentSyncParams[0]?.gain ?? 1);
@@ -1722,27 +1732,32 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 return 0;
             };
 
-            const lerp = (prev: number, next: number, alpha: number) => (prev * (1 - alpha)) + (next * alpha);
+            const slew = (prev: number, next: number, attack: number, release: number) => {
+                const alpha = next > prev ? attack : release;
+                return (prev * (1 - alpha)) + (next * alpha);
+            };
             // FX depth ceiling: give headroom without saturating at low %.
-            const fxCeiling = 6.0;
+            const fxCeiling = 7.5;
             const vuCeiling = 10.0;
-            const fxAlpha = 0.30; // slightly snappier to avoid UI lag
-            const vuAlpha = 0.35; // keep VU responsive without jitter
+            const fxAttack = 0.62;
+            const fxRelease = 0.18;
+            const vuAttack = 0.70;
+            const vuRelease = 0.24;
 
             const computeFxVal = (config: any, prev: number) => {
                 const sourceLevel = Math.max(0, getLevel(config.routing));
                 const gainMult = (config.gain ?? 100) / 100; // Depth knob as max
-                const shaped = Math.pow(sourceLevel, 0.8);
+                const shaped = Math.pow(sourceLevel, 0.58);
                 const target = Math.min(fxCeiling, shaped * gainMult * fxCeiling);
-                return lerp(prev, target, fxAlpha);
+                return slew(prev, target, fxAttack, fxRelease);
             };
 
             const computeFxVu = (config: any, prev: number) => {
                 const sourceLevel = Math.max(0, getLevel(config.routing, true));
                 const gainMult = (config.gain ?? 100) / 100;
-                const shaped = Math.pow(sourceLevel, 0.8);
+                const shaped = Math.pow(sourceLevel, 0.58);
                 const target = Math.min(vuCeiling, shaped * gainMult * vuCeiling);
-                return lerp(prev, target, vuAlpha);
+                return slew(prev, target, vuAttack, vuRelease);
             };
 
             visualLevelsRef.current.main = computeFxVal(currentFxState.main, visualLevelsRef.current.main);

@@ -5,9 +5,9 @@ import { SyncParam } from '../constants';
 import Knob from './Knob';
 
 const DEFAULT_SYNC_PARAMS: SyncParam[] = [
-    { bpm: 128.0, offset: 0, freq: 60, width: 30, gain: 1.0 },
-    { bpm: 128.0, offset: 0, freq: 800, width: 40, gain: 1.0 },
-    { bpm: 128.0, offset: 0, freq: 6000, width: 40, gain: 1.0 },
+    { bpm: 128.0, offset: 0, freq: 70, width: 45, gain: 1.5 },
+    { bpm: 128.0, offset: 0, freq: 900, width: 55, gain: 1.35 },
+    { bpm: 128.0, offset: 0, freq: 5200, width: 60, gain: 1.45 },
 ];
 
 interface BandControlsProps {
