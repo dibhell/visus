@@ -1,0 +1,316 @@
+You are an expert Android + GPU + audio reactive engineer working inside VS Code on my existing project called VISUS Native.
+
+CONTEXT
+- Platform: Android, minSdk 26, targetSdk 34
+- Language: Kotlin
+- UI: Jetpack Compose
+- Graphics: OpenGL ES 3.0 with GLSurfaceView + custom Renderer
+- Camera: CameraX with OES texture
+- Audio: AudioRecord + FFT (JTransforms or equivalent)
+- Recording: MediaCodec + MediaMuxer with Surface input (no glReadPixels)
+
+Current state of the project (very important):
+- Debug and release builds work.
+- App launches on device.
+- UI has sections similar to the original VISUS mockup, but they are mostly placeholders:
+  - Layout exists, but sliders, knobs and buttons have no real logic.
+- Camera / preview and shader rendering:
+  - Minimal OES pipeline with a very simple effect only.
+- Audio FFT:
+  - FFT is computed, but its output is hardly used in UI or shaders (only some test color).
+- Recording:
+  - Record button is wired, but MediaCodec / EGL pipeline is not fully implemented.
+  - Recording is stubbed or no-op, only crash prevention is in place.
+
+Goal:
+Recreate the full VISUS experience from the original web version as a native Android app, with:
+- professional, premium UI/UX comparable to expensive VJ systems (Resolume, Arena, MadMapper, heavy VJ gear)
+- smooth 60 FPS rendering on mid range phones
+- tight audio reactive behavior
+- working recording pipeline to MP4.
+
+UI AND UX REQUIREMENTS
+UI and UX must feel like a high end VJ system:
+- dark theme, neon accents, sleek typography, consistent spacing and alignment
+- smooth interactions, no janky jumps
+- controls grouped logically in panels with clear labels and state
+- visually distinct sections: Source Mixer, Output & Framing, FX Controls, FX Chain, Recording
+- all interactive elements should have clear hover / pressed / active states where applicable
+- touch targets large enough for mobile use
+- no debug looking or generic UI – it should look like a commercial product.
+
+Functional spec you must implement across the project:
+
+1. SOURCE MIXER
+Three main input channels:
+- VIDEO
+- MUSIC
+- MIC
+
+For each channel:
+- main fader (0 – 100 percent)
+- Mute toggle
+- Solo toggle (soloing one channel mutes others)
+- Bypass toggle (bypasses FX chain for this source if applicable)
+- Channel meters for level (peak / RMS)
+
+VIDEO channel
+- Source can be:
+  - camera rear
+  - camera front
+  - video file (local)
+- Transport controls for video files:
+  - Play / Pause
+  - Previous / Next
+  - Seek (basic is enough at first)
+- Scale / crop control integrated with Output & Framing section.
+
+MUSIC channel
+- Source can be:
+  - local audio file (MP3 / WAV)
+  - optionally system audio if available (can be stubbed at first)
+- Transport:
+  - Play / Pause
+  - Previous / Next
+- Level meter.
+
+MIC channel
+- Source: device microphone
+- Gain control
+- Mute / Unmute
+- Basic noise floor handling (simple gate or low cutoff is enough for MVP).
+
+Routing
+- There must be a clear notion of which audio source is used for analysis (FFT):
+  - user can pick: MUSIC, MIC, VIDEO audio, or a MIX from the mixer.
+- This selection must drive the audio reactive behavior globally.
+
+2. AUDIO ANALYSIS AND SPECTRUM
+- Use FFT (2048 or 4096) to compute spectrum from the selected audio source.
+- Derive at least these normalized bands:
+  - BASS: 20 – 200 Hz
+  - MID: 200 – 2000 Hz
+  - HIGH: 2000 – 8000 Hz
+- For each band keep:
+  - instantaneous value
+  - smoothed value (attack and release)
+- Provide peak detection for rhythmic triggers.
+
+Interactive spectrum UI:
+- A visual area with three colored circles or nodes for BASS, MID and HIGH.
+- Each node shows current band magnitude (radius and intensity).
+- This view is updated in real time and feels smooth.
+
+3. OUTPUT & FRAMING
+Aspect ratio options:
+- MATRIX (full window)
+- 16:9
+- 9:16
+- 4:5
+- 1:1
+
+For the selected aspect ratio:
+- Implement letterboxing or pillarboxing – never stretch the content.
+- Implement:
+  - SCALE (zoom)
+  - PAN X (horizontal offset)
+  - PAN Y (vertical offset)
+- Add optional MIRROR (horizontal flip) for selfie mode and VJ aesthetics.
+
+4. FX CONTROLS – MAIN FX PANEL
+There must be a main FX control panel that controls parameters for the currently selected shader / FX preset.
+
+Controls (generic set, exact mapping is per shader):
+- INTENSITY
+- SCALE / ZOOM
+- DISTORT AMOUNT
+- SPEED
+- OFFSET X
+- OFFSET Y
+- COLOR SHIFT
+- EXPOSURE / BRIGHTNESS
+- CONTRAST
+- BLUR / SHARPNESS
+- GLITCH AMOUNT / MODE
+- MIX (how much FX vs source)
+
+UI for FX controls:
+- Use rotary knobs (custom composable) with:
+  - circular arc
+  - numerical value or percent display
+  - optional double tap to reset to default
+- Layout:
+  - group parameters logically, e.g. Distort group, Color group, Motion group.
+
+5. BPM & SYNC
+- A small BPM section:
+  - BPM value (manual input and slider)
+  - OPTIONAL: auto BPM detection from the audio source (can be a later step)
+  - Offset / phase control to shift the animation phase.
+- Provide GLSL uniform values:
+  - uBPM
+  - uBeatPhase or similar
+
+6. FX CHAIN
+FX chain structure:
+- Header FX
+- Layer 1
+- Layer 2
+- Layer 3
+- Layer 4
+
+For each FX slot:
+- Dropdown with preset name (or “None”)
+- Two or more knobs for key parameters of that FX
+- Blend mode selector:
+  - NORMAL
+  - ADD
+  - MULTIPLY
+  - SCREEN
+  - LIGHTEN
+  - DARKEN (if simple to implement)
+
+Routing:
+- Source → Header FX → Layer 1 → Layer 2 → Layer 3 → Layer 4 → Output
+- Layers can either:
+  - operate serially in the pipeline
+  - or be rendered separately and blended (you decide, but keep it efficient).
+
+7. GLSL SHADERS AND UNIFORMS
+Target:
+- Migrate and support my existing web shaders from SHADER_LIST.
+
+Each shader:
+- Written in GLSL ES 3.0, compatible with OpenGL ES 3.0.
+- Uses a Shadertoy like header with:
+  - uniform float iTime
+  - uniform vec2 iResolution
+  - camera or video source as samplerExternalOES or sampler2D
+  - uniforms for:
+    - uBass, uMid, uHigh
+    - uIntensity
+    - uScale
+    - uOffsetX, uOffsetY
+    - uColorShift
+    - uGlitch, uGlitchMode
+    - uBPM, uPhase
+    - mixStrength or similar.
+
+Implement a shader manager:
+- Dynamically compiles and links shaders.
+- Provides a typesafe way in Kotlin to set uniforms each frame.
+- Supports switching presets at runtime with minimal hitches.
+- Loads shader bodies from resources (raw/assets) if needed.
+
+8. VIDEO INPUT SOURCES
+Video source types:
+- Camera rear
+- Camera front
+- Video file
+
+CameraX:
+- Implement a Camera module that:
+  - can switch between front and rear cameras
+  - supports tap to focus
+  - optional exposure slider
+  - outputs to a SurfaceTexture bound to a GL OES texture
+- Provide correct orientation and aspect ratio for portrait and landscape.
+
+Video file:
+- Use MediaPlayer or ExoPlayer
+- Feed its video output into a SurfaceTexture used as a GL texture.
+- Its audio can be used as another audio source for analysis.
+
+UI:
+- Simple selector to choose current video source:
+  - Camera rear
+  - Camera front
+  - Video file (with picker)
+
+9. RECORDING PIPELINE – MEDIA CODEC + EGL
+Goal:
+- Record the final GL output along with audio to an MP4 file.
+
+Constraints:
+- No glReadPixels
+- Use dual surface rendering:
+  - one EGLSurface for onscreen rendering (GLSurfaceView)
+  - one EGLSurface bound to MediaCodec input Surface.
+
+Implementation plan:
+- Create a VisusRecorder module/class that:
+  - configures a H.264 encoder with:
+    - resolution according to selected aspect ratio and chosen output size
+    - bit rate around 10–15 Mbps for 1080p (you can adjust based on performance)
+    - 30 or 60 FPS
+  - creates a MediaMuxer for MP4 output
+  - exposes:
+    - startRecording(config)
+    - stopRecording()
+    - updateOnFrame() or similar hook.
+
+- In the GL renderer:
+  - when recording is active, draw each frame twice:
+    - once to the onscreen EGLSurface
+    - once to the encoder EGLSurface
+  - handle presentation timestamps properly.
+
+- Audio for recording:
+  - For now, pick one audio source (e.g. MUSIC or mixed bus)
+  - Encode using AAC and mux with the video stream.
+
+UI:
+- Record button:
+  - toggles recording state
+  - shows clear visual state (e.g. red glowing when recording)
+- On stop:
+  - the app saves an MP4 file in a user visible folder (e.g. DCIM/VISUS or Movies/VISUS)
+  - shows a toast or snackbar with the path.
+
+10. UX BEHAVIOR AND QUALITY
+- Everything must feel like a polished, expensive VJ tool:
+  - smooth transitions
+  - no flickering
+  - no ugly default components
+  - consistent padding, margins and radii
+- Dark theme, neon accent colors (purple, cyan, magenta etc.)
+- UI organized into clear panels with labels:
+  - Source Mixer
+  - Output & Framing
+  - Spectrum / BPM
+  - FX Controls
+  - FX Chain
+  - Recording
+
+11. PERFORMANCE AND STABILITY
+- Target 60 FPS on mid range devices whenever possible.
+- Avoid unnecessary allocations in the render loop.
+- Make sure CameraX and MediaCodec lifecycles are handled correctly:
+  - handle app going to background / foreground
+  - handle permission denial gracefully
+- The app must not crash when:
+  - user denies camera or mic permissions
+  - there is no available camera
+  - recording fails due to storage issues.
+
+YOUR TASK NOW – PHASE 1
+1. Inspect the existing codebase in this workspace.
+2. Implement Phase 1: full, production level UI for:
+   - Source Mixer
+   - Output & Framing
+   - Spectrum view
+   - BPM & main FX Controls
+   - FX Chain basic layout
+   - Recording controls
+3. Use Jetpack Compose with clean, maintainable components.
+4. Wire the UI to view models and data structures so that future steps (GL routing, audio routing, recording) can plug into it cleanly.
+5. Do NOT remove working build or rendering code that already exists. Extend and refactor carefully.
+
+Work iteratively:
+- Propose file and class level changes.
+- Then apply them directly in this repo.
+- Always keep the design premium quality, like in high end VJ software.
+
+Start now by:
+- describing the high level UI architecture you will implement,
+- then create or update the necessary Kotlin files and Composables.
