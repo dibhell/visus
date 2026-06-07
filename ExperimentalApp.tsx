@@ -1855,7 +1855,10 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             if (hasVideoReady && dt > 0) {
                 const instFps = 1000 / Math.max(1, dt);
                 fpsSmoothRef.current = fpsSmoothRef.current * 0.7 + instFps * 0.3;
-                setFps(Math.round(fpsSmoothRef.current));
+                if ((now - lastFpsTickRef.current) > 250) {
+                    setFps(Math.round(fpsSmoothRef.current));
+                    lastFpsTickRef.current = now;
+                }
 
                 if (frameCapModeRef.current === 'dynamic') {
                     let nextCap = frameCapRef.current;
@@ -1912,8 +1915,6 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                         autoScaleHighStreakRef.current = 0;
                     }
                 }
-
-                lastFpsTickRef.current = now;
             }
 
             scheduleNext();

@@ -18,6 +18,7 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
     const syncParamsRef = useRef<SyncParam[]>(syncParams);
     const activePointerIdRef = useRef<number | null>(null);
     const hoveredBandRef = useRef<number | null>(null);
+    const lastDrawRef = useRef<number>(0);
     const smoothBandsRef = useRef({ sync1: 0, sync2: 0, sync3: 0 });
     const fftInfoElRef = useRef<HTMLDivElement>(null);
 
@@ -132,7 +133,13 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
 
     // --- DRAW LOOP ---
     useEffect(() => {
-        const draw = () => {
+        const draw = (time: number) => {
+            if (time - lastDrawRef.current < 33) {
+                frameRef.current = requestAnimationFrame(draw);
+                return;
+            }
+            lastDrawRef.current = time;
+
             const canvas = canvasRef.current;
             if (!canvas) return;
 
