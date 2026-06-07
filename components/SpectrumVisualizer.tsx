@@ -437,7 +437,23 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                         const bin = binForFreq(freq);
                         const val = usedFFT[bin] || 0;
 
-                        let energy = (val / 255) * gain;
+                        // Calculate band gain multiplier for this frequency based on current band controls
+                        let multiplier = 1.0;
+                        const bandsForMult = syncParamsRef.current;
+                        if (bandsForMult && bandsForMult.length >= 3) {
+                            bandsForMult.slice(0, 3).forEach((b) => {
+                                if (!b) return;
+                                // Calculate distance in octaves
+                                const octaves = Math.abs(Math.log2(freq / b.freq));
+                                // width parameter determines the width of the filter response in octaves
+                                const sigma = (b.width / 100) * 1.5;
+                                const weight = Math.exp(-(octaves * octaves) / (2 * sigma * sigma));
+                                // Blend the gain change based on weight
+                                multiplier += (b.gain - 1.0) * weight;
+                            });
+                        }
+
+                        let energy = (val / 255) * gain * multiplier;
                         if (energy < 0.02) energy = 0.02;
                         if (energy < 0) energy = 0;
                         if (energy > 1) energy = 1;

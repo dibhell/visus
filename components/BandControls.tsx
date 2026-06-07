@@ -33,7 +33,7 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
 
     const formatFreq = (v: number) => v < 1000 ? `${Math.round(v)}Hz` : `${(v/1000).toFixed(1)}k`;
     const formatPct = (v: number) => `${v.toFixed(0)}%`;
-    const formatGain = (v: number) => `${v.toFixed(1)}x`;
+    const formatDepth = (v: number) => `${v.toFixed(1)}x`;
 
     return (
         <div className="bg-black/20 border border-white/5 rounded-xl p-4 mb-4 space-y-4 backdrop-blur-sm">
@@ -118,14 +118,14 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                             />
 
                             <Knob 
-                                label="Gain" 
+                                label="Depth" 
                                 value={sync.gain} 
                                 min={0.1} 
                                 max={3.0}
                                 step={0.1}
                                 defaultValue={DEFAULT_SYNC_PARAMS[i]?.gain ?? sync.gain}
                                 onChange={(v) => update(i, 'gain', v)}
-                                format={formatGain}
+                                format={formatDepth}
                                 color={colors[i]}
                             />
                         </div>
