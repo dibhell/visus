@@ -577,8 +577,14 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     const gainYFactor = Math.min(3.0, Math.max(0.1, param.gain)) / 3.0; 
                     const anchorY = H - (gainYFactor * H * 0.8); // Keep within 80% of height
                     
-                    // Connection Line
-                    ctx.strokeStyle = colors[i] + '66';
+                    // Get live level for this band
+                    const smooth = smoothBandsRef.current;
+                    const liveLevel = i === 0 ? smooth.sync1 : i === 1 ? smooth.sync2 : smooth.sync3;
+                    const levelClamped = Math.max(0, Math.min(1.2, liveLevel));
+                    const levelY = H - (levelClamped * (H - anchorY));
+
+                    // Connection Line (Background Track)
+                    ctx.strokeStyle = colors[i] + '33';
                     ctx.setLineDash([2, 2]);
                     ctx.lineWidth = 1;
                     ctx.beginPath();
@@ -587,15 +593,27 @@ const SpectrumVisualizer: React.FC<Props> = ({ audioServiceRef, syncParams, onPa
                     ctx.stroke();
                     ctx.setLineDash([]);
 
+                    // Active VU level line climbing from bottom
+                    ctx.strokeStyle = colors[i];
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(x, H);
+                    ctx.lineTo(x, levelY);
+                    ctx.stroke();
+
                     // Handle Interaction State
                     const isHovered = hoveredBandRef.current === i;
                     const isDraggingThis = isDragging.current === i;
                     
-                    // Width (Q) Visualizer (Halo)
+                    // Width (Q) Visualizer (Halo) pulsing with live level
                     ctx.beginPath();
-                    // Scale circle by width
-                    ctx.arc(x, anchorY, 5 + (param.width / 2), 0, Math.PI * 2);
-                    ctx.fillStyle = colors[i] + '11';
+                    const baseRadius = 5 + (param.width / 2);
+                    const pulseRadius = baseRadius * (1 + levelClamped * 0.45);
+                    ctx.arc(x, anchorY, pulseRadius, 0, Math.PI * 2);
+                    
+                    const opacityHex = Math.floor((0.08 + levelClamped * 0.15) * 255).toString(16).padStart(2, '0');
+                    ctx.fillStyle = colors[i] + opacityHex;
                     ctx.fill();
                     if (isHovered || isDraggingThis) {
                         ctx.strokeStyle = colors[i] + '44';

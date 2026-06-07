@@ -52,11 +52,20 @@ class VUProcessor extends AudioWorkletProcessor {
     this.bufferIndex = 0;
   }
 
-  process(inputs) {
+  process(inputs, outputs, parameters) {
     const input = inputs[0];
     if (!input || input.length === 0) return true;
     const channelData = input[0];
     if (!channelData) return true;
+
+    const output = outputs[0];
+    if (output && output.length > 0) {
+      for (let channel = 0; channel < input.length; channel++) {
+        if (output[channel]) {
+          output[channel].set(input[channel]);
+        }
+      }
+    }
 
     let sum = 0;
     const len = channelData.length;

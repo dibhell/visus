@@ -932,6 +932,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
     const [visualLevels, setVisualLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [fxVuLevels, setFxVuLevels] = useState({ main: 0, fx1: 0, fx2: 0, fx3: 0, fx4: 0, fx5: 0 });
     const [vuLevels, setVuLevels] = useState({ video: 0, music: 0, mic: 0 });
+    const [bandLevelsState, setBandLevelsState] = useState({ sync1: 0, sync2: 0, sync3: 0 });
 
     const [syncParams, setSyncParams] = useState<SyncParam[]>([
         { bpm: 128.0, offset: 0, freq: 70, width: 45, gain: 1.5 },
@@ -1676,9 +1677,9 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 }
 
                 const baseBands = (ae as any).getBandLevels ? (ae as any).getBandLevels() : (ae as any).bands;
-                const baseSync1 = shapeAudioLevel(baseBands?.sync1 ?? 0, currentSyncParams[0]?.gain ?? 1);
-                const baseSync2 = shapeAudioLevel(baseBands?.sync2 ?? 0, currentSyncParams[1]?.gain ?? 1);
-                const baseSync3 = shapeAudioLevel(baseBands?.sync3 ?? 0, currentSyncParams[2]?.gain ?? 1);
+                const baseSync1 = (baseBands?.sync1 ?? 0) * (currentSyncParams[0]?.gain ?? 1);
+                const baseSync2 = (baseBands?.sync2 ?? 0) * (currentSyncParams[1]?.gain ?? 1);
+                const baseSync3 = (baseBands?.sync3 ?? 0) * (currentSyncParams[2]?.gain ?? 1);
 
                 bandLevels.sync1 = baseSync1;
                 bandLevels.sync2 = baseSync2;
@@ -1809,6 +1810,11 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 setVisualLevels({ ...visualLevelsRef.current });
                 setFxVuLevels({ ...fxVuLevelsRef.current });
                 setVuLevels({ video: vu[0], music: vu[1], mic: vu[2] });
+                setBandLevelsState({
+                    sync1: bandLevels.sync1,
+                    sync2: bandLevels.sync2,
+                    sync3: bandLevels.sync3,
+                });
                 lastUiUpdateRef.current = now;
             }
 
@@ -3340,7 +3346,7 @@ const removePlaylistItem = useCallback((index: number) => {
                             onParamChange={updateSyncParams}
                             enabled={mixer.video.active || mixer.music.active || mixer.mic.active}
                         />
-                        <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={handleUpdateFilters} />
+                        <BandControls syncParams={syncParams} setSyncParams={setSyncParams} onUpdateFilters={handleUpdateFilters} liveLevels={bandLevelsState} />
                     </section>
 
                     <section>

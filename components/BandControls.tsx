@@ -14,9 +14,10 @@ interface BandControlsProps {
     syncParams: SyncParam[];
     setSyncParams: React.Dispatch<React.SetStateAction<SyncParam[]>>;
     onUpdateFilters: (params: SyncParam[]) => void;
+    liveLevels?: { sync1: number; sync2: number; sync3: number };
 }
 
-const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, onUpdateFilters }) => {
+const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, onUpdateFilters, liveLevels }) => {
     
     const update = (index: number, key: keyof SyncParam, value: number) => {
         const newParams = [...syncParams];
@@ -68,20 +69,24 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
 
             {/* Bands Knob View */}
             <div className="space-y-2">
-                {syncParams.slice(0, 3).map((sync, i) => (
-                    <div key={i} className={`relative p-2 bg-white/5 rounded-xl border-l-2 ${borderColors[i]} flex items-center gap-2 overflow-hidden`}>
-                        {/* Band VU */}
-                        <div className="absolute left-2 top-2 bottom-2 w-1.5 bg-slate-900/70 rounded-full overflow-hidden">
-                            <div
-                                className="w-full rounded-full transition-all duration-80"
-                                style={{
-                                    height: `${Math.min(100, Math.max(0, sync.gain * 30))}%`,
-                                    background: `linear-gradient(180deg, ${colors[i]} 0%, ${colors[i]}55 70%, transparent 100%)`,
-                                    position: 'absolute',
-                                    bottom: 0
-                                }}
-                            />
-                        </div>
+                {syncParams.slice(0, 3).map((sync, i) => {
+                    const level = liveLevels ? (i === 0 ? liveLevels.sync1 : i === 1 ? liveLevels.sync2 : liveLevels.sync3) : 0;
+                    const heightPercent = Math.min(100, Math.max(0, level * 100));
+
+                    return (
+                        <div key={i} className={`relative p-2 bg-white/5 rounded-xl border-l-2 ${borderColors[i]} flex items-center gap-2 overflow-hidden`}>
+                            {/* Band VU */}
+                            <div className="absolute left-2 top-2 bottom-2 w-1.5 bg-slate-900/70 rounded-full overflow-hidden">
+                                <div
+                                    className="w-full rounded-full transition-all duration-80"
+                                    style={{
+                                        height: `${heightPercent}%`,
+                                        background: `linear-gradient(180deg, ${colors[i]} 0%, ${colors[i]}55 70%, transparent 100%)`,
+                                        position: 'absolute',
+                                        bottom: 0
+                                    }}
+                                />
+                            </div>
 
                         <div className={`text-[10px] font-black uppercase w-8 -rotate-90 ${textColors[i]} text-center`}>
                             {names[i]}
@@ -124,8 +129,9 @@ const BandControls: React.FC<BandControlsProps> = ({ syncParams, setSyncParams, 
                                 color={colors[i]}
                             />
                         </div>
-                    </div>
-                ))}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
