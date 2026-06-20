@@ -21,12 +21,7 @@ export class GLService {
         this.canvas = canvas;
         this.videoSize = { w: 0, h: 0 };
         const sizeInfo = { w: canvas.width, h: canvas.height };
-        let twoDProbe = false;
-        try {
-            twoDProbe = !!canvas.getContext('2d', { willReadFrequently: false } as any);
-        } catch (err) {
-            console.warn('[VISUS] 2d probe exception (ignored):', err);
-        }
+        const twoDProbe = false;
         const options: WebGLContextAttributes = { preserveDrawingBuffer: false, alpha: false, powerPreference: 'high-performance', antialias: false };
         try {
             this.gl = canvas.getContext("webgl2", options) as unknown as WebGLRenderingContext | null;

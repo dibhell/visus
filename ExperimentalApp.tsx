@@ -54,12 +54,13 @@ const getRenderPreference = (): 'auto' | 'webgl' | 'canvas' => {
 };
 
 const getWorkerPreference = (): boolean => {
-    if (typeof window === 'undefined') return true;
+    if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
     const workerParam = params.get('worker');
     const ls = localStorage.getItem('visus_worker');
+    if (workerParam === '1' || workerParam === 'true' || ls === 'on') return true;
     if (workerParam === '0' || workerParam === 'false' || ls === 'off') return false;
-    return true;
+    return false;
 };
 
 const getUseWorkletFFT = (): boolean => {
@@ -1176,9 +1177,23 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             workerRef.current.postMessage({ type: 'resize', width: renderW, height: renderH });
             return;
         }
+        if (renderModeRef.current === 'canvas2d') {
+            const canvas = canvasRef.current;
+            if (canvas && ((canvas as any).__visusOffscreenTransferred !== true)) {
+                if (canvas.width !== renderW) canvas.width = renderW;
+                if (canvas.height !== renderH) canvas.height = renderH;
+            }
+            return;
+        }
         const renderer = rendererRef.current;
         if (!renderer) {
-            pendingResizeRef.current = { w: renderW, h: renderH };
+            const canvas = canvasRef.current;
+            if (canvas && ((canvas as any).__visusOffscreenTransferred !== true)) {
+                if (canvas.width !== renderW) canvas.width = renderW;
+                if (canvas.height !== renderH) canvas.height = renderH;
+            } else {
+                pendingResizeRef.current = { w: renderW, h: renderH };
+            }
             return;
         }
         renderer.resize(renderW, renderH);
@@ -1204,16 +1219,19 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
             const hWindow = window.innerHeight;
             const isMobileNow = wWindow < 768;
             setIsMobile(isMobileNow);
-            const panelWidth = (panelVisible && panelRectRef.current.width > 0)
+            const measuredPanelWidth = (panelVisible && panelRectRef.current.width > 0)
                 ? panelRectRef.current.width
                 : ((panelVisible && uiPanelRef.current) ? uiPanelRef.current.getBoundingClientRect().width : 0);
+            const sideGap = panelVisible ? 16 : 0;
+            const minSceneW = isMobileNow ? Math.max(1, wWindow) : Math.min(Math.max(1, wWindow), 640);
+            const maxPanelWidth = isMobileNow ? 0 : Math.max(0, wWindow - minSceneW - sideGap);
+            const panelWidth = panelVisible ? Math.min(measuredPanelWidth, maxPanelWidth) : 0;
             if (panelVisible && panelRectRef.current.width === 0 && uiPanelRef.current) {
                 const r = uiPanelRef.current.getBoundingClientRect();
                 panelRectRef.current = { width: r.width, height: r.height };
             }
-            const sideGap = panelVisible ? 16 : 0;
-            const availableW = isMobileNow ? wWindow : Math.max(0, wWindow - panelWidth - sideGap);
-            let availableH = hWindow;
+            const availableW = isMobileNow ? Math.max(1, wWindow) : Math.max(minSceneW, wWindow - panelWidth - sideGap);
+            let availableH = Math.max(1, hWindow);
             let topOffset = 0;
 
             if (isMobileNow && panelVisible) {
@@ -1221,44 +1239,26 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                 topOffset = 8;
             }
 
-            let finalW = wWindow;
-            let finalH = hWindow;
+            const displayW = Math.max(1, availableW);
+            const displayH = Math.max(1, availableH);
 
-            if (aspectRatio === 'native') {
-                if (videoRef.current && videoRef.current.videoWidth > 0) {
-                    finalW = videoRef.current.videoWidth;
-                    finalH = videoRef.current.videoHeight;
-                }
-            } else if (aspectRatio === '16:9') {
-                finalH = 1080; finalW = 1920;
-            } else if (aspectRatio === '9:16') {
-                finalW = 1080; finalH = 1920;
-            } else if (aspectRatio === '4:5') {
-                finalW = 1080; finalH = 1350;
-            } else if (aspectRatio === '1:1') {
-                finalW = 1080; finalH = 1080;
-            } else if (aspectRatio === '21:9') {
-                finalH = 1080; finalW = 2520;
-            } else if (aspectRatio === 'fit') {
-                finalW = wWindow; finalH = hWindow;
-            }
-
-            const scale = Math.min(availableW / finalW, availableH / finalH);
-            const displayW = finalW * scale;
-            const displayH = finalH * scale;
-
-            const renderW = Math.max(4, Math.round(finalW * renderScaleRef.current));
-            const renderH = Math.max(4, Math.round(finalH * renderScaleRef.current));
+            const renderW = Math.max(4, Math.round(displayW * renderScaleRef.current));
+            const renderH = Math.max(4, Math.round(displayH * renderScaleRef.current));
 
             canvas.style.width = `${displayW}px`;
             canvas.style.height = `${displayH}px`;
-            canvas.style.left = `${(isMobileNow ? (wWindow - displayW) / 2 : panelWidth + sideGap + (availableW - displayW) / 2)}px`;
-            canvas.style.top = `${topOffset + (availableH - displayH) / 2}px`;
+            canvas.style.left = `${isMobileNow ? 0 : panelWidth + sideGap}px`;
+            canvas.style.top = `${topOffset}px`;
+            canvas.style.transform = 'none';
 
             applyRendererResize(renderW, renderH);
         });
-    }, [applyRendererResize, aspectRatio, panelVisible]);
+    }, [applyRendererResize, panelVisible]);
 
+    useEffect(() => {
+        renderModeRef.current = renderMode;
+        handleResize();
+    }, [renderMode, handleResize]);
     useEffect(() => {
         handleResize();
         const onResize = () => handleResize();
@@ -1332,6 +1332,7 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                     const worker = new (RenderWorker as any)();
                     workerRef.current = worker;
                     const offscreen = (canvas as any).transferControlToOffscreen();
+                    (canvas as any).__visusOffscreenTransferred = true;
                     const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
                     const initPromise = new Promise<boolean>((resolve) => {
                         worker.onmessage = (ev: MessageEvent) => {
@@ -1410,6 +1411,14 @@ const ExperimentalAppFull: React.FC<ExperimentalProps> = ({ onExit, bootRequeste
                             rendererRef.current = renderer;
                             console.info('[VISUS] FastGLService created (late)');
                         }
+                        if ((canvas as any).__visusOffscreenTransferred) {
+                            setRenderMode('webgl-worker');
+                            setFallbackReason('INIT_ERROR');
+                            setLastShaderError('worker init failed after OffscreenCanvas transfer');
+                            console.warn('[VISUS] worker failed after OffscreenCanvas transfer; skipping main-thread canvas fallback');
+                            return;
+                        }
+                        handleResize();
                         const webglReady = renderer.init(canvas);
                         if (webglReady) {
                             const shaderDef = SHADER_LIST[fxStateRef.current.main.shader] || SHADER_LIST['00_NONE'];
@@ -2940,8 +2949,16 @@ const removePlaylistItem = useCallback((index: number) => {
         <div className="w-full h-screen overflow-hidden bg-[#010312] relative font-sans text-slate-300 selection:bg-accent selection:text-white">
             <canvas
                 ref={canvasRef}
-                className={`absolute origin-center ${isMobile && panelVisible ? 'z-50 pointer-events-none' : 'z-10'}`}
-                style={{ boxShadow: '0 0 80px rgba(0,0,0,0.5)' }}
+                className={`fixed origin-top-left ${isMobile && panelVisible ? 'z-50 pointer-events-none' : 'z-10'}`}
+                style={{
+                    left: 0,
+                    top: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    transform: 'none',
+                    display: 'block',
+                    boxShadow: '0 0 80px rgba(0,0,0,0.5)'
+                }}
             />
             <video
                 ref={videoRef}

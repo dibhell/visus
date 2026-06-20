@@ -209,6 +209,7 @@ export const GLSL_HEADER = `
     uniform vec2 iVideoResolution;
 
     uniform sampler2D iChannel0;
+    uniform sampler2D iFrame1;
 
     
 
@@ -333,11 +334,33 @@ export const GLSL_HEADER = `
 
         vec2 p = abs(fract(uv * 0.5 + 0.5) * 2.0 - 1.0);
 
-        p.y = 1.0 - p.y; // flip vertically to keep video upright
+        // Video upload already uses UNPACK_FLIP_Y_WEBGL; keep shader UVs screen-oriented.
 
         if(iVideoResolution.x < 2.0) return vec4(0.0);
 
         return texture2D(iChannel0, p);
+
+    }
+
+    vec4 getFeedback(vec2 uv) {
+
+        vec2 p = clamp(uv, 0.0, 1.0);
+
+        return texture2D(iFrame1, p);
+
+    }
+
+    float luma(vec3 c) {
+
+        return dot(c, vec3(0.299, 0.587, 0.114));
+
+    }
+
+    vec2 hash22(vec2 p) {
+
+        p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+
+        return fract(sin(p) * 43758.5453);
 
     }
 
@@ -1183,15 +1206,81 @@ export const GLSL_HEADER = `
              return mix(bg, getVideo(wuv), amt);
         }
         else if (id == 140) { // DATA MOSHER
-            vec2 block = floor(uv * vec2(48.0, 32.0));
-            float r = rand(block + floor(iTime * 2.0));
-            vec2 jitter = (vec2(rand(block * 2.3), rand(block * 3.7)) - 0.5) * vec2(0.12, 0.05) * amt;
-            vec2 moshedUV = uv + jitter;
-            float line = step(0.85, fract(block.y * 0.17 + iTime * 0.5));
-            moshedUV.x += line * 0.08 * amt;
-            vec4 frozen = getVideo(clamp(uv + vec2(0.05 * sin(iTime * 2.0) * amt, 0.0), 0.0, 1.0));
-            vec4 c = mix(getVideo(moshedUV), frozen, step(0.9, r) * 0.7);
-            return mix(bg, c, amt);
+            float depth = clamp(amt, 0.0, 8.0);
+            float drive = clamp(depth / 4.0, 0.0, 1.0);
+            float wet = clamp(0.18 + depth * 0.20, 0.0, 1.0);
+
+            vec2 invRes = 1.0 / max(iResolution.xy, vec2(1.0));
+            vec2 blockPx = mix(vec2(18.0, 14.0), vec2(58.0, 38.0), drive);
+            vec2 blockUv = blockPx * invRes;
+            vec2 pixel = uv * iResolution.xy;
+            vec2 block = floor(pixel / blockPx);
+            vec2 cell = fract(pixel / blockPx);
+            vec2 center = (block + 0.5) * blockUv;
+
+            float epoch = floor(iTime * mix(2.0, 8.0, drive));
+            vec2 h = hash22(block + epoch);
+            vec2 hSlow = hash22(block * 0.37 + floor(iTime * 0.75));
+
+            vec4 cur = getVideo(uv);
+            vec4 curBlock = getVideo(center);
+            vec4 prevHere = getFeedback(uv);
+            vec4 prevBlock = getFeedback(center);
+            float c0 = luma(curBlock.rgb);
+            float p0 = luma(prevBlock.rgb);
+            float temporal = c0 - p0;
+            float gx = luma(getVideo(center + vec2(blockUv.x, 0.0)).rgb) - luma(getVideo(center - vec2(blockUv.x, 0.0)).rgb);
+            float gy = luma(getVideo(center + vec2(0.0, blockUv.y)).rgb) - luma(getVideo(center - vec2(0.0, blockUv.y)).rgb);
+            float motion = smoothstep(0.015, 0.24, abs(temporal) + abs(gx) * 0.55 + abs(gy) * 0.55);
+
+            vec2 optical = vec2(gx, gy) * (temporal / max(0.018, gx * gx + gy * gy));
+            optical *= blockUv * mix(3.0, 12.0, drive);
+            optical = clamp(optical, -blockUv * 7.0, blockUv * 7.0);
+
+            vec2 codecVector = (h - 0.5) * blockUv * mix(0.8, 7.5, drive) * (0.35 + motion);
+            float rowSeed = rand(vec2(block.y, epoch * 0.71));
+            float rowTear = smoothstep(0.70, 0.98, rowSeed) * drive;
+            codecVector.x += rowTear * blockUv.x * mix(2.0, 14.0, hSlow.x) * sign(h.y - 0.5);
+            codecVector.y += sin(block.x * 0.43 + iTime * 2.1) * blockUv.y * drive * 0.55;
+            vec2 flow = optical + codecVector;
+
+            float k = fract(iTime * 0.42 + h.x * 0.37);
+            float iRefresh = 1.0 - smoothstep(0.015, 0.16, k);
+            float hold = smoothstep(0.34, 0.92, hSlow.y + drive * 0.22);
+            float feedbackLive = smoothstep(0.01, 0.12, p0 + luma(prevHere.rgb));
+            float prediction = clamp(0.50 + drive * 0.42 + hold * 0.22 + motion * 0.18 - iRefresh * 0.62, 0.0, 0.98) * feedbackLive;
+
+            vec2 advectUv = uv - flow * (0.75 + motion * 1.65);
+            vec2 trailUv = uv - flow * (2.0 + cell.x * 3.0 + hold * 3.0) - vec2(rowTear * blockUv.x * 4.0, 0.0);
+            vec2 staleUv = center - flow * (1.6 + hold * 2.5);
+            vec4 predicted = getFeedback(advectUv);
+            vec4 trail = getFeedback(trailUv);
+            vec4 stale = getFeedback(staleUv);
+
+            predicted.rgb = mix(predicted.rgb, stale.rgb, hold * 0.45);
+            vec4 inter = mix(cur, predicted, prediction);
+            inter = mix(inter, trail, clamp((hold + rowTear) * drive * 0.48, 0.0, 0.86));
+
+            vec2 chromaFlow = flow + (h - 0.5) * blockUv * drive * 2.6;
+            vec3 chroma;
+            chroma.r = getFeedback(advectUv + vec2(chromaFlow.x, 0.0)).r;
+            chroma.g = inter.g;
+            chroma.b = getFeedback(advectUv - vec2(chromaFlow.x * 0.85, chromaFlow.y * 0.45)).b;
+            inter.rgb = mix(inter.rgb, chroma, 0.58 * drive * feedbackLive);
+
+            vec3 residual = (cur.rgb - curBlock.rgb) * (0.18 + motion * 0.32) * (1.0 - prediction);
+            inter.rgb += residual;
+            float levels = mix(18.0, 5.0, drive);
+            vec3 quantized = floor(inter.rgb * levels + h.x * 0.35) / levels;
+            inter.rgb = mix(inter.rgb, quantized, 0.34 + 0.36 * drive);
+
+            float blockEdge = max(step(cell.x, 0.035), step(cell.y, 0.045)) * drive;
+            float packetNoise = (rand(block + floor(iTime * 24.0)) - 0.5) * 0.14 * drive * (hold + rowTear + motion);
+            inter.rgb += packetNoise + blockEdge * vec3(-0.08, 0.02, 0.10);
+            float scanBurst = step(0.986 - drive * 0.045, rand(vec2(floor(pixel.y / 3.0), epoch)));
+            inter.rgb = mix(inter.rgb, vec3(inter.r * 1.35, inter.g * 0.72, inter.b * 1.55), scanBurst * (0.30 + drive * 0.42));
+
+            return mix(bg, vec4(clamp(inter.rgb, 0.0, 1.0), 1.0), wet);
         }
         else if (id == 141) { // VOXELIZER 3D
             float vox = mix(12.0, 64.0, amt);
