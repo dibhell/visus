@@ -238,7 +238,7 @@ const drawFrame = (bitmap: ImageBitmap, time: number, fx: FxPacket, videoSize: {
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
     }
 
-    const needsFeedback = fx.main_id === 140 || fx.fx1_id === 140 || fx.fx2_id === 140 || fx.fx3_id === 140 || fx.fx4_id === 140 || fx.fx5_id === 140;
+    const needsFeedback = [fx.main_id, fx.fx1_id, fx.fx2_id, fx.fx3_id, fx.fx4_id, fx.fx5_id].some((id) => id === 140 || (id >= 144 && id <= 149));
     const feedbackReady = needsFeedback && !!(copyProgram && framebuffer && feedbackTexture && outputTexture);
     if (feedbackReady) {
         ensureFeedbackTarget(canvas.width, canvas.height);

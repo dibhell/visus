@@ -336,7 +336,7 @@ export class FastGLService {
         const u = this.uniformCache;
         const required = ['iTime', 'iResolution', 'iVideoResolution', 'iChannel0', 'uFXGain', 'uFXMix', 'uFX_ID', 'uAdditiveMasterGain', 'uTranslate', 'uScale', 'uMirror'];
         if (required.some(name => !u[name])) return;
-        const needsFeedback = fx.main_id === 140 || fx.fx1_id === 140 || fx.fx2_id === 140 || fx.fx3_id === 140 || fx.fx4_id === 140 || fx.fx5_id === 140;
+        const needsFeedback = [fx.main_id, fx.fx1_id, fx.fx2_id, fx.fx3_id, fx.fx4_id, fx.fx5_id].some((id) => id === 140 || (id >= 144 && id <= 149));
         const feedbackReady = needsFeedback && !!(this.copyProgram && this.framebuffer && this.feedbackTexture && this.outputTexture);
         if (feedbackReady) {
             this.ensureFeedbackTarget(this.canvas.width, this.canvas.height);
