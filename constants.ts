@@ -1208,157 +1208,92 @@ export const GLSL_HEADER = `
         else if (id == 140 || id == 144 || id == 145 || id == 146 || id == 147 || id == 148 || id == 149) { // DATAMOSH FAMILY
             float depth = clamp(amt, 0.0, 8.0);
             float drive = clamp(depth / 4.0, 0.0, 1.0);
-            float wet = clamp(0.22 + depth * 0.25, 0.0, 1.0);
+            float wet = clamp(0.30 + depth * 0.24, 0.0, 1.0);
             vec2 invRes = 1.0 / max(iResolution.xy, vec2(1.0));
             vec2 px = uv * iResolution.xy;
             vec4 cur = getVideo(uv);
             vec4 prev = getFeedback(uv);
-            float live = smoothstep(0.012, 0.18, luma(prev.rgb));
-            float temporal = luma(cur.rgb) - luma(prev.rgb);
-            float motion = smoothstep(0.018, 0.24, abs(temporal));
+            float live = smoothstep(0.01, 0.14, luma(prev.rgb));
 
-            if (id == 140) { // CLASSIC / VOID: dropped I-frames, coarse prediction, dirty residuals
-                float rowH = mix(24.0, 82.0, drive);
-                float row = floor(px.y / rowH);
-                float epoch = floor(iTime * mix(1.2, 4.8, drive));
-                vec2 rh = hash22(vec2(row, epoch));
-                float tear = (rh.x - 0.5) * mix(0.035, 0.28, drive) * step(0.46, rh.y);
+            float sceneDiff = 0.0;
+            sceneDiff += abs(luma(getVideo(vec2(0.18, 0.26)).rgb) - luma(getFeedback(vec2(0.18, 0.26)).rgb));
+            sceneDiff += abs(luma(getVideo(vec2(0.72, 0.32)).rgb) - luma(getFeedback(vec2(0.72, 0.32)).rgb));
+            sceneDiff += abs(luma(getVideo(vec2(0.40, 0.68)).rgb) - luma(getFeedback(vec2(0.40, 0.68)).rgb));
+            sceneDiff += abs(luma(getVideo(vec2(0.86, 0.78)).rgb) - luma(getFeedback(vec2(0.86, 0.78)).rgb));
+            float cut = smoothstep(0.16, 0.46, sceneDiff * 0.25) * live;
 
-                vec2 bpx = vec2(mix(54.0, 176.0, drive), mix(34.0, 112.0, drive));
-                vec2 warpedPx = px + vec2(tear * iResolution.x, sin(row * 1.71 + iTime) * rowH * 0.16 * drive);
-                vec2 block = floor(warpedPx / bpx);
-                vec2 h = hash22(block + epoch);
-                vec2 center = (block + 0.5) * bpx * invRes;
+            vec2 d = invRes * mix(2.0, 9.0, drive);
+            float lum = luma(cur.rgb);
+            float temporal = lum - luma(prev.rgb);
+            float gx = luma(getVideo(uv + vec2(d.x, 0.0)).rgb) - luma(getVideo(uv - vec2(d.x, 0.0)).rgb);
+            float gy = luma(getVideo(uv + vec2(0.0, d.y)).rgb) - luma(getVideo(uv - vec2(0.0, d.y)).rgb);
+            vec2 flow = vec2(gx, gy) * (temporal / max(0.015, gx * gx + gy * gy));
+            flow = clamp(flow, -1.0, 1.0) * (0.012 + 0.095 * drive);
 
-                float gx = luma(getVideo(center + vec2(bpx.x, 0.0) * invRes).rgb) - luma(getVideo(center - vec2(bpx.x, 0.0) * invRes).rgb);
-                float gy = luma(getVideo(center + vec2(0.0, bpx.y) * invRes).rgb) - luma(getVideo(center - vec2(0.0, bpx.y) * invRes).rgb);
-                vec2 flow = vec2(gx, gy) * (temporal / max(0.018, gx * gx + gy * gy));
-                flow *= vec2(0.055, 0.04) * (1.0 + drive * 3.4);
-                flow += (h - 0.5) * vec2(0.035, 0.022) * drive;
-                flow.x += tear;
+            float tStep = floor(iTime * mix(1.5, 7.0, drive));
+            vec2 region = floor((uv + flow * 2.0) * vec2(mix(4.0, 9.0, drive), mix(3.0, 6.0, drive)) + vec2(0.0, tStep * 0.13));
+            vec2 h = hash22(region + tStep);
+            float island = smoothstep(0.24, 0.92, h.x + cut * 0.45 + drive * 0.10);
 
-                float refresh = 1.0 - step(0.10 + 0.10 * (1.0 - drive), fract(iTime * 0.36 + h.x * 0.73));
-                float hold = (1.0 - refresh) * live;
-                vec4 predicted = getFeedback(uv - flow * (1.0 + 2.6 * motion));
-                vec4 stale = getFeedback(center - flow * (1.6 + h.y * 3.0));
-                vec4 smear = getFeedback(uv - flow * (4.0 + 8.0 * h.x));
+            float row = floor(px.y / mix(10.0, 42.0, drive));
+            vec2 rh = hash22(vec2(row, tStep));
+            float tearGate = step(0.58 - drive * 0.22, rh.y);
+            vec2 tear = vec2((rh.x - 0.5) * mix(0.012, 0.260, drive) * tearGate, 0.0);
+            vec2 curl = vec2(sin(uv.y * 18.0 + iTime * 1.7), cos(uv.x * 14.0 - iTime * 1.3)) * 0.010 * drive;
 
-                vec4 outc = mix(cur, predicted, hold * (0.58 + drive * 0.32));
-                outc.rgb = mix(outc.rgb, stale.rgb, hold * drive * (0.20 + 0.42 * h.y));
-                outc.rgb = mix(outc.rgb, smear.rgb, hold * abs(tear) * (1.4 + drive));
-                outc.r = mix(outc.r, getFeedback(uv - flow * 1.6 + vec2(0.010, 0.0) * drive).r, hold * 0.36);
-                outc.b = mix(outc.b, getFeedback(uv - flow * 2.2 - vec2(0.012, 0.004) * drive).b, hold * 0.42);
-                outc.rgb += (cur.rgb - getVideo(center).rgb) * (0.16 + motion * 0.34) * (1.0 - hold);
-                outc.rgb = mix(outc.rgb, floor(outc.rgb * mix(22.0, 7.0, drive) + h.x * 0.31) / mix(22.0, 7.0, drive), 0.22 + drive * 0.30);
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
-            else if (id == 144) { // GLIDE: continuous P-frame duplication, no visible grid
-                float region = floor(uv.y * mix(5.0, 13.0, drive) + sin(uv.x * 8.0 + iTime * 0.3));
-                vec2 h = hash22(vec2(region, floor(iTime * 0.55)));
-                vec2 dir = normalize(h - 0.5 + vec2(0.001));
-                float pulse = smoothstep(0.18, 0.86, fract(iTime * mix(0.36, 0.92, drive) + h.x));
-                vec2 drift = dir * (0.010 + 0.092 * drive) * (0.45 + pulse);
-                drift += vec2(sin(uv.y * 17.0 + iTime * 1.7), cos(uv.x * 11.0 - iTime * 1.1)) * 0.008 * drive;
+            float mGlide = id == 144 ? 1.0 : 0.0;
+            float mSink = id == 145 ? 1.0 : 0.0;
+            float mStretch = id == 146 ? 1.0 : 0.0;
+            float mFluid = id == 147 ? 1.0 : 0.0;
+            float mBuffer = id == 148 ? 1.0 : 0.0;
+            float mSlice = id == 149 ? 1.0 : 0.0;
 
-                vec4 a = getFeedback(uv - drift);
-                vec4 b = getFeedback(uv - drift * (2.2 + h.x * 3.5));
-                vec4 c = getFeedback(uv - drift * (5.0 + h.y * 7.0));
-                vec4 outc = mix(cur, a, live * (0.56 + 0.28 * drive));
-                outc.rgb = mix(outc.rgb, b.rgb, live * (0.20 + 0.36 * drive) * pulse);
-                outc.rgb = mix(outc.rgb, c.rgb, live * drive * 0.22 * (1.0 - motion));
-                outc.r = mix(outc.r, getFeedback(uv - drift * 1.3 + vec2(0.008, 0.0) * drive).r, 0.32 * drive * live);
-                outc.b = mix(outc.b, getFeedback(uv - drift * 2.4 - vec2(0.008, 0.0) * drive).b, 0.38 * drive * live);
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
-            else if (id == 145) { // SINK: previous frame drowns moving areas
-                float wave = 0.5 + 0.5 * sin(uv.x * 22.0 + iTime * 1.4);
-                float sink = (0.010 + 0.150 * drive) * (0.35 + motion * 1.35 + wave * 0.35);
-                vec2 wobble = vec2(sin(uv.y * 19.0 + iTime) * 0.010 * drive, sink);
-                vec4 drownA = getFeedback(uv + wobble);
-                vec4 drownB = getFeedback(uv + wobble * vec2(0.5, 2.4));
-                vec4 stopped = getFeedback(uv + vec2(0.0, sink * 4.0));
-                vec4 outc = mix(cur, drownA, live * (0.42 + drive * 0.30 + motion * 0.30));
-                outc.rgb = mix(outc.rgb, drownB.rgb, live * motion * (0.32 + drive * 0.28));
-                outc.rgb = mix(outc.rgb, stopped.rgb, live * drive * smoothstep(0.04, 0.18, abs(temporal)) * 0.46);
-                outc.rgb *= 0.96 + vec3(0.02, -0.01, 0.04) * drive;
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
-            else if (id == 146) { // STRETCH: irregular horizontal/vertical macroblock pull
-                float bandH = mix(18.0, 76.0, drive);
-                float band = floor((px.y + sin(px.x * 0.018 + iTime) * bandH * drive) / bandH);
-                vec2 h = hash22(vec2(band, floor(iTime * mix(1.4, 4.4, drive))));
-                float vertical = step(0.72, h.y);
-                vec2 axis = mix(vec2(sign(h.x - 0.5), 0.0), vec2(0.0, sign(h.x - 0.5)), vertical);
-                float pull = (0.025 + 0.24 * drive) * (0.35 + h.x) * step(0.18, h.y);
-                vec2 baseUv = uv + axis * pull;
-                vec4 s1 = getFeedback(baseUv);
-                vec4 s2 = getFeedback(uv + axis * pull * 2.1);
-                vec4 s3 = getFeedback(uv - axis * pull * 1.4);
-                vec4 avg = (s1 + s2 + s3) / 3.0;
-                vec4 outc = mix(cur, avg, live * (0.46 + drive * 0.42));
-                outc.r = mix(outc.r, getFeedback(uv + axis * pull * 2.8).r, live * drive * 0.42);
-                outc.b = mix(outc.b, getFeedback(uv - axis * pull * 2.2).b, live * drive * 0.42);
-                float bandEdge = smoothstep(0.92, 1.0, fract((px.y + h.x * bandH) / bandH));
-                outc.rgb += bandEdge * vec3(-0.04, 0.01, 0.05) * drive;
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
-            else if (id == 147) { // FLUID: averaged motion vectors, smooth liquid mosh
-                vec2 d = invRes * mix(3.0, 12.0, drive);
-                float gx = luma(getVideo(uv + vec2(d.x, 0.0)).rgb) - luma(getVideo(uv - vec2(d.x, 0.0)).rgb);
-                float gy = luma(getVideo(uv + vec2(0.0, d.y)).rgb) - luma(getVideo(uv - vec2(0.0, d.y)).rgb);
-                vec2 flow = vec2(gx, gy) * (temporal / max(0.012, gx * gx + gy * gy));
-                flow = clamp(flow, -1.0, 1.0) * (0.012 + 0.085 * drive);
-                vec2 curl = vec2(sin(uv.y * 9.0 + iTime * 0.9), cos(uv.x * 8.0 - iTime * 0.7)) * 0.010 * drive;
-                vec2 fuv = uv - flow + curl;
-                vec4 avg = (
-                    getFeedback(fuv) +
-                    getFeedback(fuv + vec2(d.x, 0.0) * 1.4) +
-                    getFeedback(fuv - vec2(d.x, 0.0) * 1.4) +
-                    getFeedback(fuv + vec2(0.0, d.y) * 1.4) +
-                    getFeedback(fuv - vec2(0.0, d.y) * 1.4)
-                ) * 0.2;
-                vec4 outc = mix(cur, avg, live * (0.56 + drive * 0.34));
-                outc.rgb = mix(outc.rgb, getFeedback(fuv - flow * 2.7).rgb, live * drive * 0.24);
-                outc.rgb = mix(outc.rgb, floor(outc.rgb * 32.0) / 32.0, 0.10 * drive);
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
-            else if (id == 148) { // BUFFER: recursive ring-buffer vector echo
-                vec2 p = uv - 0.5;
-                float r = length(p) + 0.0001;
-                vec2 radial = p / r;
-                vec2 tang = vec2(-radial.y, radial.x);
-                float ring = floor(r * mix(18.0, 48.0, drive) - iTime * mix(1.0, 4.0, drive));
-                vec2 h = hash22(vec2(ring, floor(iTime * 1.15)));
-                vec2 off = tang * (h.x - 0.5) * (0.020 + 0.120 * drive) + radial * (h.y - 0.5) * (0.010 + 0.060 * drive);
-                off += vec2(sin(uv.y * 31.0 + iTime), cos(uv.x * 27.0 - iTime)) * 0.006 * drive;
-                vec4 e1 = getFeedback(uv - off);
-                vec4 e2 = getFeedback(uv - off * (2.0 + h.x * 4.0));
-                vec4 e3 = getFeedback(uv + tang * (0.014 + 0.050 * drive) * sin(iTime + ring));
-                float gate = smoothstep(0.15, 0.95, h.y + drive * 0.22);
-                vec4 outc = mix(cur, e1, live * (0.46 + drive * 0.28));
-                outc.rgb = mix(outc.rgb, e2.rgb, live * gate * (0.22 + drive * 0.36));
-                outc.rgb = mix(outc.rgb, e3.rgb, live * (1.0 - gate) * drive * 0.30);
-                outc.rgb += sin(ring * 2.1 + iTime * 3.0) * 0.035 * drive;
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
-            else { // SLICE: ffglitch-style cuts and zoomed row slips
-                float sliceH = mix(12.0, 58.0, drive);
-                float band = floor(px.y / sliceH);
-                float epoch = floor(iTime * mix(2.0, 7.0, drive));
-                vec2 h = hash22(vec2(band, epoch));
-                float active = step(0.35 + 0.30 * (1.0 - drive), h.y);
-                float xoff = (h.x - 0.5) * mix(0.030, 0.360, drive) * active;
-                float zoom = (h.y - 0.5) * mix(0.015, 0.095, drive) * active;
-                vec2 suv = uv + vec2(xoff, 0.0) + (uv - 0.5) * zoom;
-                suv.y += sin(uv.x * 16.0 + band + iTime) * 0.006 * drive * active;
-                vec4 slipped = getFeedback(suv);
-                vec4 fresh = getVideo(suv + vec2(xoff * 0.18, 0.0));
-                vec4 outc = mix(cur, slipped, live * active * (0.52 + drive * 0.34));
-                outc.rgb = mix(outc.rgb, fresh.rgb, (1.0 - live) * 0.45 + (1.0 - active) * 0.18);
-                float cutLine = smoothstep(0.93, 1.0, fract(px.y / sliceH));
-                outc.rgb += cutLine * vec3(-0.06, 0.01, 0.09) * drive * active;
-                return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
-            }
+            vec2 drift = flow + tear + curl;
+            drift *= 1.0 + mGlide * 1.8 + mBuffer * 2.4;
+            drift.y += mSink * (0.020 + 0.170 * drive) * (0.35 + island + cut);
+
+            vec2 axis = normalize(vec2(sign(h.x - 0.5), sign(h.y - 0.5)) + vec2(0.001));
+            drift += axis * mStretch * (0.035 + 0.240 * drive) * island;
+
+            float sliceBand = step(0.45 - drive * 0.20, rh.x) * mSlice;
+            vec2 sliceUv = uv + vec2((rh.x - 0.5) * mix(0.040, 0.380, drive), 0.0) * sliceBand;
+            sliceUv += (uv - 0.5) * (rh.y - 0.5) * 0.11 * drive * sliceBand;
+
+            vec2 adv = mix(uv - drift * (1.0 + cut * 5.0), sliceUv - drift, mSlice);
+            vec4 pred = getFeedback(adv);
+            vec4 longTrail = getFeedback(uv - drift * (4.0 + 12.0 * h.y + cut * 10.0));
+            vec4 ghost = getFeedback(uv - drift * (10.0 + 20.0 * h.x));
+
+            vec4 fluid = (
+                getFeedback(adv) +
+                getFeedback(adv + d * vec2(2.0, 0.0)) +
+                getFeedback(adv - d * vec2(2.0, 0.0)) +
+                getFeedback(adv + d * vec2(0.0, 2.0)) +
+                getFeedback(adv - d * vec2(0.0, 2.0))
+            ) * 0.2;
+            pred = mix(pred, fluid, mFluid * 0.72);
+
+            float hold = clamp(0.34 + cut * 0.48 + island * 0.28 + drive * 0.14, 0.0, 0.985) * live;
+            hold = max(hold, mGlide * live * (0.58 + 0.28 * island));
+            hold = max(hold, mSink * live * smoothstep(0.025, 0.19, abs(temporal)));
+            hold = max(hold, mBuffer * live * 0.76);
+
+            vec4 outc = mix(cur, pred, hold);
+            outc.rgb = mix(outc.rgb, longTrail.rgb, live * (cut * 0.42 + mGlide * 0.24 + mStretch * 0.30 + mSlice * sliceBand * 0.40));
+            outc.rgb = mix(outc.rgb, ghost.rgb, live * (mBuffer * 0.40 + cut * drive * 0.20));
+            outc.rgb = mix(outc.rgb, fluid.rgb, mFluid * live * 0.42);
+
+            vec2 chroma = drift * (1.7 + cut * 3.5);
+            outc.r = mix(outc.r, getFeedback(adv + vec2(chroma.x, 0.0)).r, live * drive * 0.42);
+            outc.b = mix(outc.b, getFeedback(adv - vec2(chroma.x, chroma.y * 0.6)).b, live * drive * 0.48);
+
+            vec2 dctCell = floor(px / 8.0);
+            float grit = (rand(dctCell + floor(iTime * 30.0)) - 0.5) * (0.035 + 0.090 * drive) * (cut + island * live);
+            outc.rgb += grit + (cur.rgb - getVideo(uv - flow).rgb) * (0.10 + 0.25 * cut) * (1.0 - hold);
+
+            float scan = step(0.988 - drive * 0.045, rand(vec2(row, floor(iTime * 24.0))));
+            outc.rgb = mix(outc.rgb, vec3(outc.r * 1.25, outc.g * 0.78, outc.b * 1.45), scan * live * (0.25 + cut));
+            return mix(bg, vec4(clamp(outc.rgb, 0.0, 1.0), 1.0), wet);
         }
         else if (id == 141) { // VOXELIZER 3D
             float vox = mix(12.0, 64.0, amt);
